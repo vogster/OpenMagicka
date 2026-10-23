@@ -44,7 +44,7 @@ internal static class Program
             Console.Error.WriteLine($"OpenMagicka: no scene named \"{scene}\"");
             return 2;
         }
-        using var viewer = new ViewerGame(catalog, loader, options.Scene, options.Screenshot);
+        using var viewer = new ViewerGame(catalog, loader, options.Scene, options.Screenshot, options.GameCamera);
         viewer.Run();
         return viewer.ExitCode;
     }

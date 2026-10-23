@@ -1,3 +1,5 @@
+using Microsoft.Xna.Framework;
+using OpenMagicka.Engine.Cameras;
 using OpenMagicka.Engine.Rendering;
 
 namespace OpenMagicka.Game.Viewer;
@@ -14,4 +16,15 @@ public static class ViewerProjection
     public static (float Near, float Far) ClipPlanes(float sceneSize, bool originalPipeline) => originalPipeline
         ? (Math.Clamp(sceneSize / 20, 0.1f, 10f), DeferredRenderer.FarPlane)
         : (Math.Max(sceneSize / 7000, 0.5f), Math.Max(sceneSize * 3, 1000));
+
+    /// <summary>The game camera between two ticks: its eye and field of view interpolated, with its own clip planes.</summary>
+    public static (Matrix View, Matrix Projection, Vector3 Eye) Game(GameCamera previous, GameCamera current, float amount, float aspectRatio)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(current);
+        var eye = Vector3.Lerp(previous.Eye, current.Eye, amount);
+        var fov = MathHelper.Lerp(previous.Fov, current.Fov, amount);
+        return (Matrix.CreateLookAt(eye, eye + GameCamera.Direction, Vector3.Up),
+            Matrix.CreatePerspectiveFieldOfView(fov, aspectRatio, GameCamera.NearPlane, GameCamera.FarPlane), eye);
+    }
 }

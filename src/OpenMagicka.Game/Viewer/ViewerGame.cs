@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content;
 using OpenMagicka.Content.Xnb;
 using OpenMagicka.Engine;
+using OpenMagicka.Engine.Cameras;
 using OpenMagicka.Engine.Rendering;
 using OpenMagicka.Engine.Threading;
 
@@ -23,6 +24,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
     private readonly SceneCatalog catalog;
     private readonly int startScene;
     private readonly string? screenshot;
+    private readonly bool gameCamera;
     private ViewerSimulation? simulation;
     private BasicEffect? effect;
     private ShaderLibrary? shaders;
@@ -44,7 +46,8 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
 
     /// <param name="scene">The first scene's name (the first scene when null or unknown).</param>
     /// <param name="screenshot">Save the first scene's frame there and exit.</param>
-    public ViewerGame(SceneCatalog catalog, ContentLoader loader, string? scene, string? screenshot = null)
+    /// <param name="gameCamera">Start with the game's camera instead of the free one.</param>
+    public ViewerGame(SceneCatalog catalog, ContentLoader loader, string? scene, string? screenshot = null, bool gameCamera = false)
         : base(() => new ViewerFrame())
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -52,6 +55,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         this.catalog = catalog;
         this.loader = loader;
         this.screenshot = screenshot;
+        this.gameCamera = gameCamera;
         startScene = Math.Max(catalog.Find(scene), 0);
         Window.Title = "OpenMagicka viewer";
     }
@@ -72,7 +76,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
     }
 
     protected override ISimulation<ViewerFrame> CreateSimulation() =>
-        simulation = new ViewerSimulation(this, catalog.Items.Count, startScene, catalog.SectionStarts);
+        simulation = new ViewerSimulation(this, catalog.Items.Count, startScene, catalog.SectionStarts, gameCamera);
 
     protected override void LoadContent()
     {
@@ -117,21 +121,21 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var drawn = 0;
         if (level is not null)
         {
-            var camera = FreeCamera.Lerp(frame.Previous, frame.Current, (float)frame.Timing.Alpha(now));
+            var alpha = (float)frame.Timing.Alpha(now);
             var aspect = Math.Max(GraphicsDevice.Viewport.AspectRatio, 0.1f);
             var renderer = Deferred() is { } built && useDeferred ? built : null;
-            var (near, far) = ViewerProjection.ClipPlanes((level.Bounds.Max - level.Bounds.Min).Length(), renderer is not null);
-            var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, near, far);
+            var view = View(frame, alpha, aspect, renderer is not null);
             StepParticles();
             drawn = renderer is not null
-                ? renderer.Render(GraphicsDevice, level, Frame(camera, projection))
-                : level.Draw(GraphicsDevice, effect, camera.View, projection);
+                ? renderer.Render(GraphicsDevice, level, Frame(view))
+                : level.Draw(GraphicsDevice, effect, view.View, view.Projection);
         }
         if (shownScene >= 0)
         {
             var scene = catalog.Items[shownScene];
             SetTitle($"OpenMagicka viewer - {scene.Level} / {scene.Scene} ({shownScene + 1} of {catalog.Items.Count})"
                 + (deferred is not null && useDeferred ? " [original shaders]" : " [simple view]")
+                + (frame.CurrentGame is null ? "" : " [game camera]")
                 + (level is null ? "" : $", {drawn} of {level.BatchCount} batches")
                 + (particles is null || !particlesStarted ? "" : $", {particles.Pool.LastActive + 1} particles") + status);
         }
@@ -177,14 +181,26 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         return deferred;
     }
 
-    private DeferredFrame Frame(FreeCamera camera, Matrix projection)
+    /// <summary>The game camera's view when it is on, otherwise the free camera's.</summary>
+    private ViewerView View(ViewerFrame frame, float alpha, float aspect, bool originalPipeline)
+    {
+        if (frame.CurrentGame is { } current)
+        {
+            var (gameView, gameProjection, eye) = ViewerProjection.Game(frame.PreviousGame ?? current, current, alpha, aspect);
+            return new ViewerView(gameView, gameProjection, eye, GameCamera.Direction, eye + GameCamera.Direction * GameCamera.EyeOfTheBeholderDistance);
+        }
+        var camera = FreeCamera.Lerp(frame.Previous, frame.Current, alpha);
+        var (near, far) = ViewerProjection.ClipPlanes((level!.Bounds.Max - level.Bounds.Min).Length(), originalPipeline);
+        var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, near, far);
+        return new ViewerView(camera.View, projection, camera.Position, Vector3.Normalize(camera.Forward), camera.Position);
+    }
+
+    private DeferredFrame Frame(ViewerView view)
     {
         var scene = catalog.Items[shownScene];
         var time = (float)(clock.Elapsed.TotalSeconds % 1);
-        var globals = new GlobalEffectValues(camera.View, projection, camera.Position, camera.Position, time);
-        // The levels' ground is near height 0; kept within the level for those that lie elsewhere.
-        var ground = Math.Clamp(0, level!.Bounds.Min.Y, level.Bounds.Max.Y);
-        var focus = SunShadowView.Focus(camera.Position, Vector3.Normalize(camera.Forward), ground);
+        var globals = new GlobalEffectValues(view.View, view.Projection, view.Position, view.EyeOfTheBeholder, time);
+        var focus = SunShadowView.Focus(view.Position, view.Forward, ViewerSimulation.GroundHeight(level!.Bounds));
         return new DeferredFrame(globals, level.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, focus,
             (float)(clock.Elapsed.TotalSeconds % 3600),   // the liquids' time, wrapped to keep float precision
             particles?.Pool, PostProcessing.For(scene.Settings));
@@ -230,11 +246,14 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             {
                 level = done.Result;
                 particlesStarted = false;
-                status = level.Warnings.Count == 0 ? "" : $" ({level.Warnings.Count} textures missing)";
-                simulation?.LevelBounds.Value = (shownScene, level.Bounds);
+                status = level.Warnings.Count == 0 ? "" : $" ({level.Warnings.Count} warnings)";
+                simulation?.Loaded.Value = new LoadedScene(shownScene, level.Bounds)
+                {
+                    Mesh = level.CameraMesh, Magnify = catalog.Items[shownScene].Settings?.Magnify,
+                };
                 foreach (var warning in level.Warnings)
                 {
-                    Console.Error.WriteLine($"OpenMagicka: texture skipped: {warning}");
+                    Console.Error.WriteLine($"OpenMagicka: skipped: {warning}");
                 }
             }
             else
@@ -298,3 +317,6 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         }
     }
 }
+
+/// <summary>What one frame is drawn from: the matrices, the eye, its direction and the effects' eye of the beholder.</summary>
+internal readonly record struct ViewerView(Matrix View, Matrix Projection, Vector3 Position, Vector3 Forward, Vector3 EyeOfTheBeholder);

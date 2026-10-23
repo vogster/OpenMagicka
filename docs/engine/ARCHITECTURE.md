@@ -737,30 +737,64 @@ layout remove the dependency on the original blobs (and enable mods).
 
 ## 6. Camera (`MagickCamera`)
 
-- Perspective with a **very narrow FOV of 5°** (an almost orthographic view).
-- Camera offset from the target: (0, 144, 171), which is ≈224 units at an angle of ≈40° to the horizon.
-  Near 105, Far 500. Aspect in PlayState is 16:9 (a constant; 4:3 exists separately).
-- Behavior (`CameraBehaviour`): FollowPlayers, FollowEntity, Locked, MoveToTarget.
-  Interpolation: Linear (100 units/s divided by time) or Interpolated (a spring with
-  velocity).
-- FollowPlayers:
-  - target = mean of the positions of living local players (if there are none, network players);
-  - Y = mean "floor" level of standing players;
-  - an "influence vector" from hostile characters and a bias are added to the target (`SetBias`,
-    exponential smoothing with base 0.02).
-- Constraints:
-  - the target is snapped to the **camera mesh** (triangles from `LevelModel`) or to the camera box:
-    the closest point is taken;
-  - 4 frustum planes with a margin of 0.5 block movement in a direction where players would leave
-    the frame (`mCanMoveUp/Right/Down/Left`, `mCanZoomIn`). Entities reset and set
-    them.
-- Magnification (zoom) = FOV_default / FOV, with exponential smoothing. Dynamic
-  magnification picks the zoom so that the farthest player fits within half the FOV
-  (min/max set by script). There is a temporary player magnification with a TTL.
-- Camera shake: a sine of TTL×60, the amplitude decays linearly.
-- The audio listener is placed 20 units above the ground point under the camera. Forward = Down,
-  Up = Forward (top-down view).
-- Visual effects attached to the camera follow its position.
+Ours: `OpenMagicka.Engine.Cameras.GameCamera` (an immutable record, one `Update` per frame), with
+`CameraMesh` and `CameraBox` (the snapping shapes) and `CameraFocus` (the players' centre and the
+enemies' pull). The parts that need entities and physics are inputs the game core will supply.
+
+- Perspective with a **very narrow FOV of 5°** (an almost orthographic view), divided by the
+  magnification. Near 105, far 500; the aspect is the screen's (the original builds the camera
+  with 16:9 and sets the window's ratio when the play state starts and when the resolution changes).
+- The camera keeps a **ground point**. The eye is the ground point plus (0, 144, 171); it always looks
+  along (0, −sin 40°, −cos 40°) with Y up, so the ray from the eye meets the ground point's height
+  ≈224 units away, just in front of the point. "Eye of the beholder" = eye + 200 × direction.
+- Behaviour: FollowPlayers (the default), FollowEntity, MoveToTarget (`MoveTo(target, time)`) and
+  Locked (never set by the game). Interpolation: Interpolated (the default) or Linear.
+- `Time` (set by `Release`, `LockOn`, `MoveTo` and scripts) is how slowly the camera follows; 0 jumps.
+- One update, in this order (dt = frame time):
+  1. Target. FollowPlayers: if there are living players, target = their centre + the enemies' pull
+     + the current bias; otherwise target = the ground point. Then `Time += (1 − Time) × dt`
+     (it creeps back towards 1). FollowEntity: target = the followed entity's position; when it is
+     gone the behaviour falls back to FollowPlayers and the target stays this frame. In both, when
+     a lock box or a camera mesh is set, the target is replaced by its closest point on the box
+     (preferred) or on the mesh's triangles. MoveToTarget and Locked leave the target alone.
+  2. Bias: `bias = lerp(targetBias, bias, 0.02^(dt / biasTime))` (`SetBias(bias, time)`; time 10 at
+     start). Ours takes the target bias at once when the bias time is not positive (the original
+     would divide by it).
+  3. If `Time > 0`, a new ground point:
+     - Linear: a step of `100 × dt / Time` towards the target, landing on it when closer.
+     - Interpolated: with v = last frame's movement / dt and d = target − ground point, the
+       step is `(v + 2d/Time − v/2) × dt`; when that is longer than d it lands on the target. A
+       frame of dt ≈ 0 does not move.
+     The magnification goes towards its target (times the temporary player magnification while that
+     lasts, in FollowPlayers only): `lerp(target, current, 0.02^(dt / Time))`.
+     If `Time ≤ 0`, the ground point and the magnification jump to their targets (the latter
+     without the player magnification).
+  4. The temporary player magnification's time runs down by dt.
+  5. The movement is kept (for the next frame's v); in the original, the four frustum side planes
+     (pushed out by 0.5) can stop the part of it that would push a local living avatar out of the
+     frame, and the zoom in, when an avatar touches a plane (needs physics; not done yet).
+  6. Dynamic magnification (`EnableDynamicMagnification(min, max)`, FollowPlayers only): the next
+     target magnification is `clamp(0.5 × 5° / widest angle, min, max)`, the widest angle between the
+     view direction and a local player as seen from the **previous** frame's eye.
+  7. The eye is placed from the ground point; the FOV is 5° / magnification.
+  8. Shake (`CameraShake(magnitude, ttl)`), when time is left and dt > 0: the ground point's Y is
+     moved by `sin(wrap(ttl × 60)) × magnitude × (ttl / startTtl) × 0.0333` (after the eye was
+     placed, so it shows next frame), then the time runs down. A shake at a position also rumbles
+     the local players' controllers by distance and side.
+- The players' centre: the mean position of the living local players (network players when there are
+  none); its height is the mean feet height (position − half the capsule length − radius) of those
+  standing on the ground, unless those heights add up to exactly 0.
+- The enemies' pull: for every living character that is not friendly (and not a local avatar), its
+  offset from the ground point × 0.99775^(squared distance), summed and divided by their number.
+- `Release(time)` = Time, no lock box, FollowPlayers, Interpolated, magnification target = the
+  default, follow nothing. `Release(time, false)` keeps the box; the variant without the
+  magnification reset keeps both. `SetPosition(p)` puts the ground point and the target at p;
+  `SetPosition(p, snap)` only the ground point (snapped to the box or mesh when asked).
+- The default magnification comes from the scene's `Magnify` setting; setting it also moves the
+  target when the target was still at the old default. Each scene sets the camera mesh and calls
+  `Release(0)` when it starts.
+- The audio listener is placed 20 units above the ground point, Forward = Down, Up = Forward.
+- Visual effects attached to the camera follow its ground point.
 - The base `PolygonHead.Camera` writes `CameraState` into the channel buffer and builds the frustum.
 
 ---

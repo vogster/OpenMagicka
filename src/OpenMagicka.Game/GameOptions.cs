@@ -4,14 +4,15 @@ namespace OpenMagicka.Game;
 /// Command line: <c>--content &lt;Magicka folder or its Content folder&gt;</c> (else the
 /// MAGICKA_DIR environment variable), <c>--check-effects</c> (load and apply every game effect
 /// on the GPU, print the result and exit), <c>--scene &lt;name&gt;</c> (the viewer's first
-/// scene), <c>--screenshot &lt;file.png&gt;</c> (save the viewer's first full frame and exit).
+/// scene), <c>--screenshot &lt;file.png&gt;</c> (save the viewer's first full frame and exit),
+/// <c>--game-camera</c> (the viewer starts with the game's camera).
 /// Finding the Steam installation by itself is OM-4.
 /// </summary>
-public sealed record GameOptions(string? ContentDirectory, bool CheckEffects, string? Scene = null, string? Screenshot = null)
+public sealed record GameOptions(string? ContentDirectory, bool CheckEffects, string? Scene = null, string? Screenshot = null, bool GameCamera = false)
 {
     public const string ContentVariable = "MAGICKA_DIR";
 
-    private const string Usage = "usage: OpenMagicka [--content <Magicka folder>] [--check-effects] [--scene <name>] [--screenshot <file.png>]";
+    private const string Usage = "usage: OpenMagicka [--content <Magicka folder>] [--check-effects] [--scene <name>] [--screenshot <file.png>] [--game-camera]";
 
     public static GameOptions Parse(IReadOnlyList<string> args, Func<string, string?> environment)
     {
@@ -21,6 +22,7 @@ public sealed record GameOptions(string? ContentDirectory, bool CheckEffects, st
         string? scene = null;
         string? screenshot = null;
         var checkEffects = false;
+        var gameCamera = false;
         for (var i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -31,6 +33,7 @@ public sealed record GameOptions(string? ContentDirectory, bool CheckEffects, st
                 case "--screenshot" when HasValue(args, i): screenshot = Path.GetFullPath(args[++i]); break;
                 case "--scene" or "--screenshot": throw new ArgumentException($"{args[i]} needs a value; " + Usage);
                 case "--check-effects": checkEffects = true; break;
+                case "--game-camera": gameCamera = true; break;
                 default: throw new ArgumentException($"unknown argument \"{args[i]}\"; " + Usage);
             }
         }
@@ -52,7 +55,7 @@ public sealed record GameOptions(string? ContentDirectory, bool CheckEffects, st
         {
             throw new DirectoryNotFoundException($"--screenshot needs the game's content: pass --content or set {ContentVariable}");
         }
-        return new GameOptions(directory, checkEffects, scene, screenshot);
+        return new GameOptions(directory, checkEffects, scene, screenshot, gameCamera);
     }
 
     private static bool HasValue(IReadOnlyList<string> args, int i) =>

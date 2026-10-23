@@ -58,8 +58,10 @@ dotnet run --project src/OpenMagicka.Launcher -- --content "<Magicka folder>" --
 
 WASD move, Q/E (or C/Space) go down/up, Shift is faster, the right mouse button looks around,
 PageUp/PageDown switch between all scenes and models, Tab jumps between the scenes and the models
-(props and characters, in their rest pose), F frames, Escape quits. The geometry is drawn
-with a simple forward shader for now; `--screenshot <file.png>` saves the first frame and exits.
+(props and characters, in their rest pose), F frames, Escape quits. G switches to the game's
+camera (WASD then walk a stand-in player it follows; `--game-camera` starts with it). Scenes are
+drawn with the original shaders; R switches to a simple forward view. `--screenshot <file.png>`
+saves the first frame and exits.
 `--check-effects` loads every original effect on the GPU and reports the result.
 
 ## Content tool

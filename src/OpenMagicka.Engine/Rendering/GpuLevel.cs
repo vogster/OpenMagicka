@@ -76,6 +76,9 @@ public sealed class GpuLevel : IDisposable
     /// <summary>The sky's tint (1, 1, 1 when the scene sets none).</summary>
     public Vector3 SkyColor { get; }
 
+    /// <summary>The triangles the game camera keeps its target on; null for models and levels without one.</summary>
+    public Cameras.CameraMesh? CameraMesh { get; private init; }
+
     /// <summary>The level's and its parts' visual effects, which the original starts with the level; none for models.</summary>
     public IReadOnlyList<Particles.PlacedEffect> Effects { get; private init; } = [];
 
@@ -109,6 +112,15 @@ public sealed class GpuLevel : IDisposable
         var content = read.Select(b => VertexPadding.Complete(b, EffectInputs.For(b))).ToArray();
 
         var warnings = new List<string>();
+        Cameras.CameraMesh? cameraMesh = null;
+        try
+        {
+            cameraMesh = file.Root is LevelModelContent { CameraMesh: { } meshContent } ? new Cameras.CameraMesh(meshContent) : null;
+        }
+        catch (InvalidDataException e)
+        {
+            warnings.Add($"{modelAsset}: the camera mesh is skipped: {e.Message}");
+        }
         var images = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in content.SelectMany(References).Select(r => ContentFileSystem.Combine(modelAsset, r.Path)).OfType<string>()
             .Concat(sky is null ? [] : [sky.Texture])
@@ -176,6 +188,7 @@ public sealed class GpuLevel : IDisposable
             sky is not null ? textures.GetValueOrDefault(sky.Texture) as Texture2D : null, sky?.Color ?? Vector3.One)
         {
             Effects = placements,
+            CameraMesh = cameraMesh,
         };
     }
 

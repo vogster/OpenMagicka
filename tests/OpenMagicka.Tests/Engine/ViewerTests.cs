@@ -90,7 +90,7 @@ public sealed class ViewerTests : IDisposable
         Assert.Equal(0, simulation.Scene);
     }
 
-    private sealed class Host : IGameHost
+    internal sealed class Host : IGameHost
     {
         public LatestValue<InputState> Input { get; } = new(default);
 
@@ -99,7 +99,7 @@ public sealed class ViewerTests : IDisposable
         public void RequestExit() => ExitRequested = true;
     }
 
-    private static InputState Keys(params Keys[] keys) => new(new KeyboardState(keys), default, IsActive: true);
+    internal static InputState Keys(params Keys[] keys) => new(new KeyboardState(keys), default, IsActive: true);
 
     [Fact]
     public void Keys_MoveTheCamera_AndPageKeysSwitchScenesOncePerPress()
@@ -131,7 +131,7 @@ public sealed class ViewerTests : IDisposable
         var simulation = new ViewerSimulation(host, sceneCount: 1, startScene: 0);
         var box = new BoundingBox(new Vector3(100, 0, 100), new Vector3(200, 20, 200));
 
-        simulation.LevelBounds.Value = (0, box);
+        simulation.Loaded.Value = new LoadedScene(0, box);
         simulation.Tick(0.016);
         Assert.Equal(FreeCamera.Framing(box), simulation.Camera);
 
@@ -157,11 +157,11 @@ public sealed class ViewerTests : IDisposable
         var host = new Host();
         var simulation = new ViewerSimulation(host, sceneCount: 2, startScene: 0);
         var box = new BoundingBox(Vector3.Zero, new Vector3(10));
-        simulation.LevelBounds.Value = (1, box);
+        simulation.Loaded.Value = new LoadedScene(1, box);
         simulation.Tick(0.1);
         Assert.NotEqual(FreeCamera.Framing(box), simulation.Camera);
 
-        simulation.LevelBounds.Value = (0, box);
+        simulation.Loaded.Value = new LoadedScene(0, box);
         simulation.Tick(0.1);
         host.Input.Value = Keys(Microsoft.Xna.Framework.Input.Keys.W);
         simulation.Tick(0.1);
