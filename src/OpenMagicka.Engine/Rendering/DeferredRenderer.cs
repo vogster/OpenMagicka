@@ -5,17 +5,20 @@ using OpenMagicka.Content.XnAnimation;
 
 namespace OpenMagicka.Engine.Rendering;
 
-/// <summary>What one frame is drawn with besides the geometry.</summary>
-public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background);
+/// <summary>
+/// What one frame is drawn with besides the geometry; <see cref="ShadowFocus"/> is where the sun's
+/// shadows are wanted (see <see cref="SunShadowView.Focus"/>).
+/// </summary>
+public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus);
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
-/// a depth prepass into an R32F target, the G-buffer (Main + Normal, after RestoreDepth), the
-/// sun into a light accumulator, the composition with fog, then additive objects, and the result
-/// shown on the back buffer, with the level's sun, point and spot lights. Not yet: shadows, decals, sky map, particles,
-/// post effects (OM-24 to OM-27). The original composes into Main while reading it; here Main is
-/// copied first, since sampling and writing one target is undefined on modern APIs.
-/// Render thread only.
+/// the sun's shadow map, a depth prepass into an R32F target, the G-buffer (Main + Normal, after
+/// RestoreDepth), the lights into a light accumulator (<see cref="LightPass"/>), the composition
+/// with fog, then additive objects, and the result shown on the back buffer. Not yet: point and
+/// spot light shadows, decals, sky map, particles, post effects (OM-24 to OM-27). The original
+/// composes into Main while reading it; here Main is copied first, since sampling and writing one
+/// target is undefined on modern APIs. Render thread only.
 /// </summary>
 public sealed class DeferredRenderer : IDisposable
 {
@@ -31,29 +34,10 @@ public sealed class DeferredRenderer : IDisposable
     /// </summary>
     public const float FarPlane = 500;
 
-    private const int WithoutShadows = 1;
-
-    /// <summary>
-    /// The original shifts screen lookups by half a pixel, as Direct3D 9 needs to sample texel
-    /// centres; FNA follows the later convention where pixel and texel centres already match, so the
-    /// shift would sample on texel edges (rows of wrong depth with point sampling). It is set to zero.
-    /// </summary>
-    private static readonly Vector2 NoHalfPixel = Vector2.Zero;
-
-    /// <summary>How close to a light's sphere the camera may come before its inner side is drawn: more than any near plane the viewer uses.</summary>
-    private const float NearMargin = 12;
-
-    /// <summary>Spot light techniques without shadows: with and without distance attenuation.</summary>
-    private const int SpotAttenuated = 1;
-    private const int SpotUnattenuated = 3;
     private static readonly Vector4 NormalClear = new(0.5f, 0.75f, 0.5f, 0.5f);
 
-    /// <summary>Light accumulation: the original adds lights as One / InvSrcColor (a screen-like sum).</summary>
-    private static readonly BlendState LightBlend = new()
-    {
-        ColorSourceBlend = Blend.One, ColorDestinationBlend = Blend.InverseSourceColor,
-        AlphaSourceBlend = Blend.One, AlphaDestinationBlend = Blend.InverseSourceColor,
-    };
+    /// <summary>The shadow map is cleared far beyond any caster, so where nothing was drawn is lit.</summary>
+    private static readonly Vector4 NoCaster = new(1e6f);
 
     /// <summary>Additive objects: InvDestColor / One.</summary>
     private static readonly BlendState AdditiveBlend = new()
@@ -62,52 +46,48 @@ public sealed class DeferredRenderer : IDisposable
         AlphaSourceBlend = Blend.InverseDestinationColor, AlphaDestinationBlend = Blend.One,
     };
 
+    private enum OpaquePass { Shadow, Depth, GBuffer }
+
     private readonly GameEffect deferred;
     private readonly GameEffect clear;
     private readonly GameEffect restoreDepth;
-    private readonly GameEffect sun;
     private readonly GameEffect shading;
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
-    private readonly GameEffect point;
-    private readonly GameEffect spot;
-    private readonly LightMesh sphere;
-    private readonly LightMesh cone;
+    private readonly LightPass lights;
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
     private readonly BoundingFrustum frustum = new(Matrix.Identity);
+    private readonly BoundingFrustum shadowFrustum = new(Matrix.Identity);
     private RenderTarget2D? depth;
     private RenderTarget2D? main;
     private RenderTarget2D? normal;
     private RenderTarget2D? light;
     private RenderTarget2D? copy;
+    private RenderTarget2D? shadowMap;
 
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
-        (deferred, clear, restoreDepth, sun, shading, additive, skinned, point, spot) =
-            (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6], effects[7], effects[8]);
+        (deferred, clear, restoreDepth, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[4], effects[5], effects[6]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
-        if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || sun.Effect.Techniques.Count <= WithoutShadows
-            || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Depth || bindPose.Length == 0
-            || point.Effect.Techniques.Count <= WithoutShadows || spot.Effect.Techniques.Count <= SpotUnattenuated)
+        if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Shadow
+            || bindPose.Length == 0)
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
         }
-        quad = new FullscreenQuad(device);
+        lights = new LightPass(device, effects[3], effects[7], effects[8]);
         try
         {
+            quad = new FullscreenQuad(device);
             sprites = new SpriteBatch(device);
-            sphere = new LightMesh(device, LightVolumes.Sphere());
-            cone = new LightMesh(device, LightVolumes.Cone());
         }
         catch
         {
-            quad.Dispose();
-            sprites?.Dispose();
-            sphere?.Dispose();
+            lights.Dispose();
+            quad?.Dispose();
             throw;
         }
     }
@@ -128,20 +108,23 @@ public sealed class DeferredRenderer : IDisposable
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(frame);
         EnsureTargets(device);
+        device.RasterizerState = RasterizerState.CullNone;
+        UnbindTextures(device);
+        var shadow = DrawSunShadow(device, level, frame);
+
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
-        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned, point, spot })
+        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned }.Concat(lights.Effects))
         {
             effect.Globals.Apply(globals);
         }
-        device.RasterizerState = RasterizerState.CullNone;
-        UnbindTextures(device);
 
         // Depth prepass into the R32F target.
+        UnbindTextures(device);
         device.SetRenderTarget(depth);
         device.Clear(ClearOptions.DepthBuffer | ClearOptions.Stencil, Color.White, 1, 0);
-        DrawFullscreen(device, clear, BlendState.Opaque);
-        DrawOpaque(device, level, depthPass: true);
+        quad.Draw(device, clear, BlendState.Opaque);
+        DrawOpaque(device, level, OpaquePass.Depth, frustum);
 
         // G-buffer: RestoreDepth fills Main, Normal and the depth buffer, then the materials.
         UnbindTextures(device);
@@ -151,24 +134,14 @@ public sealed class DeferredRenderer : IDisposable
         parameters.SetValue("SourceTexture0", depth);
         parameters.SetValue("Color0", new Vector4(frame.Background, 0));
         parameters.SetValue("Color1", NormalClear);
-        DrawFullscreen(device, restoreDepth, BlendState.Opaque);
-        var drawn = DrawOpaque(device, level, depthPass: false);
+        quad.Draw(device, restoreDepth, BlendState.Opaque);
+        var drawn = DrawOpaque(device, level, OpaquePass.GBuffer, frustum);
 
-        // The sun into the light accumulator.
+        // The lights into the light accumulator.
         UnbindTextures(device);
         device.SetRenderTarget(light);
         device.Clear(Color.Transparent);
-        var sunParameters = new FnaEffectParameters(sun.Effect);
-        sunParameters.SetValue("SourceTexture0", normal);
-        sunParameters.SetValue("SourceTexture1", depth);
-        sunParameters.SetValue("LightDirection", frame.Sun.Direction);
-        sunParameters.SetValue("DiffuseColor", frame.Sun.Diffuse);
-        sunParameters.SetValue("AmbientColor", frame.Sun.Ambient);
-        sunParameters.SetValue("SpecularAmount", frame.Sun.Specular);
-        sun.Effect.CurrentTechnique = sun.Effect.Techniques[WithoutShadows];
-        DrawFullscreen(device, sun, LightBlend);
-        DrawPointLights(device, level.PointLights, globals.CameraPosition);
-        DrawSpotLights(device, level.SpotLights, globals.CameraPosition);
+        lights.Accumulate(device, quad, level, frame, frustum, normal!, depth!, shadow);
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);
@@ -185,7 +158,7 @@ public sealed class DeferredRenderer : IDisposable
         shade.SetValue("FogStart", frame.Fog.Start);
         shade.SetValue("FogEnd", frame.Fog.End);
         shade.SetValue("FogColor", frame.Fog.Color);
-        DrawFullscreen(device, shading, BlendState.Opaque);
+        quad.Draw(device, shading, BlendState.Opaque);
         DrawAdditive(device, level, level.TextureFor);
 
         UnbindTextures(device);
@@ -195,18 +168,54 @@ public sealed class DeferredRenderer : IDisposable
         return drawn;
     }
 
-    private int DrawOpaque(GraphicsDevice device, GpuLevel level, bool depthPass)
+    /// <summary>
+    /// The sun's shadow map, when it casts shadows: the opaque geometry in the light's box, drawn with
+    /// the shadow techniques and the light's view-projection (which the casters take from the shared
+    /// globals, so these are set to the light's view for this pass).
+    /// </summary>
+    private SunShadow? DrawSunShadow(GraphicsDevice device, GpuLevel level, DeferredFrame frame)
+    {
+        var size = frame.Sun.ShadowMapSize;
+        if (size <= 0)
+        {
+            shadowMap?.Dispose();
+            shadowMap = null;
+            return null;
+        }
+        if (shadowMap is null || shadowMap.Width != size)
+        {
+            shadowMap?.Dispose();
+            shadowMap = null;
+            shadowMap = new RenderTarget2D(device, size, size, false, SurfaceFormat.Single, DepthFormat.Depth24);
+        }
+        var view = SunShadowView.Around(frame.Sun.Direction, frame.ShadowFocus, size);
+        var lightGlobals = frame.Globals with { View = view.LightView, Projection = view.LightProjection };
+        deferred.Globals.Apply(lightGlobals);
+        skinned.Globals.Apply(lightGlobals);
+        shadowFrustum.Matrix = view.LightViewProjection;
+        device.SetRenderTarget(shadowMap);
+        device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, NoCaster, 1, 0);
+        DrawOpaque(device, level, OpaquePass.Shadow, shadowFrustum);
+        return new SunShadow(shadowMap, view);
+    }
+
+    private int DrawOpaque(GraphicsDevice device, GpuLevel level, OpaquePass pass, BoundingFrustum view)
     {
         device.BlendState = BlendState.Opaque;
         device.DepthStencilState = DepthStencilState.Default;
         var parameters = new FnaEffectParameters(deferred.Effect);
         var characters = new FnaEffectParameters(skinned.Effect);
         skinned.Effect.Parameters["Bones"].SetValue(bindPose);
-        skinned.Effect.CurrentTechnique = skinned.Effect.Techniques[depthPass ? SkinnedDeferredMaterial.Depth : SkinnedDeferredMaterial.Default];
+        skinned.Effect.CurrentTechnique = skinned.Effect.Techniques[pass switch
+        {
+            OpaquePass.Shadow => SkinnedDeferredMaterial.Shadow,
+            OpaquePass.Depth => SkinnedDeferredMaterial.Depth,
+            _ => SkinnedDeferredMaterial.Default,
+        }];
         var drawn = 0;
         foreach (var batch in level.Batches)
         {
-            if (!frustum.Intersects(batch.Bounds))
+            if (!view.Intersects(batch.Bounds))
             {
                 continue;
             }
@@ -222,83 +231,18 @@ public sealed class DeferredRenderer : IDisposable
                 continue;
             }
             RenderDeferredMaterial.Apply(parameters, batch.World, material, level.TextureFor);
-            var technique = depthPass ? RenderDeferredMaterial.Depth
-                : RenderDeferredMaterial.Technique(material, level.TextureFor(material.ReflectionMap) is not null);
+            var technique = pass switch
+            {
+                OpaquePass.Shadow => RenderDeferredMaterial.Shadow,
+                OpaquePass.Depth => RenderDeferredMaterial.Depth,
+                _ => RenderDeferredMaterial.Technique(material, level.TextureFor(material.ReflectionMap) is not null),
+            };
             deferred.Effect.CurrentTechnique = deferred.Effect.Techniques[technique];
             Draw(device, deferred.Effect, batch);
             drawn++;
         }
         return drawn;
     }
-
-    /// <summary>
-    /// Each point light whose reach is in view, as its sphere: added like the sun, without depth
-    /// testing (the light is computed from the G-buffer per pixel). The outer side is drawn, as in the
-    /// original, unless the camera is in or near the sphere (the original's camera never was): then
-    /// the inner side, so the light neither vanishes nor loses what the near plane cuts off.
-    /// </summary>
-    private void DrawPointLights(GraphicsDevice device, IReadOnlyList<PointLighting> lights, Vector3 camera)
-    {
-        device.BlendState = LightBlend;
-        device.DepthStencilState = DepthStencilState.None;
-        point.Effect.CurrentTechnique = point.Effect.Techniques[WithoutShadows];
-        var parameters = new FnaEffectParameters(point.Effect);
-        parameters.SetValue("NormalMap", normal);
-        parameters.SetValue("DepthMap", depth);
-        parameters.SetValue("HalfPixel", NoHalfPixel);
-        sphere.Bind(device);
-        foreach (var lamp in lights)
-        {
-            if (!frustum.Intersects(new BoundingSphere(lamp.Position, lamp.Radius)))
-            {
-                continue;
-            }
-            parameters.SetValue("World", lamp.World);
-            parameters.SetValue("LightPosition", lamp.Position);
-            parameters.SetValue("LightRadius", lamp.Radius);
-            parameters.SetValue("DiffuseColor", lamp.Diffuse);
-            parameters.SetValue("AmbientColor", lamp.Ambient);
-            parameters.SetValue("SpecularAmount", lamp.Specular);
-            sphere.Draw(device, point.Effect, Cull(camera, lamp.Position, lamp.Radius));
-        }
-        device.RasterizerState = RasterizerState.CullNone;
-    }
-
-    /// <summary>Each spot light whose reach is in view, as its cone, drawn like the point lights.</summary>
-    private void DrawSpotLights(GraphicsDevice device, IReadOnlyList<SpotLighting> lights, Vector3 camera)
-    {
-        device.BlendState = LightBlend;
-        device.DepthStencilState = DepthStencilState.None;
-        var parameters = new FnaEffectParameters(spot.Effect);
-        parameters.SetValue("NormalMap", normal);
-        parameters.SetValue("DepthMap", depth);
-        parameters.SetValue("HalfPixel", NoHalfPixel);
-        cone.Bind(device);
-        foreach (var lamp in lights)
-        {
-            if (!frustum.Intersects(new BoundingSphere(lamp.Position, lamp.Range)))
-            {
-                continue;
-            }
-            spot.Effect.CurrentTechnique = spot.Effect.Techniques[lamp.Attenuation ? SpotAttenuated : SpotUnattenuated];
-            parameters.SetValue("World", lamp.World);
-            parameters.SetValue("LightPosition", lamp.Position);
-            parameters.SetValue("LightDirection", lamp.Direction);
-            parameters.SetValue("LightRange", lamp.Range);
-            parameters.SetValue("LightCutoffAngle", lamp.Cutoff);
-            parameters.SetValue("LightSharpness", lamp.Sharpness);
-            parameters.SetValue("DiffuseColor", lamp.Diffuse);
-            parameters.SetValue("AmbientColor", lamp.Ambient);
-            parameters.SetValue("SpecularAmount", lamp.Specular);
-            cone.Draw(device, spot.Effect, Cull(camera, lamp.Position, lamp.Range));
-        }
-        device.RasterizerState = RasterizerState.CullNone;
-    }
-
-    /// <summary>The outer side of a light volume, or the inner one when the camera is in or near it.</summary>
-    private static RasterizerState Cull(Vector3 camera, Vector3 light, float reach) =>
-        Vector3.Distance(camera, light) < reach + NearMargin ? RasterizerState.CullClockwise : RasterizerState.CullCounterClockwise;
-
 
     private void DrawAdditive(GraphicsDevice device, GpuLevel level, Func<Content.Xna.ExternalReference?, Texture?> textures)
     {
@@ -334,22 +278,13 @@ public sealed class DeferredRenderer : IDisposable
         }
     }
 
-    private void DrawFullscreen(GraphicsDevice device, GameEffect effect, BlendState blend)
-    {
-        device.BlendState = blend;
-        device.DepthStencilState = DepthStencilState.None;
-        // The effects only use the size for the half-pixel shift (0.5 / size); an infinite size makes it zero.
-        new FnaEffectParameters(effect.Effect).SetValue("DestinationDimensions", new Vector2(float.PositiveInfinity));
-        quad.Draw(device, effect.Effect);
-    }
-
     /// <summary>
     /// Clears the texture slots the passes use, so no target is bound as a texture while it is drawn
     /// into, and restores the wrapping sampler the Blit's sprite batch replaced.
     /// </summary>
     private static void UnbindTextures(GraphicsDevice device)
     {
-        for (var slot = 0; slot < 5; slot++)
+        for (var slot = 0; slot < 16; slot++)
         {
             device.Textures[slot] = null;
         }
@@ -392,39 +327,9 @@ public sealed class DeferredRenderer : IDisposable
     public void Dispose()
     {
         DisposeTargets();
+        shadowMap?.Dispose();
         quad.Dispose();
         sprites.Dispose();
-        sphere.Dispose();
-        cone.Dispose();
+        lights.Dispose();
     }
-}
-
-/// <summary>The original's fullscreen quad: a triangle strip at (±1.5, ±1.5, 1) whose texture coordinates map (±1, ±1) to 0…1.</summary>
-internal sealed class FullscreenQuad : IDisposable
-{
-    private readonly VertexBuffer vertices;
-
-    public FullscreenQuad(GraphicsDevice device)
-    {
-        vertices = new VertexBuffer(device, VertexPositionTexture.VertexDeclaration, 4, BufferUsage.WriteOnly);
-        vertices.SetData(new[]
-        {
-            new VertexPositionTexture(new Vector3(1.5f, 1.5f, 1), new Vector2(1.25f, -0.25f)),
-            new VertexPositionTexture(new Vector3(1.5f, -1.5f, 1), new Vector2(1.25f, 1.25f)),
-            new VertexPositionTexture(new Vector3(-1.5f, 1.5f, 1), new Vector2(-0.25f, -0.25f)),
-            new VertexPositionTexture(new Vector3(-1.5f, -1.5f, 1), new Vector2(-0.25f, 1.25f)),
-        });
-    }
-
-    public void Draw(GraphicsDevice device, Effect effect)
-    {
-        device.SetVertexBuffer(vertices);
-        foreach (var pass in effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            device.DrawPrimitives(PrimitiveType.TriangleStrip, 0, 2);
-        }
-    }
-
-    public void Dispose() => vertices.Dispose();
 }

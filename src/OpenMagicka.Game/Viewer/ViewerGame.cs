@@ -168,7 +168,10 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var scene = catalog.Items[shownScene];
         var time = (float)(clock.Elapsed.TotalSeconds % 1);
         var globals = new GlobalEffectValues(camera.View, projection, camera.Position, camera.Position, time);
-        return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f);
+        // The levels' ground is near height 0; kept within the level for those that lie elsewhere.
+        var ground = Math.Clamp(0, level!.Bounds.Min.Y, level.Bounds.Max.Y);
+        var focus = SunShadowView.Focus(camera.Position, Vector3.Normalize(camera.Forward), ground);
+        return new DeferredFrame(globals, level.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, focus);
     }
 
     /// <summary>Starts loading the wanted scene, and shows it once it is on the GPU (render thread).</summary>

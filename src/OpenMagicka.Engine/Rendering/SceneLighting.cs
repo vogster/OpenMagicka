@@ -4,8 +4,11 @@ using OpenMagicka.Content.Magicka;
 
 namespace OpenMagicka.Engine.Rendering;
 
-/// <summary>A directional light (intensity already applied); Direction is normalised and points where the light goes.</summary>
-public sealed record DirectionalLighting(Vector3 Direction, Vector3 Diffuse, Vector3 Ambient, float Specular);
+/// <summary>
+/// A directional light (intensity already applied); Direction is normalised and points where the
+/// light goes. <see cref="ShadowMapSize"/> is the side of its shadow map, or 0 when it casts none.
+/// </summary>
+public sealed record DirectionalLighting(Vector3 Direction, Vector3 Diffuse, Vector3 Ambient, float Specular, int ShadowMapSize = 0);
 
 /// <summary>A point light (intensity already applied) reaching <see cref="Radius"/> around <see cref="Position"/>.</summary>
 public sealed record PointLighting(Vector3 Position, float Radius, Vector3 Diffuse, Vector3 Ambient, float Specular)
@@ -35,6 +38,9 @@ public sealed record SceneFog(bool Enabled, float Start, float End, Vector3 Colo
 /// <summary>The lighting a scene is drawn with, from its level model and scene settings.</summary>
 public static class SceneLighting
 {
+    /// <summary>The largest shadow map used (the shipped levels ask for up to 2048).</summary>
+    public const int MaxShadowMapSize = 4096;
+
     /// <summary>A soft light from above and in front, for models and levels without a directional light.</summary>
     public static DirectionalLighting Default { get; } =
         new(Vector3.Normalize(new Vector3(-0.3f, -1, -0.5f)), new Vector3(0.9f), new Vector3(0.35f), 0.3f);
@@ -47,7 +53,8 @@ public static class SceneLighting
     {
         ArgumentNullException.ThrowIfNull(lights);
         var sun = lights.FirstOrDefault(l => l.Type == LevelLightType.Directional && l.Direction.LengthSquared() > 0);
-        return sun is null ? Default : new DirectionalLighting(Vector3.Normalize(sun.Direction), sun.DiffuseColor, sun.AmbientColor, sun.SpecularAmount);
+        return sun is null ? Default : new DirectionalLighting(Vector3.Normalize(sun.Direction), sun.DiffuseColor, sun.AmbientColor, sun.SpecularAmount,
+            sun.CastShadows && sun.ShadowMapSize > 0 ? Math.Min(sun.ShadowMapSize, MaxShadowMapSize) : 0);
     }
 
     /// <summary>The level's point lights at intensity 1, as a level starts; lights without a finite reach are left out.</summary>

@@ -15,6 +15,7 @@ public static class SkinnedDeferredMaterial
 {
     public const int Default = 0;
     public const int Depth = 3;
+    public const int Shadow = 4;
 
     /// <summary>The textures the material uses: each map whose flag is set.</summary>
     public static IEnumerable<ExternalReference> References(SkinnedModelBasicEffectContent material)
