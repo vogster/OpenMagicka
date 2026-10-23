@@ -360,6 +360,25 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   so it shows only where nothing was drawn. `SourceTexture0` = the picture, `SourceDimensions` = its
   size, `Color`; the effect fits the picture to the screen's height and centres it, so here
   `DestinationDimensions` must be the real target size.
+- **Colour encoding.** The targets hold light as c = 1 − 2^(−x), x being the amount of light (the
+  shaders end with `exp` and `1 − …`), so light adds up without saturating. The last pass decodes it
+  (x = −log2(1 − c)) and writes x to the screen; showing Main directly is darker than the game.
+- **Post-processing** (OpenMagicka: `PostPass`), after the particles:
+  - `FilterEffect` from Main into a screen-sized target: decodes, scales and offsets the light by
+    `Brightness` and `Contrast` around a middle of 0.5, applies a colour matrix built (in the
+    effect's preshader) from `SaturateMatrix`, `IdentityMatrix` and `Saturation`, and encodes
+    again. The two matrices keep the values the effect file gives them; the original never sets them. The values come from the scene's `Filter` (default 1, 1, 1);
+    the original first copies Main to Secondary and draws the scene's post effects there.
+  - The original draws the game's GUI and screen transitions on that target here, so they bloom
+    too (not in OpenMagicka yet: there is no GUI).
+  - `BloomEffect` (techniques 0 horizontal blur, 1 vertical blur, 2 combine, 3 down-sample):
+    down-sample into a buffer a sixteenth of the screen on each side, keeping what is above
+    `Threshold` (`SourceDimensions` = the source's size); blur horizontally into a second such
+    buffer and back vertically (`Sigma`, `Threshold` 0; these two step by `DestinationDimensions`,
+    so they get the real size, and the half-pixel shift that comes with it is cancelled by moving the
+    quad's texture coordinates back half a pixel, as for the down-sample's shift by half a source
+    pixel); then combine onto the back buffer: decoded picture + `Multiplier` ×
+    decoded bloom. Scene values: `Bloom` threshold, multiplier and blur (defaults 0.8, 1, 2.5).
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
   texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1); `DestinationDimensions` is set to ∞ (see the half-pixel shift above), except for the sky.
 - A level's directional light comes from its light list (intensity 1 unless it varies); the
@@ -441,7 +460,7 @@ over a given time), Enabled, CastShadows.
 | `DeferredShadingEffect` | — | Composition: Main × light + fog (FogEnable, Start, End, Color) |
 | `FogEffect` | Exponential, ExponentialSquare, Linear | Separate fog post effect |
 | `SkyMapEffect` | — | Fullscreen 2D skymap × Color |
-| `BloomEffect` | DownSample, HorizontalBlur, VerticalBlur, Combine | Threshold, Multiplier, Sigma |
+| `BloomEffect` | HorizontalBlur, VerticalBlur, Combine, DownSample (in index order) | Threshold, Multiplier, Sigma |
 | `FilterEffect` | — | Brightness, Contrast, Saturation |
 | `RestoreDepthEffect`, `ClearEffect`, `BasicPostProcessingEffect` | — | Utility fullscreen |
 | `Fade/CrossFadeTransitionEffect` | — | Transitions |

@@ -11,7 +11,7 @@ namespace OpenMagicka.Engine.Rendering;
 /// liquids' waves and flow have run.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
-    float Seconds = 0, Particles.ParticlePool? Particles = null);
+    float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null);
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
@@ -20,11 +20,12 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// with fog, then additive objects, and the result shown on the back buffer. Shadow maps are drawn
 /// first: the sun's, then the shadow-casting point and spot lights' (<see cref="LightShadows"/>).
 /// Water and lava are drawn with the opaque objects (<see cref="LiquidMaterial"/>), the scene's sky
-/// after the composition, the particles last (<see cref="ParticlePass"/>). Not yet: decals (OM-66), post effects (OM-27). The original
+/// after the composition, the particles last (<see cref="ParticlePass"/>), then the filter and bloom onto the back
+/// buffer (<see cref="PostPass"/>). Not yet: decals (OM-66), the scenes' own post effects. The original
 /// composes into Main while reading it; here Main is copied first, since sampling and writing one
 /// target is undefined on modern APIs. Render thread only.
 /// </summary>
-public sealed class DeferredRenderer : IDisposable
+public sealed partial class DeferredRenderer : IDisposable
 {
     public static readonly string[] EffectNames =
         [
@@ -67,6 +68,7 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect sky;
     private readonly LightPass lights;
     private readonly ParticlePass? particles;
+    private readonly PostPass? post;
     private readonly LightShadows lightShadows = new();
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
@@ -83,7 +85,7 @@ public sealed class DeferredRenderer : IDisposable
     /// <summary>The particles' effect and sprite sheets, owned by the renderer once it is built.</summary>
     private sealed record ParticleResources(GameEffect Effect, Texture3D[] Sheets);
 
-    private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects, ParticleResources? particleResources)
+    private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects, ParticleResources? particleResources, GameEffect[]? postEffects)
     {
         (deferred, clear, restoreDepth, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[4], effects[5], effects[6]);
         (water, lava, sky) = (effects[9], effects[10], effects[11]);
@@ -96,6 +98,17 @@ public sealed class DeferredRenderer : IDisposable
             || !new[] { "SourceTexture0", "SourceDimensions", "Color", "DestinationDimensions" }.All(new FnaEffectParameters(sky.Effect).Contains))
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
+        }
+        if (postEffects is not null)
+        {
+            try
+            {
+                post = new PostPass(postEffects[0], postEffects[1]);
+            }
+            catch (InvalidDataException e)
+            {
+                PostUnavailable = e.Message;
+            }
         }
         lights = new LightPass(device, effects[3], effects[7], effects[8]);
         try
@@ -127,48 +140,8 @@ public sealed class DeferredRenderer : IDisposable
     /// <summary>Why the particles are not drawn, when they were asked for but could not be set up.</summary>
     public string? ParticlesUnavailable { get; private set; }
 
-    /// <summary>
-    /// Loads the effects (created on the render thread through the library's queue) and builds the
-    /// renderer there. With a content loader it also loads <c>ParticleEffect</c> and the particles'
-    /// sprite sheets; when those fail the renderer is built without particles
-    /// (<see cref="ParticlesUnavailable"/> says why).
-    /// </summary>
-    public static async Task<DeferredRenderer> Create(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader? loader = null)
-    {
-        ArgumentNullException.ThrowIfNull(shaders);
-        ArgumentNullException.ThrowIfNull(gpu);
-        var effects = await Task.WhenAll(EffectNames.Select(shaders.Load)).ConfigureAwait(false);
-        var (particleResources, unavailable) = loader is null ? (null, null) : await LoadParticles(shaders, gpu, loader).ConfigureAwait(false);
-        try
-        {
-            var renderer = await gpu.Enqueue(device => new DeferredRenderer(device, effects, particleResources)).ConfigureAwait(false);
-            renderer.ParticlesUnavailable ??= unavailable;
-            return renderer;
-        }
-        catch
-        {
-            // The renderer never took the sheets.
-            if (particleResources is not null)
-            {
-                _ = gpu.Enqueue(_ => Array.ForEach(particleResources.Sheets, s => s.Dispose()));
-            }
-            throw;
-        }
-    }
-
-    private static async Task<(ParticleResources?, string?)> LoadParticles(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader loader)
-    {
-        try
-        {
-            var effect = await shaders.Load("ParticleEffect").ConfigureAwait(false);
-            var sheets = await ParticleSheets.Load(loader, gpu).ConfigureAwait(false);
-            return (new ParticleResources(effect, sheets), null);
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            return (null, e.GetBaseException().Message);
-        }
-    }
+    /// <summary>Why the filter and bloom are not applied (the scene is then shown as it is), or null.</summary>
+    public string? PostUnavailable { get; private set; }
 
     /// <summary>Draws the level and shows it on the back buffer; returns how many batches were drawn into the G-buffer.</summary>
     public int Render(GraphicsDevice device, GpuLevel level, DeferredFrame frame)
@@ -184,7 +157,7 @@ public sealed class DeferredRenderer : IDisposable
         var shadow = DrawSunShadow(device, level, frame);
         lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
-        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects))
+        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects).Concat(post?.Effects ?? []))
         {
             effect.Globals.Apply(globals);
         }
@@ -237,163 +210,17 @@ public sealed class DeferredRenderer : IDisposable
         }
 
         UnbindTextures(device);
-        device.SetRenderTarget(null);
-        Blit(device, main!);
+        if (post is not null)
+        {
+            post.Draw(device, quad, main!, frame.Post ?? PostProcessing.Default);
+        }
+        else
+        {
+            device.SetRenderTarget(null);
+            Blit(device, main!);
+        }
         UnbindTextures(device);
         return drawn;
-    }
-
-    /// <summary>
-    /// The sun's shadow map, when it casts shadows: the opaque geometry in the light's box, drawn with
-    /// the shadow techniques and the light's view-projection (which the casters take from the shared
-    /// globals, so these are set to the light's view for this pass).
-    /// </summary>
-    private SunShadow? DrawSunShadow(GraphicsDevice device, GpuLevel level, DeferredFrame frame)
-    {
-        var size = frame.Sun.ShadowMapSize;
-        if (size <= 0)
-        {
-            shadowMap?.Dispose();
-            shadowMap = null;
-            return null;
-        }
-        if (shadowMap is null || shadowMap.Width != size)
-        {
-            shadowMap?.Dispose();
-            shadowMap = null;
-            shadowMap = new RenderTarget2D(device, size, size, false, SurfaceFormat.Single, DepthFormat.Depth24);
-        }
-        var view = SunShadowView.Around(frame.Sun.Direction, frame.ShadowFocus, size);
-        device.SetRenderTarget(shadowMap);
-        device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, NoCaster, 1, 0);
-        DrawCasters(device, level, frame, view.LightView, view.LightProjection, RasterizerState.CullCounterClockwise);
-        return new SunShadow(shadowMap, view);
-    }
-
-    /// <summary>
-    /// The opaque geometry seen by a light, with the shadow techniques, into the bound shadow map.
-    /// The casters take the view-projection from the shared globals, so these are set to the
-    /// light's view here; the camera's are set again before the camera passes.
-    /// </summary>
-    private void DrawCasters(GraphicsDevice device, GpuLevel level, DeferredFrame frame, Matrix view, Matrix projection, RasterizerState cull)
-    {
-        var lightGlobals = frame.Globals with { View = view, Projection = projection };
-        foreach (var effect in new[] { deferred, skinned, water, lava })
-        {
-            effect.Globals.Apply(lightGlobals);
-        }
-        shadowFrustum.Matrix = lightGlobals.ViewProjection;
-        device.RasterizerState = cull;
-        DrawOpaque(device, level, frame, OpaqueKind.Shadow, shadowFrustum);
-        device.RasterizerState = RasterizerState.CullNone;
-    }
-
-    private int DrawOpaque(GraphicsDevice device, GpuLevel level, DeferredFrame frame, OpaqueKind pass, BoundingFrustum view)
-    {
-        var liquids = (water: new FnaEffectParameters(water.Effect), lava: new FnaEffectParameters(lava.Effect));
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.Default;
-        var parameters = new FnaEffectParameters(deferred.Effect);
-        var characters = new FnaEffectParameters(skinned.Effect);
-        skinned.Effect.Parameters["Bones"].SetValue(bindPose);
-        skinned.Effect.CurrentTechnique = skinned.Effect.Techniques[pass switch
-        {
-            OpaqueKind.Shadow => SkinnedDeferredMaterial.Shadow,
-            OpaqueKind.Depth => SkinnedDeferredMaterial.Depth,
-            _ => SkinnedDeferredMaterial.Default,
-        }];
-        var drawn = 0;
-        foreach (var batch in level.Batches)
-        {
-            if (!view.Intersects(batch.Bounds))
-            {
-                continue;
-            }
-            if (batch.Material is SkinnedModelBasicEffectContent character && !batch.Additive)
-            {
-                SkinnedDeferredMaterial.Apply(characters, character, level.TextureFor);
-                Draw(device, skinned.Effect, batch);
-                drawn++;
-                continue;
-            }
-            if (batch.Material is RenderDeferredLiquidEffectContent or LavaEffectContent)
-            {
-                var (effect, liquid) = batch.Material is LavaEffectContent ? (lava, liquids.lava) : (water, liquids.water);
-                LiquidMaterial.Apply(liquid, batch.Material, batch.World, frame.Seconds, level.TextureFor);
-                var reflects = batch.Material is RenderDeferredLiquidEffectContent w && level.TextureFor(w.ReflectionMap) is not null;
-                effect.Effect.CurrentTechnique = effect.Effect.Techniques[LiquidMaterial.Technique(batch.Material, reflects, pass)];
-                Draw(device, effect.Effect, batch);
-                drawn++;
-                continue;
-            }
-            if (batch.Deferred is not { } material)
-            {
-                continue;
-            }
-            RenderDeferredMaterial.Apply(parameters, batch.World, material, level.TextureFor);
-            var technique = pass switch
-            {
-                OpaqueKind.Shadow => RenderDeferredMaterial.Shadow,
-                OpaqueKind.Depth => RenderDeferredMaterial.Depth,
-                _ => RenderDeferredMaterial.Technique(material, level.TextureFor(material.ReflectionMap) is not null),
-            };
-            deferred.Effect.CurrentTechnique = deferred.Effect.Techniques[technique];
-            Draw(device, deferred.Effect, batch);
-            drawn++;
-        }
-        return drawn;
-    }
-
-    /// <summary>
-    /// The scene's sky picture where nothing was drawn: a fullscreen pass at the far plane, tested
-    /// LessEqual against Main's depth without writing it. The effect fits the picture to the screen's
-    /// height, so it needs the real target size.
-    /// </summary>
-    private void DrawSky(GraphicsDevice device, GpuLevel level)
-    {
-        if (level.SkyMap is not { } map)
-        {
-            return;
-        }
-        var parameters = new FnaEffectParameters(sky.Effect);
-        parameters.SetValue("SourceTexture0", map);
-        parameters.SetValue("SourceDimensions", new Vector2(map.Width, map.Height));
-        parameters.SetValue("Color", level.SkyColor);
-        quad.Draw(device, sky, BlendState.Opaque, SkyDepth, new Vector2(main!.Width, main.Height));
-    }
-
-    private void DrawAdditive(GraphicsDevice device, GpuLevel level, Func<Content.Xna.ExternalReference?, Texture?> textures)
-    {
-        device.BlendState = AdditiveBlend;
-        device.DepthStencilState = DepthStencilState.DepthRead;
-        var parameters = new FnaEffectParameters(additive.Effect);
-        foreach (var batch in level.Batches)
-        {
-            if (!batch.Additive || batch.Material is not AdditiveEffectContent material || !frustum.Intersects(batch.Bounds))
-            {
-                continue;
-            }
-            var texture = material.TextureEnabled ? textures(material.Texture) : null;
-            parameters.SetValue("World", batch.World);
-            parameters.SetValue("TextureScale", Vector2.One);
-            parameters.SetValue("TextureOffset", Vector2.Zero);
-            parameters.SetValue("ColorTint", new Vector4(material.ColorTint, 1));   // the original reads the tint with alpha 1
-            parameters.SetValue("VertexColorEnabled", material.VertexColorEnabled);
-            parameters.SetValue("TextureEnabled", texture is not null);
-            parameters.SetValue("Texture", texture);
-            Draw(device, additive.Effect, batch);
-        }
-    }
-
-    private static void Draw(GraphicsDevice device, Effect effect, GpuBatch batch)
-    {
-        device.SetVertexBuffer(batch.Vertices);
-        device.Indices = batch.Indices;
-        foreach (var pass in effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, batch.VertexCount, batch.StartIndex, batch.PrimitiveCount);
-        }
     }
 
     /// <summary>
@@ -451,5 +278,6 @@ public sealed class DeferredRenderer : IDisposable
         sprites.Dispose();
         lights.Dispose();
         particles?.Dispose();
+        post?.Dispose();
     }
 }

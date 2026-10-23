@@ -162,6 +162,10 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
                 {
                     Console.Error.WriteLine($"OpenMagicka: no particles: {reason}");
                 }
+                if (deferred.PostUnavailable is { } postReason)
+                {
+                    Console.Error.WriteLine($"OpenMagicka: no filter or bloom: {postReason}");
+                }
             }
             else
             {
@@ -183,7 +187,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var focus = SunShadowView.Focus(camera.Position, Vector3.Normalize(camera.Forward), ground);
         return new DeferredFrame(globals, level.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, focus,
             (float)(clock.Elapsed.TotalSeconds % 3600),   // the liquids' time, wrapped to keep float precision
-            particles?.Pool);
+            particles?.Pool, PostProcessing.For(scene.Settings));
     }
 
     /// <summary>Starts the shown level's effects once the effect library is in, then steps them with the frame time.</summary>

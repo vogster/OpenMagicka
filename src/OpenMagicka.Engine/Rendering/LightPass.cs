@@ -59,9 +59,9 @@ internal sealed class LightPass : IDisposable
         {
             throw new InvalidDataException("the light effects do not have the expected techniques");
         }
-        Require(sun, SunParameters);
-        Require(point, ["ShadowMap"]);
-        Require(spot, ["ShadowMap", "ShadowMapSize", "LightViewProjection"]);
+        EffectChecks.Require(sun, SunParameters);
+        EffectChecks.Require(point, ["ShadowMap"]);
+        EffectChecks.Require(spot, ["ShadowMap", "ShadowMapSize", "LightViewProjection"]);
         (this.sun, this.point, this.spot) = (sun, point, spot);
         sphere = new LightMesh(device, LightVolumes.Sphere());
         try
@@ -76,17 +76,6 @@ internal sealed class LightPass : IDisposable
     }
 
     public IEnumerable<GameEffect> Effects => [sun, point, spot];
-
-    /// <summary>A missing parameter fails here, so the viewer falls back, rather than in a frame.</summary>
-    private static void Require(GameEffect effect, IEnumerable<string> names)
-    {
-        var parameters = new FnaEffectParameters(effect.Effect);
-        var missing = names.Where(name => !parameters.Contains(name)).ToArray();
-        if (missing.Length > 0)
-        {
-            throw new InvalidDataException($"an effect has no parameter {string.Join(", ", missing)}");
-        }
-    }
 
     /// <summary>Adds every light into the bound light target; the G-buffer's normals and depth are read.</summary>
     public void Accumulate(GraphicsDevice device, FullscreenQuad quad, GpuLevel level, DeferredFrame frame, BoundingFrustum view,
