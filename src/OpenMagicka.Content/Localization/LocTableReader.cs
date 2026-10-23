@@ -12,14 +12,13 @@ public sealed record LocEntry(string Key, string Text);
 /// Cells are taken by position (<c>ss:Index</c> is ignored) and their text includes nested markup.
 /// Element names are compared ignoring case. Rows whose key does not start with '#' (headers)
 /// and rows with an empty string are skipped. Whitespace-only nodes are dropped, other
-/// whitespace is kept as written.
+/// whitespace is kept as written (<see cref="LegacyXml"/>).
 /// </summary>
 public static class LocTableReader
 {
     public static IReadOnlyList<LocEntry> Read(Stream stream)
     {
-        ArgumentNullException.ThrowIfNull(stream);
-        var document = Load(stream);
+        var document = LegacyXml.Load(stream, "string table");
         var workbook = Children(document, "Workbook").FirstOrDefault()
             ?? throw new InvalidDataException("no Workbook element in the string table");
 
@@ -40,22 +39,5 @@ public static class LocTableReader
         return entries;
     }
 
-    private static XmlDocument Load(Stream stream)
-    {
-        var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null };
-        try
-        {
-            using var reader = XmlReader.Create(stream, settings);
-            var document = new XmlDocument { XmlResolver = null };
-            document.Load(reader);
-            return document;
-        }
-        catch (XmlException e)
-        {
-            throw new InvalidDataException($"string table is not valid XML: {e.Message}", e);
-        }
-    }
-
-    private static IEnumerable<XmlNode> Children(XmlNode parent, string name) =>
-        parent.ChildNodes.Cast<XmlNode>().Where(n => n.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    private static IEnumerable<XmlNode> Children(XmlNode parent, string name) => LegacyXml.Children(parent, name);
 }

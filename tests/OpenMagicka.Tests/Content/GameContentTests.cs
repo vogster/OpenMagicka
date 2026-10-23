@@ -182,6 +182,28 @@ public class GameContentTests(ITestOutputHelper output)
         }
     }
 
+    [GameContentFact]
+    public void EveryVisualEffect_Loads_WithEveryEmitterAndLight()
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var library = OpenMagicka.Content.Particles.EffectLibrary.Load(files);
+        Assert.Equal(904, library.Count);
+
+        // Counted independently from the raw text.
+        var paths = files.ListFiles("Effects", recursive: true).Where(p => p.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var texts = paths.Select(p => System.Text.Encoding.UTF8.GetString(files.ReadAllBytes(p))).ToArray();
+        int Count(string tag) => texts.Sum(t => t.Split(tag).Length - 1);
+
+        var effects = paths.Select(p => library.Get(OpenMagicka.Content.Particles.EffectLibrary.Id(Path.GetFileNameWithoutExtension(p)))).ToArray();
+        var emitters = effects.SelectMany(e => e.Emitters).ToArray();
+        output.WriteLine($"{emitters.Length} emitters, {effects.Count(e => e.Light is not null)} lights");
+        Assert.Equal(Count("<ContinuousEmitter"), emitters.Count(e => e.Kind == OpenMagicka.Content.Particles.EmitterKind.Continuous));
+        Assert.Equal(Count("<PulseEmitter"), emitters.Count(e => e.Kind == OpenMagicka.Content.Particles.EmitterKind.Pulse));
+        Assert.Equal(Count("<Light>"), effects.Count(e => e.Light is not null));
+        Assert.Equal((1381, 1344, 31), (emitters.Count(e => e.Kind == OpenMagicka.Content.Particles.EmitterKind.Continuous),
+            emitters.Count(e => e.Kind == OpenMagicka.Content.Particles.EmitterKind.Pulse), effects.Count(e => e.Light is not null)));
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {

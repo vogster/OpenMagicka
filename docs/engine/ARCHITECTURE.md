@@ -484,7 +484,7 @@ layout remove the dependency on the original blobs (and enable mods).
   particle flag.
 - `RotationAligned` orients the particle along its velocity.
 
-### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (~904 files)
+### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (904 files)
 
 ```text
 <Effect type="Single|Looping|Infinite" duration="seconds" keyFramesPerSecond="N" [version="2"]>
@@ -495,29 +495,67 @@ layout remove the dependency on the original blobs (and enable mods).
 </Effect>
 ```
 
-- The child node name sets the emitter type: the code looks up a class with that name
-  implementing `IParticleEmitter`. There are currently two: `ContinuousEmitter` and `PulseEmitter`.
-- Tag and attribute names are case-insensitive. Numbers are written in InvariantCulture.
-- Flag parameters have a `Value` attribute: `BlendMode` (Alpha/Additive),
-  `SpreadType` (Arc/Cone), `RotationAligned`, `ColorControlAlpha`, `HSV`, `Colorize`,
-  `RelativeVelocity` (add the emitter's velocity), `Particle` (sprite index),
-  `SpawnLights`, `LightSizeRelative`.
-- Animatable parameters are written either as `<Name value="x"/>` (a constant) or
-  as `<Name><key time="frame" value="x"/>…</Name>`. Time is given in frames and divided by
-  `keyFramesPerSecond`. Between keys values are interpolated linearly; outside the range
-  the edge value is used. A missing parameter equals 1.
-  Full list: ParticlesPerSecond, PositionX/Y/Z, Position{X,Y,Z}Offset, RotationY,
-  Gravity, Drag, ColorR/G/B, ColorAMin/Max/Distribution, Hue/Sat/Value/Alpha
-  Min/Max/Distribution, LifeTimeMin/Max/Distribution, SizeStart/SizeEnd Min/Max/
-  Distribution, VelocityMin/Max/Distribution, RotationMin/Max, RotationSpeedMin/Max,
-  RotationPCCW (percentage of particles rotating counterclockwise), SpreadConeAngle/
-  Distribution, SpreadArcHorizontalAngle/Distribution, SpreadArcVerticalMin/Max/
-  Distribution, LightRadius, LightDiffuseR/G/B, LightAmbientR/G/B, LightSpecular.
-- Angles (Hue, Rotation, RotationSpeed, Spread*) are given in the file **in degrees** and
-  converted to radians.
-- **Version 1** (attribute absent): color is taken from `Alpha*` as ColorA,
-  ColorR/G/B/Value equal 1, there are no lights. **Version 2** adds
-  SpawnLights and LightSizeRelative.
+- The shipped content has **904** effects with 2725 emitters (1381 continuous, 1344 pulse)
+  and 31 lights; 703 files are version 1. Every top-level node except the `Effect` element is a
+  copyright comment. `ItemAbilities/Tron_disc.xml` contains the character reference `&#x1F;` in an
+  attribute; the original's XML reader does not check characters, so a strict parser must not
+  either.
+- **Root.** Every top-level node named `Effect` (ignoring case) is read into the same effect: the
+  root element, and a processing instruction `<?Effect?>`, which has no attributes and makes the
+  original fail. A file without one gives an empty effect (Single, duration 0, no emitters). Attributes, names
+  ignoring case: `type` (enum parse ignoring case: Single/Looping/Infinite, default Single),
+  `duration` (float, default 0), `keyFramesPerSecond` (int, default 10), `version` (int,
+  default 1; ≥ 2 selects the version 2 reader). Enum parsing also accepts numbers and
+  comma lists, so `type="7"` loads as an undefined value 7: the runtime must cope with it.
+- **Children.** A child whose name is exactly `ContinuousEmitter` or `PulseEmitter` (case
+  matters: it is a type name) is an emitter; one named `Light` (ignoring case) is the effect's
+  light; everything else, comments included, is ignored.
+- **Emitter parameters.** A child whose name exactly matches (case matters) a parameter of
+  that emitter type is a parameter:
+  - continuous emitters have the animatable parameters listed below; with child nodes the
+    parameter is a key list, one key per child node: `time` attribute = frame (int) divided by
+    `keyFramesPerSecond` as floats (default 0; a 0 or negative rate gives infinite, NaN or
+    negative times, no error), `value` = float (default 0); the child's own name does not
+    matter (the content uses `Key`), and a text or comment child makes the original fail.
+    Without child nodes it is a constant from its `value` attribute (default 0). Keys keep file
+    order; evaluation scans them in that order and stops at the first key with time > t; that
+    key and the last key with time ≤ t seen before it are blended linearly; with only one of them
+    its value is used; a single key is a constant; a parameter that is absent evaluates to **1**;
+  - pulse emitters have the same names minus `ParticlesPerSecond`, plus `TriggerTime`, all plain
+    floats from the `value` attribute (default 0, children ignored); an absent one is **0**.
+- **Flags** (any other child; for each attribute named `value` ignoring case, child name
+  compared ignoring case): `BlendMode` (Alpha blended if the value is `Alpha`, ignoring case,
+  otherwise additive), `SpreadType` (cone if `Cone`, otherwise arc), `RotationAligned`, `HSV`,
+  `ColorControlAlpha` (HSV = not the value), `Colorize` (booleans, .NET `bool.Parse`),
+  `Particle` (byte, sprite index), `RelativeVelocity`, and in pulse emitters `NrOfParticles`
+  (int). Version 2 adds `SpawnLights` and `LightSizeRelative`. Pulse emitters of version 1
+  ignore `RelativeVelocity`. A value that does not parse makes the original fail, and so does a
+  text, comment or processing-instruction node directly inside an emitter (it has no attributes).
+  Defaults: additive, arc spread, all booleans false, `Particle` 0, `NrOfParticles` 0. A repeated
+  parameter or flag: the last one wins (degrees are converted afterwards, once).
+- **Version 1 colours.** After reading: ColorAMin/Max/Distribution = AlphaMin/Max/Distribution
+  as read (absent stays absent), then ColorR/G/B, ValueMin/Max/Distribution and
+  AlphaMin/Max/Distribution = constant 1.
+- **Degrees.** RotationY, HueMin/Max, RotationMin/Max, RotationSpeedMin/Max, SpreadConeAngle,
+  SpreadArcHorizontalAngle and SpreadArcVerticalMin/Max are converted from degrees to radians
+  (every key). In a continuous emitter these 11 parameters must be present, or the original
+  fails (every shipped continuous emitter has them).
+- **Light** children (comments skipped; other non-element nodes make the original fail), for each
+  attribute named `Value` ignoring case, child name ignoring case: PositionX/Y/Z (offset in the effect's space), DiffuseR/G/B,
+  AmbientR/G/B, Specular, Radius, VariationSpeed, VariationAmount, SpawnTransitionTime,
+  DespawnTransitionTime (floats); VariationType (None, Sine, Flicker, Candle, Strobe) and
+  Spawn/DespawnTransitionType (None, Linear, Flicker), enum parse ignoring case. All start at 0 /
+  None; a second `<Light>` element changes only the properties it sets.
+- Numbers: floats with the invariant culture (thousands separators allowed; a number outside the
+  float range, such as `1e40`, overflows in .NET Framework, while the `Infinity` and `NaN`
+  symbols are accepted), integers with leading and trailing whitespace and a sign allowed.
+- Animatable parameters, full list: ParticlesPerSecond, PositionX/Y/Z, Position{X,Y,Z}Offset,
+  RotationY, Gravity, Drag, ColorR/G/B, ColorAMin/Max/Distribution, Hue/Sat/Value/Alpha
+  Min/Max/Distribution, LifeTimeMin/Max/Distribution, SizeStart/SizeEnd Min/Max/Distribution,
+  VelocityMin/Max/Distribution, RotationMin/Max, RotationSpeedMin/Max, RotationPCCW
+  (percentage of particles rotating counterclockwise), SpreadConeAngle/Distribution,
+  SpreadArcHorizontalAngle/Distribution, SpreadArcVerticalMin/Max/Distribution, LightRadius,
+  LightDiffuseR/G/B, LightAmbientR/G/B, LightSpecular.
 - The `*Distribution` parameter is an exponent: a random u∈[0,1) is raised to the
   power d, then mapped onto [min,max]. d>1 biases values toward min.
 - Random numbers come from a **precomputed table** of 65536 floats and 65536 bytes
@@ -534,8 +572,10 @@ layout remove the dependency on the original blobs (and enable mods).
 - `VisualEffect.Update`: Single stops when duration expires, Looping
   wraps time modulo duration, Infinite holds the last frame. A `<Light>` source
   follows the effect transform via `PointLightBatcher`.
-- `EffectManager` (Magicka) reads `content/Effects` recursively at startup. The key is the
-  **hash of the lowercase file name without extension** (§12.1). Up to
+- `EffectManager` (Magicka) reads `content/Effects` recursively at startup (a directory's files,
+  then its subdirectories). The key is the **hash of the lowercase file name without
+  extension** (§12.1); two files with the same name anywhere in the tree make the original fail
+  (the shipped names are unique; OpenMagicka reports which two files clash). Up to
   **256** instances are active at once. An instance reference (`VisualEffectReference`) = index + unique ID.
 
 ---
