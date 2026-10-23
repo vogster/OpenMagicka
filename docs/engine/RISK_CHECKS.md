@@ -136,6 +136,12 @@ our own HLSL for it.
   `ShaderLibrary` loads each effect, patches it, creates it on the render thread, sets the
   global parameters and applies every pass): 50 of 51 effects on Vulkan and on D3D11
   (`FNA3D_FORCE_DRIVER=D3D11`); `ArcaneEffect` is skipped (§1.5).
+- Drawing with real content (OM-63) showed that "loads and applies" is not "draws right" on every
+  driver: on SDL_GPU (Vulkan) MojoShader's SPIR-V for `AdditiveEffect` gives wrong colours, and on
+  D3D11 its HLSL for `SkinnedModelDeferredEffect` fails to compile at the first draw (shaders
+  are compiled when first linked, after `--check-effects` has passed). OpenGL draws them right
+  (50 of 51 effects ready there too), so it is the launcher's default; details in
+  ARCHITECTURE.md §3.2.
 - The spike draws without textures and with zero parameters: "draws" means "the pipeline was
   built and drawing did not crash", not "the picture matches the original". Visual comparison
   is the job of the viewer (OM-22).

@@ -83,7 +83,7 @@ public sealed class GpuLevel : IDisposable
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(gpu);
         var file = loader.LoadUncached(modelAsset);
-        IReadOnlyList<LevelBatch> content = file.Root is LevelModelContent level
+        IReadOnlyList<LevelBatch> read = file.Root is LevelModelContent level
             ?
             [
                 .. level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry),
@@ -91,6 +91,8 @@ public sealed class GpuLevel : IDisposable
             ]
             : file.Root is ModelContent or SkinnedModelContent ? ModelMeshes.ForModel(file)
             : throw new InvalidDataException($"{modelAsset} is neither a level model nor a model");
+        // Every vertex gets the elements its effect reads (OM-63).
+        var content = read.Select(b => VertexPadding.Complete(b, EffectInputs.For(b))).ToArray();
 
         var warnings = new List<string>();
         var images = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);

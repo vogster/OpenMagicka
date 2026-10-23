@@ -328,14 +328,31 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   as 0 but current GPUs make NaN, dropping the triangles; OpenMagicka moves the apex and the base
   centre a hair off the axis.
 - Additive objects: the original reads the material's tint as RGB and sets `ColorTint` = (tint, 1).
-- **Open:** the original effects read vertex elements the meshes do not have (an additive mesh, for
-  example, has no colour while `AdditiveEffect` reads one). Direct3D 9 tolerated that. Under FNA,
-  D3D11 refuses to build the input layout ("Could not compile input layout"), so the deferred
-  view needs Vulkan for now, and on Vulkan the additive light shafts and windows come out saturated
-  green whatever their tint (a white colour stream supplied for the missing element did not change
-  it, so the cause is still unknown).
+- Missing vertex elements: the original effects' vertex shaders read elements some meshes lack
+  (an additive mesh has no colour while `AdditiveEffect` reads one; plain models lack tangents).
+  Direct3D 9 tolerated that; under FNA, D3D11 refuses the input layout and Vulkan reads an unbound
+  attribute. OpenMagicka appends every missing element to the vertices at load with a neutral value
+  (white colour, normal up, tangent +X, full first blend weight, zero otherwise). What each effect
+  reads comes from its bytecode's input declarations:
+
+  | Effect | Vertex shader inputs (all techniques) |
+  |---|---|
+  | `RenderDeferredEffectWOVT` | Position, Normal, TextureCoordinate 0 and 1, Tangent 0 and 1, Color |
+  | `AdditiveEffect` | Position, Color, TextureCoordinate |
+  | `SkinnedModelDeferredEffect` | Position, Normal, TextureCoordinate, BlendIndices, BlendWeight |
+  | light and fullscreen effects | Position (and TextureCoordinate for the quad); their meshes are OpenMagicka's own, so they are not padded or pinned by a test |
+
+- Graphics driver: MojoShader translates the effects for each FNA3D driver, and two translations
+  get some wrong. For SDL_GPU (Vulkan), the additive shafts come out in the wrong colours: in a
+  test with the texture off, a tint of (2, 0, 0) gave red and green, (0, 2, 0) gave black,
+  (0, 0, 2) gave blue, so the green output takes the red value. For D3D11, the generated HLSL of
+  `SkinnedModelDeferredEffect` does not compile (X3000 syntax error), which only shows at the
+  first draw. The OpenGL translation draws all of them right, so the launcher sets the SDL hint
+  `FNA3D_FORCE_DRIVER=OpenGL` unless the user chose a driver (on macOS that means Apple's
+  deprecated OpenGL instead of Metal until the translations are fixed). Both faults are MojoShader's; they
+  are for a human to report upstream.
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
-  texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1), and `DestinationDimensions` = target size.
+  texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1); `DestinationDimensions` is set to ∞ (see the half-pixel shift above).
 - A level's directional light comes from its light list (intensity 1 unless it varies); the
   original composes into Main while reading it; OpenMagicka renders the composition into a separate
   target, since sampling and writing one texture is undefined on modern APIs.

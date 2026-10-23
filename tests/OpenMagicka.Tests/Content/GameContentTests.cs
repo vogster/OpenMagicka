@@ -31,6 +31,18 @@ public sealed class GameContentFactAttribute : FactAttribute
     }
 }
 
+/// <summary>A theory that runs only when MAGICKA_DIR points at a Magicka installation; skipped otherwise.</summary>
+public sealed class GameContentTheoryAttribute : TheoryAttribute
+{
+    public GameContentTheoryAttribute()
+    {
+        if (GameContent.ContentDirectory is null)
+        {
+            Skip = $"Set {GameContent.Variable} to a Magicka installation to run tests on the game files.";
+        }
+    }
+}
+
 public class GameContentTests(ITestOutputHelper output)
 {
     [GameContentFact]

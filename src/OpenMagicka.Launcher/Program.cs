@@ -8,6 +8,13 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Before FNA starts: the drivers it would pick first draw some original effects wrongly.
+        // FNA3D reads the choice as an SDL hint (an environment variable set from .NET would not
+        // reach native code on Unix); a normal-priority hint leaves FNA's own /gldevice: option first.
+        if (GraphicsDriver.Default(Environment.GetEnvironmentVariable(GraphicsDriver.Variable)) is { } driver)
+        {
+            SDL3.SDL.SDL_SetHint(GraphicsDriver.Variable, driver);
+        }
         GameOptions options;
         try
         {
