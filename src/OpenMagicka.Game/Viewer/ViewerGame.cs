@@ -115,9 +115,10 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         {
             var camera = FreeCamera.Lerp(frame.Previous, frame.Current, (float)frame.Timing.Alpha(now));
             var aspect = Math.Max(GraphicsDevice.Viewport.AspectRatio, 0.1f);
-            var far = Math.Max((level.Bounds.Max - level.Bounds.Min).Length() * 3, 1000);
-            var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, Math.Max(far / 20000, 0.5f), far);
-            drawn = Deferred() is { } renderer && useDeferred
+            var renderer = Deferred() is { } built && useDeferred ? built : null;
+            var (near, far) = ViewerProjection.ClipPlanes((level.Bounds.Max - level.Bounds.Min).Length(), renderer is not null);
+            var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, near, far);
+            drawn = renderer is not null
                 ? renderer.Render(GraphicsDevice, level, Frame(camera, projection))
                 : level.Draw(GraphicsDevice, effect, camera.View, projection);
         }

@@ -290,6 +290,7 @@ them; what the engine must reproduce is how each pass is fed (from the original'
 | G-buffer init | `RestoreDepthEffect` fullscreen into Main+Normal | `SourceTexture0` = Depth; `Color0` = (background RGB, 0); `Color1` = (0.5, 0.75, 0.5, 0.5); it also writes the depth back |
 | G-buffer | `RenderDeferredEffect` technique by material: `ReflectionMap` set → `SingleLayerReflection` (2) or, with a second diffuse texture, `DualLayerReflection` (3); otherwise `SingleLayer` (0) or `DualLayer` (1). Depth test LessEqual | material (below) |
 | Light | into Secondary cleared to 0, blend One / InvSrcColor. `DirectionalLightEffect` technique 0 with shadows, 1 without, on the fullscreen quad | `SourceTexture0` = Normal, `SourceTexture1` = Depth, `SourceTexture3` = shadow map; `LightDirection`, `DiffuseColor`/`AmbientColor`/`SpecularAmount` × intensity |
+| Point lights | `PointLightEffect` technique 0 with shadows, 1 without, into Secondary with the same blend; one draw per light whose sphere is in view. Effect states: no depth test or write, cull CCW | Mesh: a unit sphere with its 42 vertices on the sphere (an icosahedron subdivided once, 80 triangles, clockwise from outside), `World` = scale(range) × translation(position); `LightPosition`, `LightRadius` = range, `DiffuseColor`/`AmbientColor`/`SpecularAmount` × intensity, `NormalMap` = Normal, `DepthMap` = Depth, `HalfPixel` |
 | Composition | `DeferredShadingEffect` fullscreen into Main | `SourceTexture0` = Main, `1` = Normal, `2` = Depth, `4` = Secondary (light); `FogEnable`/`FogStart`/`FogEnd`/`FogColor` |
 
 - Material parameters of `RenderDeferredEffect`: `World`, `Alpha`, `Sharpness`, `VertexColorEnabled`,
@@ -306,6 +307,21 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   then drawn with `DiffuseColor` = 1, `FresnelPower` = 4, `Colorize` = 0 (non-zero only while frozen),
   no damage maps, and `Bones` = the skin transforms (identity in the bind pose); there is no `World`.
   Using only one of the diffuse maps leaves holes: the detail map is transparent where the base shows.
+- Depth is **linear**: the depth pass writes the view-space distance along the view axis (cleared to a
+  very large value). The light passes and RestoreDepth rebuild a world position as
+  `CameraPosition + ray × depth`, where `ray` is the far-plane point under the pixel (from
+  `InverseViewProjection`) minus the camera, times 1/500. This holds only when the projection's far
+  plane is 500, which is the original camera's (near 105, field of view 5°). RestoreDepth adds 0.002 to the depth
+  before projecting it back, so the depth buffer must be precise to well under that at the
+  scene's distance; a near plane far from the camera gives that.
+- The screen lookups add a half-pixel shift (`HalfPixel`, or 0.5 / `DestinationDimensions` in the
+  fullscreen effects, where that is all the size is used for), as Direct3D 9 needs to sample texel
+  centres. Under FNA's convention pixel and texel centres already match, so the shift lands on
+  texel edges and point sampling picks neighbouring rows (lines of wrong depth); OpenMagicka sets
+  it to zero (`HalfPixel` = 0, `DestinationDimensions` = ∞).
+- Spot lights (`SpotLightEffect`, 39 in the shipped levels) are not drawn yet: the effect has no
+  `World` parameter, so how its cone (16 sides, 4 rings, apex at the light) is placed must still be read from
+  its vertex shader.
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
   texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1), and `DestinationDimensions` = target size.
 - A level's directional light comes from its light list (intensity 1 unless it varies); the

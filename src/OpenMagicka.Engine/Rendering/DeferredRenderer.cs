@@ -12,7 +12,7 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
 /// a depth prepass into an R32F target, the G-buffer (Main + Normal, after RestoreDepth), the
 /// sun into a light accumulator, the composition with fog, then additive objects, and the result
-/// shown on the back buffer. Not yet: shadows, point and spot lights, decals, sky map, particles,
+/// shown on the back buffer, with the level's sun and point lights. Not yet: shadows, spot lights, decals, sky map, particles,
 /// post effects (OM-24 to OM-27). The original composes into Main while reading it; here Main is
 /// copied first, since sampling and writing one target is undefined on modern APIs.
 /// Render thread only.
@@ -22,10 +22,26 @@ public sealed class DeferredRenderer : IDisposable
     public static readonly string[] EffectNames =
         [
             "RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect",
-            "SkinnedModelDeferredEffect",
+            "SkinnedModelDeferredEffect", "PointLightEffect",
         ];
 
+    /// <summary>
+    /// The far plane the projection must use: the original camera always has 500, and the light
+    /// shaders rebuild world positions from the linear depth with a view ray scaled by 1/500.
+    /// </summary>
+    public const float FarPlane = 500;
+
     private const int WithoutShadows = 1;
+
+    /// <summary>
+    /// The original shifts screen lookups by half a pixel, as Direct3D 9 needs to sample texel
+    /// centres; FNA follows the later convention where pixel and texel centres already match, so the
+    /// shift would sample on texel edges (rows of wrong depth with point sampling). It is set to zero.
+    /// </summary>
+    private static readonly Vector2 NoHalfPixel = Vector2.Zero;
+
+    /// <summary>How close to a light's sphere the camera may come before its inner side is drawn: more than any near plane the viewer uses.</summary>
+    private const float NearMargin = 12;
     private static readonly Vector4 NormalClear = new(0.5f, 0.75f, 0.5f, 0.5f);
 
     /// <summary>Light accumulation: the original adds lights as One / InvSrcColor (a screen-like sum).</summary>
@@ -49,6 +65,8 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect shading;
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
+    private readonly GameEffect point;
+    private readonly SphereMesh sphere;
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
@@ -61,12 +79,14 @@ public sealed class DeferredRenderer : IDisposable
 
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
-        (deferred, clear, restoreDepth, sun, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6]);
+        (deferred, clear, restoreDepth, sun, shading, additive, skinned, point) =
+            (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6], effects[7]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
         if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || sun.Effect.Techniques.Count <= WithoutShadows
-            || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Depth || bindPose.Length == 0)
+            || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Depth || bindPose.Length == 0
+            || point.Effect.Techniques.Count <= WithoutShadows)
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
         }
@@ -74,10 +94,12 @@ public sealed class DeferredRenderer : IDisposable
         try
         {
             sprites = new SpriteBatch(device);
+            sphere = new SphereMesh(device);
         }
         catch
         {
             quad.Dispose();
+            sprites?.Dispose();
             throw;
         }
     }
@@ -100,7 +122,7 @@ public sealed class DeferredRenderer : IDisposable
         EnsureTargets(device);
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
-        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned })
+        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned, point })
         {
             effect.Globals.Apply(globals);
         }
@@ -110,7 +132,7 @@ public sealed class DeferredRenderer : IDisposable
         // Depth prepass into the R32F target.
         device.SetRenderTarget(depth);
         device.Clear(ClearOptions.DepthBuffer | ClearOptions.Stencil, Color.White, 1, 0);
-        DrawFullscreen(device, clear, depth!, BlendState.Opaque);
+        DrawFullscreen(device, clear, BlendState.Opaque);
         DrawOpaque(device, level, depthPass: true);
 
         // G-buffer: RestoreDepth fills Main, Normal and the depth buffer, then the materials.
@@ -121,7 +143,7 @@ public sealed class DeferredRenderer : IDisposable
         parameters.SetValue("SourceTexture0", depth);
         parameters.SetValue("Color0", new Vector4(frame.Background, 0));
         parameters.SetValue("Color1", NormalClear);
-        DrawFullscreen(device, restoreDepth, main!, BlendState.Opaque);
+        DrawFullscreen(device, restoreDepth, BlendState.Opaque);
         var drawn = DrawOpaque(device, level, depthPass: false);
 
         // The sun into the light accumulator.
@@ -136,7 +158,8 @@ public sealed class DeferredRenderer : IDisposable
         sunParameters.SetValue("AmbientColor", frame.Sun.Ambient);
         sunParameters.SetValue("SpecularAmount", frame.Sun.Specular);
         sun.Effect.CurrentTechnique = sun.Effect.Techniques[WithoutShadows];
-        DrawFullscreen(device, sun, light!, LightBlend);
+        DrawFullscreen(device, sun, LightBlend);
+        DrawPointLights(device, level.PointLights, globals.CameraPosition);
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);
@@ -153,7 +176,7 @@ public sealed class DeferredRenderer : IDisposable
         shade.SetValue("FogStart", frame.Fog.Start);
         shade.SetValue("FogEnd", frame.Fog.End);
         shade.SetValue("FogColor", frame.Fog.Color);
-        DrawFullscreen(device, shading, main!, BlendState.Opaque);
+        DrawFullscreen(device, shading, BlendState.Opaque);
         DrawAdditive(device, level, level.TextureFor);
 
         UnbindTextures(device);
@@ -199,6 +222,41 @@ public sealed class DeferredRenderer : IDisposable
         return drawn;
     }
 
+    /// <summary>
+    /// Each point light whose reach is in view, as its sphere: added like the sun, without depth
+    /// testing (the light is computed from the G-buffer per pixel). The outer side is drawn, as in the
+    /// original, unless the camera is in or near the sphere (the original's camera never was): then
+    /// the inner side, so the light neither vanishes nor loses what the near plane cuts off.
+    /// </summary>
+    private void DrawPointLights(GraphicsDevice device, IReadOnlyList<PointLighting> lights, Vector3 camera)
+    {
+        device.BlendState = LightBlend;
+        device.DepthStencilState = DepthStencilState.None;
+        point.Effect.CurrentTechnique = point.Effect.Techniques[WithoutShadows];
+        var parameters = new FnaEffectParameters(point.Effect);
+        parameters.SetValue("NormalMap", normal);
+        parameters.SetValue("DepthMap", depth);
+        parameters.SetValue("HalfPixel", NoHalfPixel);
+        sphere.Bind(device);
+        foreach (var lamp in lights)
+        {
+            if (!frustum.Intersects(new BoundingSphere(lamp.Position, lamp.Radius)))
+            {
+                continue;
+            }
+            parameters.SetValue("World", lamp.World);
+            parameters.SetValue("LightPosition", lamp.Position);
+            parameters.SetValue("LightRadius", lamp.Radius);
+            parameters.SetValue("DiffuseColor", lamp.Diffuse);
+            parameters.SetValue("AmbientColor", lamp.Ambient);
+            parameters.SetValue("SpecularAmount", lamp.Specular);
+            var near = Vector3.Distance(camera, lamp.Position) < lamp.Radius + NearMargin;
+            sphere.Draw(device, point.Effect, near ? RasterizerState.CullClockwise : RasterizerState.CullCounterClockwise);
+        }
+        device.RasterizerState = RasterizerState.CullNone;
+    }
+
+
     private void DrawAdditive(GraphicsDevice device, GpuLevel level, Func<Content.Xna.ExternalReference?, Texture?> textures)
     {
         device.BlendState = AdditiveBlend;
@@ -233,11 +291,12 @@ public sealed class DeferredRenderer : IDisposable
         }
     }
 
-    private void DrawFullscreen(GraphicsDevice device, GameEffect effect, RenderTarget2D target, BlendState blend)
+    private void DrawFullscreen(GraphicsDevice device, GameEffect effect, BlendState blend)
     {
         device.BlendState = blend;
         device.DepthStencilState = DepthStencilState.None;
-        new FnaEffectParameters(effect.Effect).SetValue("DestinationDimensions", new Vector2(target.Width, target.Height));
+        // The effects only use the size for the half-pixel shift (0.5 / size); an infinite size makes it zero.
+        new FnaEffectParameters(effect.Effect).SetValue("DestinationDimensions", new Vector2(float.PositiveInfinity));
         quad.Draw(device, effect.Effect);
     }
 
@@ -292,6 +351,7 @@ public sealed class DeferredRenderer : IDisposable
         DisposeTargets();
         quad.Dispose();
         sprites.Dispose();
+        sphere.Dispose();
     }
 }
 
