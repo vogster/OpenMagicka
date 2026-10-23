@@ -137,6 +137,13 @@ public sealed class ShaderLibrary(ShaderSource source, RenderQueue<GraphicsDevic
             return Task.FromException<GameEffect>(e);
         }
         var lazy = effects.GetOrAdd(key, k => new Lazy<Task<GameEffect>>(() => Create(k)));
+        // An earlier request that failed or was cancelled may not be evicted yet (its continuation
+        // runs asynchronously): drop it now and start again.
+        if (lazy.IsValueCreated && lazy.Value is { IsFaulted: true } or { IsCanceled: true })
+        {
+            effects.TryRemove(new KeyValuePair<string, Lazy<Task<GameEffect>>>(key, lazy));
+            lazy = effects.GetOrAdd(key, k => new Lazy<Task<GameEffect>>(() => Create(k)));
+        }
         var task = lazy.Value;
         task.ContinueWith(_ => effects.TryRemove(new KeyValuePair<string, Lazy<Task<GameEffect>>>(key, lazy)),
             CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
