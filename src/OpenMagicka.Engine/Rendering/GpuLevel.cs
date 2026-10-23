@@ -88,6 +88,7 @@ public sealed class GpuLevel : IDisposable
             [
                 .. level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry),
                 .. LevelParts.Batches(level.AnimatedParts, file.SharedResources),
+                .. LevelLiquids.Batches(level.Liquids),
             ]
             : file.Root is ModelContent or SkinnedModelContent ? ModelMeshes.ForModel(file)
             : throw new InvalidDataException($"{modelAsset} is neither a level model nor a model");
@@ -161,6 +162,10 @@ public sealed class GpuLevel : IDisposable
         {
             all.AddRange(SkinnedDeferredMaterial.References(skinned));
         }
+        if (batch.Material is RenderDeferredLiquidEffectContent or LavaEffectContent)
+        {
+            all.AddRange(LiquidMaterial.References(batch.Material));
+        }
         if (DeferredMaterial(batch) is { } m)
         {
             all.Add(m.ReflectionMap);
@@ -173,7 +178,8 @@ public sealed class GpuLevel : IDisposable
     }
 
     /// <summary>The RenderDeferredEffect material a batch is drawn with; none for additive batches and characters.</summary>
-    private static RenderDeferredEffectContent? DeferredMaterial(LevelBatch batch) => batch.Additive || batch.Material is SkinnedModelBasicEffectContent ? null
+    private static RenderDeferredEffectContent? DeferredMaterial(LevelBatch batch) =>
+        batch.Additive || batch.Material is SkinnedModelBasicEffectContent or RenderDeferredLiquidEffectContent or LavaEffectContent ? null
         : batch.Material as RenderDeferredEffectContent
           ?? RenderDeferredMaterial.StandIn(batch.HasUv ? batch.DiffuseTexture : null, batch.DiffuseColor);
 

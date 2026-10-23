@@ -7,9 +7,11 @@ namespace OpenMagicka.Engine.Rendering;
 
 /// <summary>
 /// What one frame is drawn with besides the geometry; <see cref="ShadowFocus"/> is where the sun's
-/// shadows are wanted (see <see cref="SunShadowView.Focus"/>).
+/// shadows are wanted (see <see cref="SunShadowView.Focus"/>), <see cref="Seconds"/> the time the
+/// liquids' waves and flow have run.
 /// </summary>
-public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus);
+public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
+    float Seconds = 0);
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
@@ -17,7 +19,8 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// RestoreDepth), the lights into a light accumulator (<see cref="LightPass"/>), the composition
 /// with fog, then additive objects, and the result shown on the back buffer. Shadow maps are drawn
 /// first: the sun's, then the shadow-casting point and spot lights' (<see cref="LightShadows"/>).
-/// Not yet: decals, sky map, particles, post effects (OM-25 to OM-27). The original
+/// Water and lava are drawn with the opaque objects (<see cref="LiquidMaterial"/>). Not yet: decals,
+/// sky map, particles, post effects (OM-25 to OM-27). The original
 /// composes into Main while reading it; here Main is copied first, since sampling and writing one
 /// target is undefined on modern APIs. Render thread only.
 /// </summary>
@@ -26,7 +29,7 @@ public sealed class DeferredRenderer : IDisposable
     public static readonly string[] EffectNames =
         [
             "RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect",
-            "SkinnedModelDeferredEffect", "PointLightEffect", "SpotLightEffect",
+            "SkinnedModelDeferredEffect", "PointLightEffect", "SpotLightEffect", "RenderDeferredLiquidEffect", "LavaEffect",
         ];
 
     /// <summary>
@@ -47,14 +50,14 @@ public sealed class DeferredRenderer : IDisposable
         AlphaSourceBlend = Blend.InverseDestinationColor, AlphaDestinationBlend = Blend.One,
     };
 
-    private enum OpaquePass { Shadow, Depth, GBuffer }
-
     private readonly GameEffect deferred;
     private readonly GameEffect clear;
     private readonly GameEffect restoreDepth;
     private readonly GameEffect shading;
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
+    private readonly GameEffect water;
+    private readonly GameEffect lava;
     private readonly LightPass lights;
     private readonly LightShadows lightShadows = new();
     private readonly Matrix[] bindPose;
@@ -72,10 +75,12 @@ public sealed class DeferredRenderer : IDisposable
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
         (deferred, clear, restoreDepth, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[4], effects[5], effects[6]);
+        (water, lava) = (effects[9], effects[10]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
         if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Shadow
+            || water.Effect.Techniques.Count <= LiquidMaterial.Shadow || lava.Effect.Techniques.Count <= LiquidMaterial.LavaShadow
             || bindPose.Length == 0)
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
@@ -115,9 +120,9 @@ public sealed class DeferredRenderer : IDisposable
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
         var shadow = DrawSunShadow(device, level, frame);
-        lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, globals, viewProjection, Matrix.Identity, cull));
+        lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
-        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned }.Concat(lights.Effects))
+        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava }.Concat(lights.Effects))
         {
             effect.Globals.Apply(globals);
         }
@@ -127,7 +132,7 @@ public sealed class DeferredRenderer : IDisposable
         device.SetRenderTarget(depth);
         device.Clear(ClearOptions.DepthBuffer | ClearOptions.Stencil, Color.White, 1, 0);
         quad.Draw(device, clear, BlendState.Opaque);
-        DrawOpaque(device, level, OpaquePass.Depth, frustum);
+        DrawOpaque(device, level, frame, OpaqueKind.Depth, frustum);
 
         // G-buffer: RestoreDepth fills Main, Normal and the depth buffer, then the materials.
         UnbindTextures(device);
@@ -138,7 +143,7 @@ public sealed class DeferredRenderer : IDisposable
         parameters.SetValue("Color0", new Vector4(frame.Background, 0));
         parameters.SetValue("Color1", NormalClear);
         quad.Draw(device, restoreDepth, BlendState.Opaque);
-        var drawn = DrawOpaque(device, level, OpaquePass.GBuffer, frustum);
+        var drawn = DrawOpaque(device, level, frame, OpaqueKind.GBuffer, frustum);
 
         // The lights into the light accumulator.
         UnbindTextures(device);
@@ -194,7 +199,7 @@ public sealed class DeferredRenderer : IDisposable
         var view = SunShadowView.Around(frame.Sun.Direction, frame.ShadowFocus, size);
         device.SetRenderTarget(shadowMap);
         device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, NoCaster, 1, 0);
-        DrawCasters(device, level, frame.Globals, view.LightView, view.LightProjection, RasterizerState.CullCounterClockwise);
+        DrawCasters(device, level, frame, view.LightView, view.LightProjection, RasterizerState.CullCounterClockwise);
         return new SunShadow(shadowMap, view);
     }
 
@@ -203,19 +208,22 @@ public sealed class DeferredRenderer : IDisposable
     /// The casters take the view-projection from the shared globals, so these are set to the
     /// light's view here; the camera's are set again before the camera passes.
     /// </summary>
-    private void DrawCasters(GraphicsDevice device, GpuLevel level, GlobalEffectValues camera, Matrix view, Matrix projection, RasterizerState cull)
+    private void DrawCasters(GraphicsDevice device, GpuLevel level, DeferredFrame frame, Matrix view, Matrix projection, RasterizerState cull)
     {
-        var lightGlobals = camera with { View = view, Projection = projection };
-        deferred.Globals.Apply(lightGlobals);
-        skinned.Globals.Apply(lightGlobals);
+        var lightGlobals = frame.Globals with { View = view, Projection = projection };
+        foreach (var effect in new[] { deferred, skinned, water, lava })
+        {
+            effect.Globals.Apply(lightGlobals);
+        }
         shadowFrustum.Matrix = lightGlobals.ViewProjection;
         device.RasterizerState = cull;
-        DrawOpaque(device, level, OpaquePass.Shadow, shadowFrustum);
+        DrawOpaque(device, level, frame, OpaqueKind.Shadow, shadowFrustum);
         device.RasterizerState = RasterizerState.CullNone;
     }
 
-    private int DrawOpaque(GraphicsDevice device, GpuLevel level, OpaquePass pass, BoundingFrustum view)
+    private int DrawOpaque(GraphicsDevice device, GpuLevel level, DeferredFrame frame, OpaqueKind pass, BoundingFrustum view)
     {
+        var liquids = (water: new FnaEffectParameters(water.Effect), lava: new FnaEffectParameters(lava.Effect));
         device.BlendState = BlendState.Opaque;
         device.DepthStencilState = DepthStencilState.Default;
         var parameters = new FnaEffectParameters(deferred.Effect);
@@ -223,8 +231,8 @@ public sealed class DeferredRenderer : IDisposable
         skinned.Effect.Parameters["Bones"].SetValue(bindPose);
         skinned.Effect.CurrentTechnique = skinned.Effect.Techniques[pass switch
         {
-            OpaquePass.Shadow => SkinnedDeferredMaterial.Shadow,
-            OpaquePass.Depth => SkinnedDeferredMaterial.Depth,
+            OpaqueKind.Shadow => SkinnedDeferredMaterial.Shadow,
+            OpaqueKind.Depth => SkinnedDeferredMaterial.Depth,
             _ => SkinnedDeferredMaterial.Default,
         }];
         var drawn = 0;
@@ -241,6 +249,16 @@ public sealed class DeferredRenderer : IDisposable
                 drawn++;
                 continue;
             }
+            if (batch.Material is RenderDeferredLiquidEffectContent or LavaEffectContent)
+            {
+                var (effect, liquid) = batch.Material is LavaEffectContent ? (lava, liquids.lava) : (water, liquids.water);
+                LiquidMaterial.Apply(liquid, batch.Material, batch.World, frame.Seconds, level.TextureFor);
+                var reflects = batch.Material is RenderDeferredLiquidEffectContent w && level.TextureFor(w.ReflectionMap) is not null;
+                effect.Effect.CurrentTechnique = effect.Effect.Techniques[LiquidMaterial.Technique(batch.Material, reflects, pass)];
+                Draw(device, effect.Effect, batch);
+                drawn++;
+                continue;
+            }
             if (batch.Deferred is not { } material)
             {
                 continue;
@@ -248,8 +266,8 @@ public sealed class DeferredRenderer : IDisposable
             RenderDeferredMaterial.Apply(parameters, batch.World, material, level.TextureFor);
             var technique = pass switch
             {
-                OpaquePass.Shadow => RenderDeferredMaterial.Shadow,
-                OpaquePass.Depth => RenderDeferredMaterial.Depth,
+                OpaqueKind.Shadow => RenderDeferredMaterial.Shadow,
+                OpaqueKind.Depth => RenderDeferredMaterial.Depth,
                 _ => RenderDeferredMaterial.Technique(material, level.TextureFor(material.ReflectionMap) is not null),
             };
             deferred.Effect.CurrentTechnique = deferred.Effect.Techniques[technique];

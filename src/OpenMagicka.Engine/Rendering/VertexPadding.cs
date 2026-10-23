@@ -30,11 +30,25 @@ public static class EffectInputs
         In(VertexElementUsageXna31.BlendIndices), In(VertexElementUsageXna31.BlendWeight),
     ];
 
-    /// <summary>The inputs of the effect a batch is drawn with: additive, a character's, or RenderDeferred (its own material or a stand-in).</summary>
+    /// <summary>Water and lava (the same inputs); Color1 is the freeze value (see <see cref="LevelLiquids"/>).</summary>
+    public static IReadOnlyList<ShaderInput> Liquid { get; } =
+    [
+        In(VertexElementUsageXna31.Position), In(VertexElementUsageXna31.Normal), In(VertexElementUsageXna31.Tangent),
+        In(VertexElementUsageXna31.Binormal), In(VertexElementUsageXna31.TextureCoordinate), In(VertexElementUsageXna31.Color),
+        In(VertexElementUsageXna31.Color, 1),
+    ];
+
+    /// <summary>The inputs of the effect a batch is drawn with: additive, a character's, a liquid's, or RenderDeferred (its own material or a stand-in).</summary>
     public static IReadOnlyList<ShaderInput> For(LevelBatch batch)
     {
         ArgumentNullException.ThrowIfNull(batch);
-        return batch.Additive ? Additive : batch.Material is SkinnedModelBasicEffectContent ? SkinnedModelDeferred : RenderDeferred;
+        return batch.Additive ? Additive
+            : batch.Material switch
+            {
+                SkinnedModelBasicEffectContent => SkinnedModelDeferred,
+                RenderDeferredLiquidEffectContent or LavaEffectContent => Liquid,
+                _ => RenderDeferred,
+            };
     }
 }
 
@@ -57,15 +71,27 @@ public static class VertexPadding
         {
             return batch;
         }
+        return AppendAll(batch, [.. missing.Select(input => (input, Default(input.Usage)))]);
+    }
+
+    /// <summary>Appends one element with the given value to every vertex.</summary>
+    public static LevelBatch Append(LevelBatch batch, ShaderInput input, VertexElementFormatXna31 format, byte[] value)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        ArgumentNullException.ThrowIfNull(value);
+        return AppendAll(batch, [(input, (format, value))]);
+    }
+
+    private static LevelBatch AppendAll(LevelBatch batch, IReadOnlyList<(ShaderInput Input, (VertexElementFormatXna31 Format, byte[] Value) Element)> elements)
+    {
         if (batch.Stride < batch.Declaration.Stride)
         {
             throw new InvalidDataException($"vertex stride {batch.Stride} is shorter than its declaration ({batch.Declaration.Stride} bytes)");
         }
         var added = new List<VertexElementContent>();
         var values = new List<byte>();
-        foreach (var input in missing)
+        foreach (var (input, (format, value)) in elements)
         {
-            var (format, value) = Default(input.Usage);
             added.Add(new VertexElementContent(0, batch.Stride + values.Count, format, 0, input.Usage, input.Index));
             values.AddRange(value);
         }

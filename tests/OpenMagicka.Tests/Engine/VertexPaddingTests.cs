@@ -104,6 +104,8 @@ public class EffectInputsGameTests
     [InlineData("RenderDeferredEffectWOVT")]
     [InlineData("AdditiveEffect")]
     [InlineData("SkinnedModelDeferredEffect")]
+    [InlineData("RenderDeferredLiquidEffect")]
+    [InlineData("LavaEffect")]
     public void TheListedInputs_AreWhatTheGamesVertexShadersRead(string effect)
     {
         var source = new ShaderSource(new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(OpenMagicka.Tests.Content.GameContent.ContentDirectory!),
@@ -116,9 +118,42 @@ public class EffectInputsGameTests
         {
             "AdditiveEffect" => EffectInputs.Additive,
             "SkinnedModelDeferredEffect" => EffectInputs.SkinnedModelDeferred,
+            "RenderDeferredLiquidEffect" or "LavaEffect" => EffectInputs.Liquid,
             _ => EffectInputs.RenderDeferred,
         };
 
         Assert.True(read.SetEquals(listed), string.Join(", ", read));
+    }
+}
+
+public class LiquidParametersGameTests
+{
+    private sealed class Names : IEffectParameters
+    {
+        public HashSet<string> Set { get; } = [];
+
+        public bool Contains(string name) => true;
+        public void SetValue(string name, Microsoft.Xna.Framework.Matrix value) => Set.Add(name);
+        public void SetValue(string name, Vector3 value) => Set.Add(name);
+        public void SetValue(string name, float value) => Set.Add(name);
+        public void SetValue(string name, bool value) => Set.Add(name);
+        public void SetValue(string name, Vector2 value) => Set.Add(name);
+        public void SetValue(string name, Vector4 value) => Set.Add(name);
+        public void SetValue(string name, Microsoft.Xna.Framework.Graphics.Texture? value) => Set.Add(name);
+    }
+
+    [OpenMagicka.Tests.Content.GameContentTheory]
+    [InlineData("RenderDeferredLiquidEffect")]
+    [InlineData("LavaEffect")]
+    public void EveryParameterTheLiquidsSet_IsInTheGamesEffect(string effect)
+    {
+        var source = new ShaderSource(new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(OpenMagicka.Tests.Content.GameContent.ContentDirectory!),
+            OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka));
+        var declared = Fx2Effect.Parse(source.Bytecode(effect)).Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var names = new Names();
+
+        LiquidMaterial.Apply(names, effect == "LavaEffect" ? LiquidTests.Lava() : LiquidTests.Water(), Microsoft.Xna.Framework.Matrix.Identity, 0, _ => null);
+
+        Assert.DoesNotContain(names.Set, n => !declared.Contains(n));
     }
 }

@@ -10,7 +10,7 @@ namespace OpenMagicka.Engine.Rendering;
 /// original places them when a level starts: a part's world transform is the pose of its
 /// animation's first keyframe times its parent part's world transform, and every mesh of the part's
 /// model is drawn with it (the model's bone transforms are not used). A mesh's visibility comes
-/// from the part's mesh settings, which must name every mesh. Liquids on parts are not drawn yet.
+/// from the part's mesh settings, which must name every mesh. A part's liquids move with it.
 /// A part whose rest pose is not finite (six energy rings of ch_end_of_world start with an all-NaN
 /// keyframe) is skipped with its children. docs/formats/XNB_READERS.md §4.3.
 /// </summary>
@@ -52,6 +52,7 @@ public static class LevelParts
                 }
             }
         }
+        batches.AddRange(LevelLiquids.Batches(part.Liquids, world));
         foreach (var child in part.Children)
         {
             Add(child, world, shared, batches);

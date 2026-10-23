@@ -95,7 +95,7 @@ public static class ModelMeshes
         _ => (null, Vector3.One, false),
     };
 
-    /// <summary>The batches of one mesh drawn with <paramref name="world"/>; water parts are left to the liquids (OM-25).</summary>
+    /// <summary>The batches of one mesh drawn with <paramref name="world"/>; liquid materials on a mesh are not drawn (see <see cref="LevelLiquids"/>).</summary>
     public static IReadOnlyList<LevelBatch> MeshBatches(ModelContent model, ModelMeshContent mesh, Matrix world, IReadOnlyList<object?> shared)
     {
         ArgumentNullException.ThrowIfNull(model);
@@ -127,9 +127,9 @@ public static class ModelMeshes
             var effect = part.Effect is { } reference
                 ? (uint)reference.Index < (uint)shared.Count ? shared[reference.Index] : throw new InvalidDataException($"mesh {mesh.Name}: effect {reference.Index} of {shared.Count} shared resources")
                 : null;
-            if (effect is RenderDeferredLiquidEffectContent)
+            if (effect is RenderDeferredLiquidEffectContent or LavaEffectContent)
             {
-                continue;   // water on a part: drawn with the liquids (OM-25)
+                continue;   // a water material on a mesh: the original draws only a part's own liquids
             }
             var declaration = model.VertexDeclarations[part.VertexDeclarationIndex];
             var (texture, color, additive) = Material(effect);
@@ -153,7 +153,7 @@ public static class ModelMeshes
     private static int IndexSize(IndexBufferContent indices) => indices.Is16Bit ? 2 : 4;
 
     /// <summary>Index values are relative to the part's first vertex and must stay inside its vertices (the GPU would read past them).</summary>
-    private static void CheckIndices(byte[] indices, bool is16Bit, int vertices, string? mesh)
+    internal static void CheckIndices(byte[] indices, bool is16Bit, int vertices, string? mesh)
     {
         var size = is16Bit ? 2 : 4;
         for (var i = 0; i + size <= indices.Length; i += size)
