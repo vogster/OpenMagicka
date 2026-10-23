@@ -47,6 +47,39 @@ public readonly record struct Spell
 
     public float TotalMagnitude => Earth + Water + Cold + Fire + Lightning + Arcane + Life + Shield + Ice + Steam + Poison;
 
+    /// <summary>Fire, Cold, Steam, Water and Poison together: what a spray's range grows with.</summary>
+    public float TotalSprayMagnitude => Fire + Cold + Steam + Water + Poison;
+
+    public SpellType Type => SpellTypes.Of(Element);
+
+    /// <summary>The blast size of the spell's own type (<see cref="BlastSizeAs"/>).</summary>
+    public float BlastSize => BlastSizeAs(Type);
+
+    /// <summary>
+    /// <c>√(m / 5)</c>, m the biggest magnitude that matters to the type: Fire, Cold, Steam, Water or
+    /// Poison for a spray, Earth or Ice for a projectile, Arcane or Life for a beam; 0 otherwise.
+    /// Radii are usually ten times this.
+    /// </summary>
+    public float BlastSizeAs(SpellType type)
+    {
+        var m = type switch
+        {
+            SpellType.Spray => MathF.Max(Steam, MathF.Max(Fire, MathF.Max(Cold, MathF.Max(Water, Poison)))),
+            SpellType.Projectile => MathF.Max(Earth, Ice),
+            SpellType.Beam => MathF.Max(Arcane, Life),
+            _ => 0,
+        };
+        return MathF.Sqrt(MathF.Max(m, 0) / 5);
+    }
+
+    /// <summary>The magnitudes scaled to a total of 1 (a weapon's queue holds these); unchanged when the total is not positive.</summary>
+    public Spell Normalized()
+    {
+        var total = TotalMagnitude;
+        return total <= 0 ? this : new Spell(Earth / total, Water / total, Cold / total, Fire / total, Lightning / total,
+            Arcane / total, Life / total, Shield / total, Ice / total, Steam / total, Poison / total) { Magick = Magick };
+    }
+
     /// <summary>The magnitude of one element.</summary>
     public float this[Elements element] => element switch
     {

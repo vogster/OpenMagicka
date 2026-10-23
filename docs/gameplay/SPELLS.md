@@ -196,6 +196,12 @@ Helper quantities:
 `CastType`: `None/Blast = 0`, `Force = 1` (RMB), `Area = 2` (Shift+RMB), `Self = 3` (MMB),
 `Weapon = 4` (Shift+LMB, weapon "imbue"), `Magick = 5` (Space).
 
+Ours (OM-35): the rules and numbers of sections 3.2–5 as pure functions in
+`OpenMagicka.Gameplay.Spells`: `SpellTypes`, `ElementQueue.Combine`, `CastRules`, `PushRules`,
+`SprayRules`, `ProjectileRules`, `BeamRules`, `LightningRules`, `ShieldRules`, `BlastRules`.
+Carrying them out in the world (effects, entities, physics, targeting) waits for the entities and
+physics (OM-71).
+
 Order: when cast is pressed, the queue is folded into a `Spell` (the player's queue is cleared), the character
 enters `CastState` (or `ChargeState`), and an animation event calls `Spell.Cast(castType)`,
 which takes an effect from the pool by `SpellType` and calls `CastForce/CastArea/CastSelf/CastWeapon`.
@@ -221,7 +227,11 @@ Basic effect rules (`SpellEffect`):
 **Charge (SpellPower).** If the type is Projectile and the cast is Force, or the type is Push and the cast is Force/Area, the character
 enters `ChargeState`: `charge_force`/`charge_area` plays, `SpellPower` grows linearly
 from 0 to 1 over the clip duration, and after the clip ends it is 1 (loop animation). Releasing the button →
-cast. Turning while charging ×0.125. For non-avatars, projectile charge is fixed at 0.5.
+cast. Turning while charging ×0.125. For non-avatars, projectile charge is fixed at 0.5 (a boss's
+spell zone charges like a player).
+
+Arc angles in this section (cones, weapon arcs) are measured from the facing to either side: a
+target counts when its direction deviates from the facing by less than the angle.
 
 **Weapon (imbue).** For the avatar, a Weapon cast does not create an effect right away: all queue entries
 are moved into the held weapon's queue (`Item.TryAddToQueue`, with `Normalize` and the same
@@ -275,13 +285,17 @@ only with line of sight (the ray to the target does not cross level geometry). E
 - All projectiles except the last get a random Y rotation within `±(π/4)·(1−charge)`
   and speed `v0·(1.25 + 0.75·rand)`; the last one flies exactly along the direction at speed `v0`.
 - If the segment "character center → launch point" crosses a shield, the projectile is not created.
-- Models: `Models/Missiles/Earth0..3` (index `clamp(E−1, 0, 4)`, 2 and 3 are the same),
-  `Ice3`, `IceEarth0..3` (index `clamp(I+E−1,0,4)`).
+- Models (`Models/Missiles/`): with Earth and Ice, `IceEarth0, IceEarth1, IceEarth2, IceEarth2,
+  IceEarth3` by `clamp(trunc(I) + trunc(E) − 1, 0, 4)`; with Earth only, `Earth0, Earth1, Earth2,
+  Earth2, Earth3` by `clamp(trunc(E) − 1, 0, 4)`; shards `Ice3`.
 - Hit: damage `(Projectile, Force)` (section 6.3); for stone projectiles the first entry
   is scaled by speed: `amount × |v| / 50`. Ice shards are Piercing, magnitudes ×`1/N`.
-- A boulder with other elements (except Ice): on hit/collision, a blast of radius
-  `BlastSize(spell without Earth)·10` with damage `CalculateDamage(remainder_type, Area)` from the full
-  spell. Without a "remainder", the boulder pierces up to 25 targets.
+- A boulder's blast: `remainder_type` = the type of its elements without Earth, and the radius
+  `BlastSizeAs(remainder_type)·10` measured on **all** the magnitudes (Earth's included). If the
+  radius is above 0, on hit/collision the boulder blasts with `CalculateDamage(remainder_type, Area)`
+  of the full spell and is removed; otherwise it pierces up to 25 targets. So a boulder with Ice
+  blasts as a projectile sized by `max(E, I)`, one with Arcane or Life as a beam, one with a spray
+  element as a spray; Earth alone, or with Lightning (a blast size of 0), pierces.
 - Collision with the environment: `Crater` decal.
 
 **Area**: `GroundBlast` of radius `BlastSize·10` (Earth/Ice), no falloff, ignores
@@ -303,7 +317,8 @@ each target takes damage once.
   fields. Maximum depth of the reflection/merge chain is 6.
 - **Beam crossing** (distance between segments ≤ 1):
   - "Explosion" after 0.25 s if: the beams share an owner, OR their extra elements
-    (`W, C, F, Z, T, P`) are `InclusiveOpposites`, OR one is Arcane and the other Life, OR the directions are
+    (`W, C, F, Z, T, P`) are `InclusiveOpposites`, OR one carries Arcane and the other does not
+    (an Arcane and a Life beam, or an Arcane+Life and a Life beam), OR the directions are
     nearly opposite (|mean of the directions| < 0.2). Explosion: `FullBlast` of each owner's damage
     collection with radius `3 + number_of_owners`, plus Knockback 500 / magnitude 2 with radius 5.
     Achievement `nevercrossthebeams`.
@@ -365,8 +380,8 @@ from attacks with the Damage/Status flags (`amount × magnitude`), others are re
 **Otherwise → barriers/walls (`Barrier`):**
 - Force: an arc of radius 4, segment step `2·GetRadius` (1.25 for solid, 0.75 for
   elemental, with scale fitting), a chain every 0.075 s over `≈π` in each direction. If the
-  spell has no status elements, Steam or Lightning (i.e. a pure stone/ice wall,
-  possibly with Arcane/Life), the arc center is shifted 2 m back.
+  spell has no status elements (`StatusEffects` mask: Water, Cold, Fire, Life, Steam, Poison) and no
+  Lightning (i.e. a pure stone/ice wall, possibly with Arcane), the arc center is shifted 2 m back.
 - Area: a ring of radius `S + 3` around the caster.
 - Weapon: a line forward, as for mines.
 - **Solid barrier** (has Earth or Ice):

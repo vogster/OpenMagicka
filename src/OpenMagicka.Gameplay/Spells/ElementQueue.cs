@@ -80,6 +80,15 @@ public sealed class ElementQueue
 
     public ElementQueue Cleared() => Count == 0 ? this : new(Capacity);
 
+    /// <summary>
+    /// The spell the queue casts (§3): its entries added left to right; a leading magick entry is
+    /// returned as it is, and an empty queue gives the empty spell (a push).
+    /// </summary>
+    public Spell Combine() =>
+        Count == 0 ? default
+        : Entries[0].Magick != MagickType.None ? Entries[0]
+        : Entries.Skip(1).Aggregate(Entries[0], (sum, entry) => sum + entry);
+
     private static void Normalize(List<Spell> list)
     {
         for (var i = list.Count - 1; i >= 0; i--)
