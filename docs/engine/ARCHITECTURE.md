@@ -569,6 +569,17 @@ layout remove the dependency on the original blobs (and enable mods).
   (the shader outputs α=1) and alpha blend (premultiplied color, α = 1−a), depending on the
   particle flag.
 - `RotationAligned` orients the particle along its velocity.
+- OpenMagicka (`ParticlePass`): drawn into Main right after the additive objects, as in the
+  original. The quad is 4 vertices of corner number (float, Position0) and texture coordinate
+  (TextureCoordinate0): (0; 1, 1), (1; 0, 1), (2; 0, 0), (3; 1, 0), indices 0 1 2 0 2 3. The
+  instance stream (frequency 1) holds the 56-byte records: Position1 = position and rotation
+  (Vector4), Normal1 = radius and normalized lifetime (Vector2), Color1 (Vector4), TextureCoordinate1
+  = the four bytes (Byte4), Normal0 = velocity (Vector3). `View`, `Projection`, `DepthTexture` = the
+  R32F depth, `SpritesA…D` = the sheets (256 × 256, depths 1, 4, 4 and 8, colour format), and
+  `DestinationDimensions` = ∞ (it only serves the half-pixel shift).
+- The level's effects (`VisualEffectPlacement`) start with the level, each placed with
+  `CreateWorld(position, forward, up)`. The viewer steps them on the render thread with the frame
+  time (cut to 0.1 s) after a 2-second warm-up; the game will step them on its logic thread.
 
 ### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (904 files)
 
@@ -699,7 +710,7 @@ layout remove the dependency on the original blobs (and enable mods).
   them from the effect instance (seed + 4099 × emitter index), so a run can be repeated.
 - A cone wider than π gives NaN directions (the square root of a negative number).
 - **Not yet:** particle lights (`SpawnLights`, the effect's `<Light>`), the Particles setting's spawn
-  modifier (taken as 1), and drawing (§5.1).
+  modifier (taken as 1), and the effects of animated parts.
 
 ---
 

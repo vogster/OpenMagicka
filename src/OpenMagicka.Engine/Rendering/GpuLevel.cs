@@ -76,6 +76,9 @@ public sealed class GpuLevel : IDisposable
     /// <summary>The sky's tint (1, 1, 1 when the scene sets none).</summary>
     public Vector3 SkyColor { get; }
 
+    /// <summary>The level's visual effects, which the original starts with the level; none for models.</summary>
+    public IReadOnlyList<VisualEffectPlacement> EffectPlacements { get; private init; } = [];
+
     public int BatchCount => batches.Length;
 
     /// <summary>Textures that could not be read; their batches are drawn without them.</summary>
@@ -165,9 +168,13 @@ public sealed class GpuLevel : IDisposable
         {
             warnings.Add($"{sky.Texture}: the sky map is not a 2D texture");
         }
+        var placements = file.Root is LevelModelContent placed ? placed.Effects : [];
         return new GpuLevel(modelAsset, [.. batchTasks.Select(t => t.Result)], textures, LevelGeometry.FramingBounds(content), warnings, sun,
             SceneLighting.PointLights(lights), SceneLighting.SpotLights(lights),
-            sky is not null ? textures.GetValueOrDefault(sky.Texture) as Texture2D : null, sky?.Color ?? Vector3.One);
+            sky is not null ? textures.GetValueOrDefault(sky.Texture) as Texture2D : null, sky?.Color ?? Vector3.One)
+        {
+            EffectPlacements = placements,
+        };
     }
 
     /// <summary>Every texture a batch's material references.</summary>

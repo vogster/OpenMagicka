@@ -38,6 +38,9 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
     private string status = "";
     private string title = "";
     private int framesShown;
+    private ViewerParticles? particles;
+    private bool particlesStarted;
+    private double lastSeconds;
 
     /// <param name="scene">The first scene's name (the first scene when null or unknown).</param>
     /// <param name="screenshot">Save the first scene's frame there and exit.</param>
@@ -78,7 +81,8 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         effect.EnableDefaultLighting();
         shaders = new ShaderLibrary(new ShaderSource(loader), GpuWork);
         var library = shaders;
-        deferredLoading = Task.Run(() => DeferredRenderer.Create(library, GpuWork));
+        deferredLoading = Task.Run(() => DeferredRenderer.Create(library, GpuWork, loader));
+        particles = new ViewerParticles(Task.Run(() => OpenMagicka.Content.Particles.EffectLibrary.Load(loader.Files)));
         if (catalog.Items.Count == 0)
         {
             Fail("no scenes or models found in the content");
@@ -118,6 +122,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             var renderer = Deferred() is { } built && useDeferred ? built : null;
             var (near, far) = ViewerProjection.ClipPlanes((level.Bounds.Max - level.Bounds.Min).Length(), renderer is not null);
             var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, near, far);
+            StepParticles();
             drawn = renderer is not null
                 ? renderer.Render(GraphicsDevice, level, Frame(camera, projection))
                 : level.Draw(GraphicsDevice, effect, camera.View, projection);
@@ -127,10 +132,11 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             var scene = catalog.Items[shownScene];
             SetTitle($"OpenMagicka viewer - {scene.Level} / {scene.Scene} ({shownScene + 1} of {catalog.Items.Count})"
                 + (deferred is not null && useDeferred ? " [original shaders]" : " [simple view]")
-                + (level is null ? "" : $", {drawn} of {level.BatchCount} batches") + status);
+                + (level is null ? "" : $", {drawn} of {level.BatchCount} batches")
+                + (particles is null || !particlesStarted ? "" : $", {particles.Pool.LastActive + 1} particles") + status);
         }
         // A few frames in, the camera has framed the scene: the shot shows it.
-        if (screenshot is not null && level is not null && deferredLoading is null && ++framesShown == ScreenshotAfterFrames)
+        if (screenshot is not null && level is not null && deferredLoading is null && particlesStarted && ++framesShown == ScreenshotAfterFrames)
         {
             SaveScreenshot(screenshot);
             Console.WriteLine($"{title}; saved {screenshot}");
@@ -152,6 +158,10 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             if (done.IsCompletedSuccessfully)
             {
                 deferred = done.Result;
+                if (deferred.ParticlesUnavailable is { } reason)
+                {
+                    Console.Error.WriteLine($"OpenMagicka: no particles: {reason}");
+                }
             }
             else
             {
@@ -172,7 +182,35 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var ground = Math.Clamp(0, level!.Bounds.Min.Y, level.Bounds.Max.Y);
         var focus = SunShadowView.Focus(camera.Position, Vector3.Normalize(camera.Forward), ground);
         return new DeferredFrame(globals, level.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, focus,
-            (float)(clock.Elapsed.TotalSeconds % 3600));   // the liquids' time, wrapped to keep float precision
+            (float)(clock.Elapsed.TotalSeconds % 3600),   // the liquids' time, wrapped to keep float precision
+            particles?.Pool);
+    }
+
+    /// <summary>Starts the shown level's effects once the effect library is in, then steps them with the frame time.</summary>
+    private void StepParticles()
+    {
+        var seconds = clock.Elapsed.TotalSeconds;
+        // A screenshot steps by a fixed frame, so the same scene gives the same picture.
+        var dt = screenshot is not null ? 1 / 60f : (float)(seconds - lastSeconds);
+        lastSeconds = seconds;
+        if (particles is null || level is null)
+        {
+            return;
+        }
+        if (!particlesStarted)
+        {
+            particlesStarted = particles.Start(level.EffectPlacements);
+            if (particlesStarted && particles.Error is { } error)
+            {
+                Console.Error.WriteLine($"OpenMagicka: no particles: the effects did not load: {error}");
+            }
+            foreach (var name in particles.Missing.Distinct())
+            {
+                Console.Error.WriteLine($"OpenMagicka: no visual effect named {name}");
+            }
+            return;
+        }
+        particles.Step(dt);
     }
 
     /// <summary>Starts loading the wanted scene, and shows it once it is on the GPU (render thread).</summary>
@@ -187,6 +225,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             if (done.IsCompletedSuccessfully)
             {
                 level = done.Result;
+                particlesStarted = false;
                 status = level.Warnings.Count == 0 ? "" : $" ({level.Warnings.Count} textures missing)";
                 simulation?.LevelBounds.Value = (shownScene, level.Bounds);
                 foreach (var warning in level.Warnings)

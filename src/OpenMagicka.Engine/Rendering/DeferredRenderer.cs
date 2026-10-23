@@ -11,7 +11,7 @@ namespace OpenMagicka.Engine.Rendering;
 /// liquids' waves and flow have run.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
-    float Seconds = 0);
+    float Seconds = 0, Particles.ParticlePool? Particles = null);
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
@@ -20,7 +20,7 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// with fog, then additive objects, and the result shown on the back buffer. Shadow maps are drawn
 /// first: the sun's, then the shadow-casting point and spot lights' (<see cref="LightShadows"/>).
 /// Water and lava are drawn with the opaque objects (<see cref="LiquidMaterial"/>), the scene's sky
-/// after the composition. Not yet: decals, particles, post effects (OM-25 to OM-27). The original
+/// after the composition, the particles last (<see cref="ParticlePass"/>). Not yet: decals (OM-66), post effects (OM-27). The original
 /// composes into Main while reading it; here Main is copied first, since sampling and writing one
 /// target is undefined on modern APIs. Render thread only.
 /// </summary>
@@ -66,6 +66,7 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect lava;
     private readonly GameEffect sky;
     private readonly LightPass lights;
+    private readonly ParticlePass? particles;
     private readonly LightShadows lightShadows = new();
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
@@ -79,7 +80,10 @@ public sealed class DeferredRenderer : IDisposable
     private RenderTarget2D? copy;
     private RenderTarget2D? shadowMap;
 
-    private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
+    /// <summary>The particles' effect and sprite sheets, owned by the renderer once it is built.</summary>
+    private sealed record ParticleResources(GameEffect Effect, Texture3D[] Sheets);
+
+    private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects, ParticleResources? particleResources)
     {
         (deferred, clear, restoreDepth, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[4], effects[5], effects[6]);
         (water, lava, sky) = (effects[9], effects[10], effects[11]);
@@ -105,15 +109,65 @@ public sealed class DeferredRenderer : IDisposable
             quad?.Dispose();
             throw;
         }
+        if (particleResources is not null)
+        {
+            try
+            {
+                particles = new ParticlePass(device, particleResources.Effect, particleResources.Sheets);
+            }
+            catch (InvalidDataException e)
+            {
+                // A different particle effect: everything else still draws.
+                ParticlesUnavailable = e.Message;
+                Array.ForEach(particleResources.Sheets, s => s.Dispose());
+            }
+        }
     }
 
-    /// <summary>Loads the effects (created on the render thread through the library's queue) and builds the renderer there.</summary>
-    public static async Task<DeferredRenderer> Create(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu)
+    /// <summary>Why the particles are not drawn, when they were asked for but could not be set up.</summary>
+    public string? ParticlesUnavailable { get; private set; }
+
+    /// <summary>
+    /// Loads the effects (created on the render thread through the library's queue) and builds the
+    /// renderer there. With a content loader it also loads <c>ParticleEffect</c> and the particles'
+    /// sprite sheets; when those fail the renderer is built without particles
+    /// (<see cref="ParticlesUnavailable"/> says why).
+    /// </summary>
+    public static async Task<DeferredRenderer> Create(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader? loader = null)
     {
         ArgumentNullException.ThrowIfNull(shaders);
         ArgumentNullException.ThrowIfNull(gpu);
         var effects = await Task.WhenAll(EffectNames.Select(shaders.Load)).ConfigureAwait(false);
-        return await gpu.Enqueue(device => new DeferredRenderer(device, effects)).ConfigureAwait(false);
+        var (particleResources, unavailable) = loader is null ? (null, null) : await LoadParticles(shaders, gpu, loader).ConfigureAwait(false);
+        try
+        {
+            var renderer = await gpu.Enqueue(device => new DeferredRenderer(device, effects, particleResources)).ConfigureAwait(false);
+            renderer.ParticlesUnavailable ??= unavailable;
+            return renderer;
+        }
+        catch
+        {
+            // The renderer never took the sheets.
+            if (particleResources is not null)
+            {
+                _ = gpu.Enqueue(_ => Array.ForEach(particleResources.Sheets, s => s.Dispose()));
+            }
+            throw;
+        }
+    }
+
+    private static async Task<(ParticleResources?, string?)> LoadParticles(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader loader)
+    {
+        try
+        {
+            var effect = await shaders.Load("ParticleEffect").ConfigureAwait(false);
+            var sheets = await ParticleSheets.Load(loader, gpu).ConfigureAwait(false);
+            return (new ParticleResources(effect, sheets), null);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            return (null, e.GetBaseException().Message);
+        }
     }
 
     /// <summary>Draws the level and shows it on the back buffer; returns how many batches were drawn into the G-buffer.</summary>
@@ -177,6 +231,10 @@ public sealed class DeferredRenderer : IDisposable
         quad.Draw(device, shading, BlendState.Opaque);
         DrawSky(device, level);
         DrawAdditive(device, level, level.TextureFor);
+        if (particles is not null && frame.Particles is { } pool)
+        {
+            particles.Draw(device, pool, globals.View, globals.Projection, depth!);
+        }
 
         UnbindTextures(device);
         device.SetRenderTarget(null);
@@ -392,5 +450,6 @@ public sealed class DeferredRenderer : IDisposable
         quad.Dispose();
         sprites.Dispose();
         lights.Dispose();
+        particles?.Dispose();
     }
 }

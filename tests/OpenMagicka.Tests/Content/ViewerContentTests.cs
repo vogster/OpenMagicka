@@ -35,4 +35,17 @@ public class ViewerContentTests(ITestOutputHelper output)
             Assert.IsType<OpenMagicka.Content.Xna.Texture2DContent>(loader.LoadUncached(sky.Texture).Root).Format));
         Assert.Equal(19, skies.Count);     // of the 21 scene files with a sky, 19 are in the levels
     }
+
+    [GameContentFact]
+    public void TheParticleSheets_AreVolumeTexturesTheRendererCanCreate()
+    {
+        var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+
+        var depths = OpenMagicka.Engine.Rendering.ParticleSheets.Assets
+            .Select(asset => Assert.IsType<OpenMagicka.Content.Xna.Texture3DContent>(loader.LoadUncached(asset).Root))
+            .Select(sheet => (sheet.Format, sheet.Width, sheet.Depth)).ToList();
+
+        Assert.All(depths, d => Assert.Equal((OpenMagicka.Content.Xna.SurfaceFormatXna31.Color, 256), (d.Format, d.Width)));
+        Assert.Equal([1, 4, 4, 8], depths.Select(d => d.Depth));
+    }
 }

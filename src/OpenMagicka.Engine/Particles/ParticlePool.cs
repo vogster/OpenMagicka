@@ -88,6 +88,9 @@ public sealed class ParticlePool
     /// <summary>Every slot; the ones up to <see cref="LastActive"/> are drawn.</summary>
     public ReadOnlySpan<ParticleInstance> Instances => instances;
 
+    /// <summary>The slots as an array, for uploading to the GPU.</summary>
+    internal ParticleInstance[] Records => instances;
+
     public void Clear()
     {
         LastActive = -1;
