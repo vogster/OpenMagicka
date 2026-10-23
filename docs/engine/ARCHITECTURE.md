@@ -664,6 +664,43 @@ layout remove the dependency on the original blobs (and enable mods).
   (the shipped names are unique; OpenMagicka reports which two files clash). Up to
   **256** instances are active at once. An instance reference (`VisualEffectReference`) = index + unique ID.
 
+### 5.3 Emitters in detail (OpenMagicka: `OpenMagicka.Engine.Particles`)
+
+- **Pool.** A spawn takes the lowest free slot; a full pool drops the particle. A particle whose time
+  runs out frees its slot in that step; its radius is extrapolated past its end size there. Only slots
+  up to the highest live one are drawn, and that bound shrinks at the end of the step, so a dying
+  particle below a live one is still drawn once (then hidden with radius 0) while dying ones at the top
+  are not. A zero lifetime gives an infinite inverse lifetime and a NaN radius for that one step (a few
+  shipped emitters have, or animate to, a zero `LifeTimeMax`); a negative lifetime keeps its slot
+  until the pool is cleared, and a NaN one never dies.
+- **Emitter place.** Rotation about Y by `RotationY`, then translation by `PositionX/Y/Z`, then the
+  effect's transform. A particle starts at a random point of the box ±`Position{X,Y,Z}Offset`
+  around it (each coordinate (2u − 1) × offset).
+- **Continuous emitters** evaluate their parameters at the timeline position after the step,
+  except the places at the start of the step, which use the previous one. The rate is the mean of
+  `ParticlesPerSecond` at that position and one step beyond it (not wrapped in a looping effect). The n particles of a step are spread at
+  shares 1/n, 2/n, … 1 between the place and offset at the start of the step and at its end
+  (`Matrix.Lerp`). Per particle, random values are drawn in this order: direction (2), position (3),
+  start size, end size, lifetime, speed, then, unless rotation-aligned, rotation, spin and spin
+  sign, then colour: HSV draws hue, saturation, value and alpha; otherwise RGB come from `ColorR/G/B`
+  and alpha is drawn from `ColorAMin/Max/Distribution`. Colorize follows the emitter's flag.
+- **Pulse emitters** fire when the timeline goes past `TriggerTime` from at or before it, or wraps
+  past it (a looping effect fires again every loop). Their place uses the parameters as constants.
+  Draw order: position (3), start size, end size, direction (2), speed, lifetime, then, unless
+  rotation-aligned, rotation, spin and spin sign, then colour. A trigger between the last position
+  before a wrap and the duration is missed, and in an Infinite effect a trigger equal to the
+  duration never fires (the timeline holds there and the test is strict).
+  Their alpha always comes from `AlphaMin/Max/Distribution` (not ColorA), and only HSV particles are
+  colorized.
+- **Velocity.** Direction × speed; with `RelativeVelocity`, plus the effect's own velocity
+  (its translation change over the step divided by the step).
+- **Spin.** The sign is −1 when the table's percent byte is below `RotationPCCW`.
+- **Random cursors.** The original seeds each emitter's cursor from the clock; OpenMagicka seeds
+  them from the effect instance (seed + 4099 × emitter index), so a run can be repeated.
+- A cone wider than π gives NaN directions (the square root of a negative number).
+- **Not yet:** particle lights (`SpawnLights`, the effect's `<Light>`), the Particles setting's spawn
+  modifier (taken as 1), and drawing (§5.1).
+
 ---
 
 ## 6. Camera (`MagickCamera`)

@@ -18,6 +18,9 @@ public sealed class EffectLibrary
 
     public int Count => effects.Count;
 
+    /// <summary>Every effect, in no particular order.</summary>
+    public IEnumerable<VisualEffectContent> Effects => effects.Values;
+
     public static int Id(string name) => LegacyStringHash.Lower(name);
 
     public static EffectLibrary Load(ContentFileSystem files)
