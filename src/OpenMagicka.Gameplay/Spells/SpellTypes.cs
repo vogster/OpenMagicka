@@ -31,8 +31,8 @@ public static class SpellTypes
         elements == Elements.All ? SpellType.Magick
         : elements == Elements.None ? SpellType.Push
         : Any(elements, Elements.Shield) ? SpellType.Shield
-        : Any(elements, Elements.Earth | Elements.Ice) ? SpellType.Projectile
-        : Any(elements, Elements.Arcane | Elements.Life) ? SpellType.Beam
+        : Any(elements, ElementSets.Physical) ? SpellType.Projectile
+        : Any(elements, ElementSets.Beams) ? SpellType.Beam
         : Any(elements, Elements.Lightning) && !Any(elements, Elements.Steam) ? SpellType.Lightning
         : SpellType.Spray;
 

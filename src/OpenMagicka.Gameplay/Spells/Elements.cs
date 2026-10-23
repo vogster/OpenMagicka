@@ -77,3 +77,22 @@ public enum MagickType
     InflictBleedDamage,
     InflictPoisonDamage,
 }
+
+/// <summary>The composite element masks the rules use (docs/gameplay/SPELLS.md §1.1).</summary>
+public static class ElementSets
+{
+    /// <summary>Earth and Ice.</summary>
+    public const Elements Physical = Elements.Earth | Elements.Ice;
+
+    /// <summary>Arcane and Life.</summary>
+    public const Elements Beams = Elements.Arcane | Elements.Life;
+
+    /// <summary>The elements that set a status: Water, Cold, Fire, Life, Steam and Poison.</summary>
+    public const Elements StatusEffects = Elements.Water | Elements.Cold | Elements.Fire | Elements.Life | Elements.Steam | Elements.Poison;
+
+    /// <summary>Earth, Lightning, Arcane, Life, Ice and Steam.</summary>
+    public const Elements Instant = Elements.Earth | Elements.Lightning | Elements.Arcane | Elements.Life | Elements.Ice | Elements.Steam;
+
+    /// <summary>Lightning, Arcane, Life and Steam.</summary>
+    public const Elements InstantNonPhysical = Elements.Lightning | Elements.Arcane | Elements.Life | Elements.Steam;
+}

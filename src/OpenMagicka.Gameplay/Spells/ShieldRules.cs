@@ -93,8 +93,6 @@ public static class ShieldRules
 
     public const float IceArmourBlastRadius = 3;
 
-    private const Elements Physical = Elements.Earth | Elements.Ice;
-    private const Elements StatusElements = Elements.Water | Elements.Cold | Elements.Fire | Elements.Life | Elements.Steam | Elements.Poison;
     private const Elements WardElements = Elements.Lightning | Elements.Arcane | Elements.Life | Elements.Steam | Elements.Water | Elements.Cold | Elements.Fire;
 
     /// <summary>
@@ -126,12 +124,12 @@ public static class ShieldRules
         }
         var layout = Layout(cast);
         var lineCount = 2 + (int)MathF.Max(spell.TotalMagnitude / 2, 1);
-        if ((others & Physical) == 0 && (others & (Elements.Arcane | Elements.Life)) != 0)
+        if ((others & ElementSets.Physical) == 0 && (others & ElementSets.Beams) != 0)
         {
             return new Mines(layout, lineCount, LineStep, MineRadius: 1, Fuse: 0.5f, BlastRadius: 3, OwnerRange: 30);
         }
-        var solid = (others & Physical) != 0;
-        var plain = (elements & (StatusElements | Elements.Lightning)) == 0;
+        var solid = (others & ElementSets.Physical) != 0;
+        var plain = (elements & (ElementSets.StatusEffects | Elements.Lightning)) == 0;
         return new Barriers(
             layout, solid,
             Hp: solid ? (1 + spell.Earth) * 500 : spell.TotalMagnitude * 100,
@@ -149,7 +147,7 @@ public static class ShieldRules
         {
             return new Bubble(500, 100);
         }
-        if ((others & Physical) != 0)
+        if ((others & ElementSets.Physical) != 0)
         {
             var earth = (others & Elements.Earth) != 0;
             return new Armour(

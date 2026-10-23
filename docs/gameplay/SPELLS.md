@@ -436,6 +436,17 @@ from attacks with the Damage/Status flags (`amount × magnitude`), others are re
 The result is a `DamageCollection5`: up to 5 entries `Damage {AttackProperty, Element, Amount, Magnitude}`.
 An empty entry also takes a slot. `ScaleAmount(base, m) = base·√m`.
 
+`AttackProperties` (flags): Damage 1, Knockdown 2, Pushed 4, Knockback 6 (= Pushed | Knockdown),
+Piercing 8, ArmourPiercing 0x10, Status 0x20, Entanglement 0x40, Stun 0x80, Bleed 0x100.
+
+There is damage for Spray, Projectile, Shield, Beam and Lightning; a push or a magick has none (the
+original throws for a push). Spray × Magick and Projectile × Self give an empty collection: a
+projectile cast on oneself is damaged by the projectiles as they fall (Force). Two entries combine
+as `amount = (a₁m₁ + a₂m₂)/(m₁ + m₂)`, `magnitude = m₁ + m₂`, the flags and elements joined.
+
+OpenMagicka: an empty entry carries nothing, so it is left out. A magnitude below zero (possible after
+cancelling, §3.1) counts as zero here; the original would take its square root and get NaN.
+
 ### 6.1 Base constants (`Defines`, static, the "balance table")
 
 | Name | Value | Name | Value |
@@ -488,10 +499,10 @@ damage against Wet targets, see 7).
 - **Force, with Earth**: `Damage`, elements `Element ∩ {E, I}` (+Cold with Ice), amount
   `150·E² + 275·I²` (quadratic!), mag 1; × speed/50 (5.3).
 - **Force, Ice only**: `Damage`, elements `Element ∪ {Cold, Earth}`, amount
-  `275·√I + 250·√Z + 225·√A − 180·√L − 180·√L` (Life is counted twice), mag 1; Piercing;
-  per shard mag ×1/N.
-- **Force, Ice + statuses**: additionally `Status`, elements `∩StatusEffects`, amount
-  `50·min1(P) − 80·min1(L)`, mag `min1(W + C + P + L)`.
+  `275·√I + 250·√Z + 225·√A − 180·√L − 180·√L` (Life is counted twice), mag 1; per shard mag
+  ×1/N. The shards pierce, but the Piercing flag is not part of this entry.
+- **Force, any Ice + statuses** (with Earth too): additionally `Status`, elements `∩StatusEffects`,
+  amount `50·min1(P) − 80·min1(L)`, mag `min1(W + C + P + L)`.
 - **Area**: 
   - Status (if W/C/F/T): elements `∩StatusEffects`, amount `60·min1(F)`, mag `min1(W+F+C+T)`;
   - LifeStatus;
@@ -501,7 +512,7 @@ damage against Wet targets, see 7).
   - Earth: `Knockdown`, amount `trunc(150E)`, mag `E`.
 - **Weapon**: if Ice, `Damage` (+Piercing), Earth, amount `2·275·√I + 150·√E`, mag 1;
   then Misc(Weapon), StatusB, an empty entry.
-- **Self**: damage is computed as for Force projectiles (they fall on the caster).
+- **Self**: no entries; the projectiles that fall on the caster carry Force damage.
 
 ### 6.4 Shield (damage of mines, elemental walls, Wave, etc.)
 
@@ -584,6 +595,11 @@ five entries were "deflected".
 Status DoT damage goes a separate path (`Damage(float, element)`): resistances are not applied
 (they are already accounted for in the DPS on application), but fire against Greased ×2, and shield/armor absorb it.
 
+Pushes (step 4) in detail: the direction is from the attack point to the target, flattened. The
+reach is `magnitude · max(0, 2·√(1 − (mass − amount/4) / amount))`; nothing happens below 10⁻⁶ or
+for an immortal, ethereal, solid-shielded, entangled or dead target, or one heavier than 1000. The
+velocity flies that reach on flat ground at the elevation angle, ×1.4: `1.4·√(g·d / sin 2θ)`.
+
 ### 7.3 Regeneration
 
 `HP += RegenRate·dt` (from the template), only if HP is in (0, MaxHP] and the target is not Burning/Poisoned.
@@ -601,14 +617,25 @@ Sources for a character:
 2. For the avatar, additionally the staff (`Equipment[1]`, `Item.Resistance`, `Content/Data/items`).
 3. `BuffType.Resistance` buffs (auras, magicks, the ward from 5.6).
 
-`Damage.ApplyResistances`: for **each** element flag of the entry and each source:
+`Damage.ApplyResistances`: for **each** element flag of the entry, the template's entry for that
+element, then the staff's (avatars):
 - `mag_mult *= |Multiplier|`; if Multiplier < 0, an "inversion" flag (Life is marked separately);
 - `amount += Modifier`, clamped at zero (a positive amount does not go below 0, a negative one does not
-  go above 0).
-- After the loop: if Life had a negative multiplier → `amount = |amount|` (healing hurts,
+  go above 0). The sign is taken from the amount as it stands at each step, so a heal clamped to 0 is
+  then treated as damage by the next modifier, and an entry of amount 0 (the spray's water marker)
+  takes a positive modifier as damage.
+Then each `Resistance` buff whose elements overlap the entry's, **once per buff** (not per
+element): the same, except that the multiplier is used with its sign (`mag_mult *= Multiplier`), and
+"Life" means the buff's elements include Life.
+- After the loops: if Life had a negative multiplier → `amount = |amount|` (healing hurts,
   for example, undead); otherwise if any negative multiplier occurred → `amount = −amount`
-  (element absorption heals). `magnitude *= mag_mult`.
+  (element absorption heals). `magnitude *= mag_mult`. (A buff with a negative multiplier
+  therefore flips both the amount and the magnitude: the damage keeps its sign.)
 - `ArmourPiercing`: multipliers ≤ 1 and modifiers ≤ 0 are ignored.
+
+Physics props (`DamageablePhysicsEntity`) use an "inclusive" variant: the magnitude is multiplied by
+the **largest** multiplier among the entry's elements (no product, no inversion, armour piercing
+ignored), and the modifiers apply as above.
 
 Result: `damage ≈ (amount + ΣModifier) · magnitude · Π|Multiplier| · special_multipliers`.
 
@@ -651,6 +678,29 @@ Stacking identical statuses: magnitudes add up (Healing takes the maximum); DPS:
 others take the magnitude-weighted average. Fire DoT is dealt with the Fire element, poison with Poison,
 healing with Life, others with Earth.
 
+Details of each tick (in this order: the cap, then the decay, then the damage):
+
+- **Burning**: magnitude capped at 3, then −0.2·dt; DPS `min(DPS + 0.25·DPS·dt, 500·magnitude)`;
+  damage `DPS·dt` (the magnitude does not multiply it).
+- **Cold**: −0.1·dt, then capped at 3; no damage.
+- **Wet**: capped at 1; **Frozen**: capped at 3, then −0.25·dt.
+- **Poisoned**: magnitude capped at 1 (or, for an expiring poison, −dt instead); damage
+  `DPS·magnitude·dt`; speed ×0.5 (not during cutscenes).
+- **Healing**: damage `DPS·dt` (negative: healing); capped at 3; at full HP the magnitude drops to
+  `dt`, so it ends this tick; then −dt.
+- **Steamed**: capped at 1, then −dt. **Bleeding**: damage `DPS·dt`; an expiring one −dt. **Greased**:
+  nothing.
+- Damage is dealt in whole units: the fractional rest is carried, and the whole part (rounded towards
+  zero) is dealt.
+- Statuses decay only through their magnitude: a Wet, Greased or plain Poisoned character stays so
+  until another status or damage removes it (§13, question 2: confirmed in the status code).
+
+The magnitude a new status starts with: as given, except Healing `0.5 + 0.5·m`, Steamed 1, Bleeding 1
+(an expiring bleed keeps its own). Expiring statuses ("effect stops", used by abilities that inflict
+bleeding or poison for a while): when both sides of a stack expire, the newer one replaces the older
+(DPS and magnitude). Healing stacks are quirky: the magnitude is the larger one, but the DPS weights
+are `m₁/max` and `m₂/max`, which need not add up to 1.
+
 Interactions on application (`AddStatusEffect`):
 
 | Applied | Condition | Result |
@@ -671,6 +721,27 @@ Interactions on application (`AddStatusEffect`):
 
 The "drying" state (`DryTimer`, 0.9 s ≈ `STATUS_DRYING_TIME`) blocks new Wet/Cold right after
 evaporation.
+
+Resistances on application, per status, with the element in brackets: Burning (Fire): `DPS = (DPS +
+modifier) · multiplier`, the magnitude unchanged. Cold (Cold), Wet (Water, also from Steam), Greased
+(Water), Steamed (Steam), Poisoned (Poison), Healing (Life): `DPS += modifier`, `magnitude ×=
+multiplier`. The multiplier is the template's × the staff's (avatars) × every resistance buff that
+covers the element (whole, not just overlapping); the modifiers add up the same way. Only the
+**template's** `StatusResistance` forbids a status. A status whose DPS or magnitude ends up zero is
+not applied, except that Cold and Wet only check the magnitude. So a grease with no DPS never sticks
+(the Grease magick makes the ground slippery instead; only grease lumps, DPS 10, grease a
+character), and nothing in vanilla applies Steamed (§13, question 3).
+
+More detail on the interactions above: grease is removed by Burning even when Burning itself is
+stopped by Cold or Wet, and by Wet even when Wet is stopped by burning; Burning on a Frozen target only
+thaws it when the target is not also Wet. Cold that meets Burning (or drying) is not applied; if it
+meets Wet it freezes the target even so. Drying starts when burning removes Wet (or thaws the last of
+Frozen) unless it is already running, and restarts when Cold or Wet puts out a fire. (The original
+starts it only while the status's sound plays; OpenMagicka does not tie rules to sounds.)
+
+OpenMagicka difference: the original refreshes its status mask after an addition for the first four
+statuses only (Burning, Wet, Frozen, Cold), so a fresh Poisoned, Healing or Greased is invisible to
+the rules until the next tick; ours sees it at once.
 
 ---
 
