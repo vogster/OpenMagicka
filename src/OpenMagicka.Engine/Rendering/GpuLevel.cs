@@ -2,13 +2,14 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content;
 using OpenMagicka.Content.Magicka;
+using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Content.Xna;
 using OpenMagicka.Engine.Threading;
 
 namespace OpenMagicka.Engine.Rendering;
 
 /// <summary>
-/// A level's static geometry on the GPU, drawn with FNA's BasicEffect (diffuse texture and simple
+/// A level's geometry (static and animated parts) or a model on the GPU, drawn with FNA's BasicEffect (diffuse texture and simple
 /// lighting): the viewer's first look at a level before the original deferred pipeline (OM-23).
 /// <see cref="Load"/> reads and decodes on the calling thread, without keeping the content cached,
 /// and creates each texture and batch as its own render-queue item, so the per-frame budget holds;
@@ -41,15 +42,14 @@ public sealed class GpuLevel : IDisposable
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(gpu);
         var file = loader.LoadUncached(modelAsset);
-        if (file.Root is not LevelModelContent level)
-        {
-            throw new InvalidDataException($"{modelAsset} is not a level model");
-        }
-        IReadOnlyList<LevelBatch> content =
-        [
-            .. level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry),
-            .. LevelParts.Batches(level.AnimatedParts, file.SharedResources),
-        ];
+        IReadOnlyList<LevelBatch> content = file.Root is LevelModelContent level
+            ?
+            [
+                .. level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry),
+                .. LevelParts.Batches(level.AnimatedParts, file.SharedResources),
+            ]
+            : file.Root is ModelContent or SkinnedModelContent ? ModelMeshes.ForModel(file)
+            : throw new InvalidDataException($"{modelAsset} is neither a level model nor a model");
         var paths = content.Select(b => b.DiffuseTexture is null ? null : loader.ResolveReference(modelAsset, b.DiffuseTexture)).ToArray();
         var warnings = new List<string>();
         var images = new Dictionary<string, Texture2DContent>(StringComparer.OrdinalIgnoreCase);

@@ -57,22 +57,22 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var catalog = SceneCatalog.Load(files);
         foreach (var problem in catalog.Problems)
         {
-            Console.Error.WriteLine($"OpenMagicka: scene skipped: {problem}");
+            Console.Error.WriteLine($"OpenMagicka: skipped: {problem}");
         }
         return (catalog, new ContentLoader(files, XnbReaderRegistry.Magicka));
     }
 
     protected override ISimulation<ViewerFrame> CreateSimulation() =>
-        simulation = new ViewerSimulation(this, catalog.Scenes.Count, startScene);
+        simulation = new ViewerSimulation(this, catalog.Items.Count, startScene, catalog.SectionStarts);
 
     protected override void LoadContent()
     {
         base.LoadContent();
         effect = new BasicEffect(GraphicsDevice);
         effect.EnableDefaultLighting();
-        if (catalog.Scenes.Count == 0)
+        if (catalog.Items.Count == 0)
         {
-            Fail("no scenes found in the content");
+            Fail("no scenes or models found in the content");
         }
     }
 
@@ -90,7 +90,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
     protected override void Render(ViewerFrame? frame, TimeSpan now)
     {
         GraphicsDevice.Clear(Sky);
-        if (frame is null || catalog.Scenes.Count == 0 || effect is null)
+        if (frame is null || catalog.Items.Count == 0 || effect is null)
         {
             return;
         }
@@ -106,8 +106,8 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         }
         if (shownScene >= 0)
         {
-            var scene = catalog.Scenes[shownScene];
-            SetTitle($"OpenMagicka viewer - {scene.Level} / {scene.Scene} ({shownScene + 1} of {catalog.Scenes.Count})"
+            var scene = catalog.Items[shownScene];
+            SetTitle($"OpenMagicka viewer - {scene.Level} / {scene.Scene} ({shownScene + 1} of {catalog.Items.Count})"
                 + (level is null ? "" : $", {drawn} of {level.BatchCount} batches") + status);
         }
         // A few frames in, the camera has framed the scene: the shot shows it.
@@ -142,14 +142,14 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             {
                 var reason = done.Exception?.GetBaseException().Message ?? "cancelled";
                 status = $" - failed: {reason}";
-                Console.Error.WriteLine($"OpenMagicka: {catalog.Scenes[shownScene].Model}: {reason}");
+                Console.Error.WriteLine($"OpenMagicka: {catalog.Items[shownScene].Model}: {reason}");
                 Fail($"the scene did not load: {reason}");
             }
         }
         if (loading is null && wanted != shownScene)
         {
             loadingScene = wanted;
-            var model = catalog.Scenes[wanted].Model;
+            var model = catalog.Items[wanted].Model;
             loading = Task.Run(() => GpuLevel.Load(loader, model, GpuWork));
         }
     }

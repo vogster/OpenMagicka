@@ -57,7 +57,8 @@ dotnet run --project src/OpenMagicka.Launcher -- --content "<Magicka folder>" --
 ```
 
 WASD move, Q/E (or C/Space) go down/up, Shift is faster, the right mouse button looks around,
-PageUp/PageDown switch between all scenes, F frames the scene, Escape quits. The geometry is drawn
+PageUp/PageDown switch between all scenes and models, Tab jumps between the scenes and the models
+(props and characters, in their rest pose), F frames, Escape quits. The geometry is drawn
 with a simple forward shader for now; `--screenshot <file.png>` saves the first frame and exits.
 `--check-effects` loads every original effect on the GPU and reports the result.
 

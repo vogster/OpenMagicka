@@ -19,10 +19,11 @@ public sealed class ViewerFrame
 
 /// <summary>
 /// The viewer's logic (logic thread): WASD moves, Q/E or Space/C go down/up, Shift is fast, the
-/// right mouse button looks around, PageUp/PageDown switch scenes, F frames the scene, Escape
-/// quits. When the renderer reports a newly loaded scene's bounds, the camera frames them.
+/// right mouse button looks around, PageUp/PageDown switch scenes, Tab jumps to the next section
+/// (scenes, models), F frames the scene, Escape quits. When the renderer reports a newly loaded
+/// scene's bounds, the camera frames them.
 /// </summary>
-public sealed class ViewerSimulation(IGameHost host, int sceneCount, int startScene) : ISimulation<ViewerFrame>
+public sealed class ViewerSimulation(IGameHost host, int sceneCount, int startScene, IReadOnlyList<int>? sectionStarts = null) : ISimulation<ViewerFrame>
 {
     public const float Speed = 150;
     public const float FastSpeed = 600;
@@ -56,6 +57,11 @@ public sealed class ViewerSimulation(IGameHost host, int sceneCount, int startSc
         if (Pressed(input, Keys.PageUp))
         {
             Scene = sceneCount == 0 ? 0 : (Scene + sceneCount - 1) % sceneCount;
+        }
+        if (Pressed(input, Keys.Tab) && sectionStarts is { Count: > 1 } starts)
+        {
+            var next = starts.FirstOrDefault(s => s > Scene, starts[0]);
+            Scene = Math.Clamp(next, 0, Math.Max(sceneCount - 1, 0));
         }
         if (LevelBounds.Value is { } loaded && loaded.Scene == Scene && (framedScene != Scene || Pressed(input, Keys.F)))
         {

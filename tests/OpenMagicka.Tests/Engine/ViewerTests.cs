@@ -21,6 +21,18 @@ public sealed class ViewerTests : IDisposable
         File.WriteAllText(Path.Combine(root, "Levels", "Swamp", "sw_s1.xml"), SceneReaderTests.Scene("").Replace("swamp_s1", "sw_s1"));
         File.WriteAllText(Path.Combine(root, "Levels", "Swamp", "sw_s2.xml"), SceneReaderTests.Scene("").Replace("swamp_s1", "SW_S2"));
         File.WriteAllText(Path.Combine(root, "Levels", "Swamp", "broken.xml"), "<Scene><Sound/></Scene>");
+        Directory.CreateDirectory(Path.Combine(root, "Models", "Characters"));
+        File.WriteAllBytes(Path.Combine(root, "Models", "Characters", "wizard.xnb"), ModelFile("SkinnedModelReader"));
+        File.WriteAllBytes(Path.Combine(root, "Models", "Characters", "Crate.xnb"), ModelFile("ModelReader"));
+        File.WriteAllBytes(Path.Combine(root, "Models", "Characters", "skin.xnb"), new OpenMagicka.Tests.Content.XnbTestWriter().StringObject("texture").BuildBytes());
+        File.WriteAllText(Path.Combine(root, "Models", "Characters", "broken.xnb"), "not xnb");
+    }
+
+    /// <summary>An XNB whose root reader is the named one (the catalog only looks at the reader table).</summary>
+    private static byte[] ModelFile(string reader)
+    {
+        var w = new OpenMagicka.Tests.Content.XnbTestWriter().TypeId("Microsoft.Xna.Framework.Content." + reader + ", Microsoft.Xna.Framework");
+        return w.BuildBytes();
     }
 
     public void Dispose() => Directory.Delete(root, recursive: true);
@@ -32,10 +44,50 @@ public sealed class ViewerTests : IDisposable
 
         Assert.Equal([("Swamp", "sw_s1", "Levels/Swamp/sw_s1"), ("Swamp", "sw_s2", "Levels/Swamp/SW_S2")],
             catalog.Scenes.Select(s => (s.Level, s.Scene, s.Model)));
-        Assert.Single(catalog.Problems);
+        Assert.Equal(2, catalog.Problems.Count);              // the broken scene and the broken .xnb
         Assert.Equal(1, catalog.Find("SW_S2"));
         Assert.Equal(-1, catalog.Find("nope"));
         Assert.Equal(0, catalog.Find(null));
+    }
+
+    [Fact]
+    public void TheCatalog_ListsModelsAfterTheScenes_OnlyFilesThatAreModels()
+    {
+        var catalog = SceneCatalog.Load(new ContentFileSystem(root));
+
+        Assert.Equal([("Models/Characters", "Crate", "Models/Characters/Crate"), ("Models/Characters", "wizard", "Models/Characters/wizard")],
+            catalog.Models.Select(m => (m.Level, m.Scene, m.Model)));
+        Assert.Equal(4, catalog.Items.Count);
+        Assert.Equal(3, catalog.Find("wizard"));
+        Assert.Equal(2, catalog.Find("models/characters/crate"));
+        Assert.Equal([0, 2], catalog.SectionStarts);
+    }
+
+    [Fact]
+    public void Tab_DoesNothingWithOneSection()
+    {
+        var host = new Host();
+        var simulation = new ViewerSimulation(host, sceneCount: 5, startScene: 2, sectionStarts: [0]);
+        host.Input.Value = Keys(Microsoft.Xna.Framework.Input.Keys.Tab);
+        simulation.Tick(0.1);
+
+        Assert.Equal(2, simulation.Scene);
+    }
+
+    [Fact]
+    public void Tab_JumpsBetweenScenesAndModels()
+    {
+        var host = new Host();
+        var simulation = new ViewerSimulation(host, sceneCount: 5, startScene: 1, sectionStarts: [0, 3]);
+
+        host.Input.Value = Keys(Microsoft.Xna.Framework.Input.Keys.Tab);
+        simulation.Tick(0.1);
+        Assert.Equal(3, simulation.Scene);
+        host.Input.Value = Keys();
+        simulation.Tick(0.1);
+        host.Input.Value = Keys(Microsoft.Xna.Framework.Input.Keys.Tab);
+        simulation.Tick(0.1);
+        Assert.Equal(0, simulation.Scene);
     }
 
     private sealed class Host : IGameHost

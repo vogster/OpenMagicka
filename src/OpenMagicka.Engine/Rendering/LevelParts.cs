@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using OpenMagicka.Content.Magicka;
-using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Content.Xna;
 
@@ -49,7 +48,7 @@ public static class LevelParts
                     ?? throw new InvalidDataException($"animated part {part.Name}: no mesh settings for mesh {mesh.Name}");
                 if (setting.Visible)
                 {
-                    AddMesh(model, mesh, world, shared, batches);
+                    batches.AddRange(ModelMeshes.MeshBatches(model, mesh, world, shared));
                 }
             }
         }
@@ -59,83 +58,9 @@ public static class LevelParts
         }
     }
 
-    private static void AddMesh(ModelContent model, ModelMeshContent mesh, Matrix world, IReadOnlyList<object?> shared, List<LevelBatch> batches)
-    {
-        if (mesh.VertexBuffer is null || mesh.IndexBuffer is null)
-        {
-            return;
-        }
-        var center = Vector3.Transform(mesh.Bounds.Center, world);
-        // The Frobenius norm bounds the largest stretch of any linear part, also a skewed one.
-        var scale = MathF.Sqrt(world.Right.LengthSquared() + world.Up.LengthSquared() + world.Backward.LengthSquared());
-        var bounds = BoundingBox.CreateFromSphere(new BoundingSphere(center, mesh.Bounds.Radius * scale));
-        foreach (var part in mesh.Parts)
-        {
-            if (part.PrimitiveCount <= 0)
-            {
-                continue;
-            }
-            if (part.NumVertices <= 0)
-            {
-                throw new InvalidDataException($"mesh {mesh.Name}: {part.PrimitiveCount} triangles over no vertices");
-            }
-            if (part.VertexDeclarationIndex < 0 || part.VertexDeclarationIndex >= model.VertexDeclarations.Count)
-            {
-                throw new InvalidDataException($"mesh {mesh.Name}: vertex declaration {part.VertexDeclarationIndex} of {model.VertexDeclarations.Count}");
-            }
-            var effect = part.Effect is { } reference
-                ? (uint)reference.Index < (uint)shared.Count ? shared[reference.Index] : throw new InvalidDataException($"mesh {mesh.Name}: effect {reference.Index} of {shared.Count} shared resources")
-                : null;
-            if (effect is RenderDeferredLiquidEffectContent)
-            {
-                continue;   // water on a part: drawn with the liquids (OM-25)
-            }
-            var declaration = model.VertexDeclarations[part.VertexDeclarationIndex];
-            var (texture, color, additive) = effect switch
-            {
-                RenderDeferredEffectContent m => (m.Layer0.DiffuseTexture, m.Layer0.DiffuseColor, false),
-                AdditiveEffectContent a => (a.TextureEnabled ? a.Texture : null, a.ColorTint, true),
-                _ => ((ExternalReference?)null, Vector3.One, false),
-            };
-            var basic = VertexLayouts.Basic(declaration);
-            var indices = Slice(mesh.IndexBuffer.Data, (long)part.StartIndex * IndexSize(mesh.IndexBuffer), part.PrimitiveCount * 3L * IndexSize(mesh.IndexBuffer), mesh.Name);
-            CheckIndices(indices, mesh.IndexBuffer.Is16Bit, part.NumVertices, mesh.Name);
-            batches.Add(new LevelBatch(
-                Slice(mesh.VertexBuffer.Data, part.StreamOffset + (long)part.BaseVertex * declaration.Stride, (long)part.NumVertices * declaration.Stride, mesh.Name),
-                declaration.Stride, part.NumVertices, declaration, indices,
-                mesh.IndexBuffer.Is16Bit, 0, part.PrimitiveCount, bounds, texture, color, additive,
-                basic.Any(e => e.VertexElementUsage == Microsoft.Xna.Framework.Graphics.VertexElementUsage.Normal),
-                basic.Any(e => e.VertexElementUsage == Microsoft.Xna.Framework.Graphics.VertexElementUsage.TextureCoordinate))
-            {
-                World = world,
-            });
-        }
-    }
-
-    private static int IndexSize(IndexBufferContent indices) => indices.Is16Bit ? 2 : 4;
-
-    /// <summary>Index values are relative to the part's first vertex and must stay inside its vertices (the GPU would read past them).</summary>
-    private static void CheckIndices(byte[] indices, bool is16Bit, int vertices, string? mesh)
-    {
-        var size = is16Bit ? 2 : 4;
-        for (var i = 0; i + size <= indices.Length; i += size)
-        {
-            var index = is16Bit ? BitConverter.ToUInt16(indices, i) : BitConverter.ToUInt32(indices, i);
-            if (index >= (uint)vertices)
-            {
-                throw new InvalidDataException($"mesh {mesh}: index {index} beyond its {vertices} vertices");
-            }
-        }
-    }
-
     private static bool IsFinite(Matrix m) =>
         float.IsFinite(m.M11) && float.IsFinite(m.M12) && float.IsFinite(m.M13) && float.IsFinite(m.M14)
         && float.IsFinite(m.M21) && float.IsFinite(m.M22) && float.IsFinite(m.M23) && float.IsFinite(m.M24)
         && float.IsFinite(m.M31) && float.IsFinite(m.M32) && float.IsFinite(m.M33) && float.IsFinite(m.M34)
         && float.IsFinite(m.M41) && float.IsFinite(m.M42) && float.IsFinite(m.M43) && float.IsFinite(m.M44);
-
-    private static byte[] Slice(byte[] data, long start, long length, string? mesh) =>
-        start >= 0 && length >= 0 && start + length <= data.Length
-            ? data.AsSpan((int)start, (int)length).ToArray()
-            : throw new InvalidDataException($"mesh {mesh}: range {start}+{length} outside its {data.Length}-byte buffer");
 }
