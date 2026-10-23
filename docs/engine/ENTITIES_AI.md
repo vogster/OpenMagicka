@@ -1,284 +1,284 @@
-# Сущности, ИИ, навигация, сеть и игроки
+# Entities, AI, navigation, network and players
 
-Область: `Magicka.GameLogic.Entities` (+ `Abilities`, `SpecialAbilities`, `AnimationActions`,
+Scope: `Magicka.GameLogic.Entities` (+ `Abilities`, `SpecialAbilities`, `AnimationActions`,
 `CharacterStates`, `Items`, `Buffs`, `Bosses`, `MoveAbilities`), `Magicka.AI` (+ `AgentStates`,
 `Arithmetics`, `Messaging`), `Magicka.PathFinding`, `Magicka.Network`, `Magicka.Gamers`,
-связка игрок–контроллер (`Magicka.GameLogic.Player`, `Controls`).
+the player–controller binding (`Magicka.GameLogic.Player`, `Controls`).
 
-Источник: декомпиляция `Magicka.exe` 1.10.4.2 и данные `Content/Data`. Контекст — [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md).
+Source: decompilation of `Magicka.exe` 1.10.4.2 and the `Content/Data` data. Context: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md).
 
-> **Clean-room.** Ниже только описание поведения: таблицы, схемы, константы и порядок полей
-> форматов (это нужно для совместимости с ассетами). Кода оригинала здесь нет. Реализация
-> OpenMagicka пишется заново по этому описанию.
+> **Clean-room.** Below is only a description of behavior: tables, diagrams, constants and the field order
+> of formats (this is needed for asset compatibility). There is no original code here. The OpenMagicka
+> implementation is written from scratch based on this description.
 
 ---
 
-## 1. Иерархия сущностей
+## 1. Entity hierarchy
 
-### 1.1 Базовая модель
+### 1.1 Base model
 
-`Entity` — абстрактная база всего, что живёт в мире: есть физическое тело JigLibX (`Body` + `CollisionSkin`),
-радиус, аудио-эмиттер, ссылка на `PlayState`.
+`Entity` is the abstract base of everything that lives in the world: it has a JigLibX physics body (`Body` + `CollisionSkin`),
+a radius, an audio emitter, and a reference to `PlayState`.
 
-Идентификация (это важно для сети):
+Identification (this matters for the network):
 
-| Идентификатор | Тип | Откуда | Назначение |
+| Identifier | Type | Origin | Purpose |
 |---|---|---|---|
-| `Handle` | `ushort` | Порядковый номер объекта в **глобальном** статическом списке всех когда-либо созданных `Entity`. Выдаётся в конструкторе | Сетевая адресация. Работает, потому что все пулы создаются заранее и в одинаковом порядке на всех машинах (см. §1.4) |
-| `UniqueID` | `int` | Хеш строкового имени из скрипта уровня (`id="#Her_King"` → `GetHashCodeCustom`), 0 = безымянная | Ссылки из триггеров (`giveOrder id=…`, priority target, face target) |
+| `Handle` | `ushort` | Sequence number of the object in the **global** static list of all `Entity` objects ever created. Assigned in the constructor | Network addressing. Works because all pools are created up front and in the same order on all machines (see §1.4) |
+| `UniqueID` | `int` | Hash of the string name from the level script (`id="#Her_King"` → `GetHashCodeCustom`), 0 = unnamed | References from triggers (`giveOrder id=…`, priority target, face target) |
 
-Список экземпляров очищается только при смене `PlayState` (`ClearHandles`). Поэтому сущности **не создаются
-во время игры**: их берут из пулов (`GetFromCache`/`GetInstance`) и инициализируют заново (`Initialize` / `Deinitialize`).
+The instance list is cleared only when `PlayState` changes (`ClearHandles`). Therefore entities **are not created
+during gameplay**: they are taken from pools (`GetFromCache`/`GetInstance`) and re-initialized (`Initialize` / `Deinitialize`).
 
-Общий контракт:
-- `Update(dataChannel, dt)` — у базы только синхронизирует аудио-эмиттер с ориентацией.
-- `Dead` / `Removable` — `EntityManager` удаляет `Removable` в конце кадра (на сервере ещё и рассылает `EntityRemove`).
+Common contract:
+- `Update(dataChannel, dt)`: in the base it only syncs the audio emitter with the orientation.
+- `Dead` / `Removable`: `EntityManager` removes `Removable` at the end of the frame (on the server it also broadcasts `EntityRemove`).
 - `Kill()`.
-- Сетевые хуки: `SendsNetworkUpdate(state)` (по умолчанию «только сервер»), `IGetNetworkUpdate` / `INetworkUpdate`, `SyncWithClient`.
-- `GetDanger()` — насколько сущность «опасна» для ИИ-избегания (0 по умолчанию; у снарядов, мин, луж и т.п. больше 0).
-- Баллистика: `CalcImpulseVelocity(direction, elevation, massPower, distance)` — начальная скорость, чтобы под гравитацией
-  долететь на заданную дистанцию под заданным углом. Дистанция гасится массой тела относительно «силы» толчка.
-  Если масса слишком велика, импульса нет. Это единая основа для knockback / push / jump / throw.
-- `ArcIntersect` — попадание в сектор (дальность, полуугол, допуск по высоте). Через него работают melee и area-заклинания.
+- Network hooks: `SendsNetworkUpdate(state)` (default "server only"), `IGetNetworkUpdate` / `INetworkUpdate`, `SyncWithClient`.
+- `GetDanger()`: how "dangerous" the entity is for AI avoidance (0 by default; greater than 0 for missiles, mines, puddles, etc.).
+- Ballistics: `CalcImpulseVelocity(direction, elevation, massPower, distance)` is the initial velocity needed to travel
+  a given distance at a given angle under gravity. The distance is damped by the body mass relative to the push "power".
+  If the mass is too large, there is no impulse. This is the shared basis for knockback / push / jump / throw.
+- `ArcIntersect`: hit test against a sector (range, half-angle, height tolerance). Melee and area spells work through it.
 
-Интерфейсы:
+Interfaces:
 
-| Интерфейс | Что добавляет |
+| Interface | What it adds |
 |---|---|
 | `IDamageable` | HP/MaxHP, `InternalDamage(Damage | DamageCollection5, attacker, timestamp, attackPos, features)`, `SegmentIntersect`, `ArcIntersect`, `Kill`, `OverKill`, `Electrocute`, `ResistanceAgainst(element)` |
-| `IStatusEffected : IDamageable` | `Volume`, статусы (`HasStatus`, `StatusMagnitude`, `GetStatusEffects`), `Damage(amount, element)` для DoT |
-| `ISpellCaster : IStatusEffected` | точки каста (`CastSource`, `WeaponSource`), `CastType`, `SpellPower`, `CurrentSpell`, self-shield, пассивки предметов |
+| `IStatusEffected : IDamageable` | `Volume`, statuses (`HasStatus`, `StatusMagnitude`, `GetStatusEffects`), `Damage(amount, element)` for DoT |
+| `ISpellCaster : IStatusEffected` | cast points (`CastSource`, `WeaponSource`), `CastType`, `SpellPower`, `CurrentSpell`, self-shield, item passives |
 
-### 1.2 Дерево классов
+### 1.2 Class tree
 
 ```
 Entity
 ├── Character (abstract)  : ISpellCaster
-│   ├── Avatar             : IAI         — маг игрока
-│   └── NonPlayerCharacter               — все NPC (и большинство боссов-персонажей: VladCharacter, WarlordCharacter…)
-├── PhysicsEntity                        — проп из PhysicsEntityTemplate (ящики, бочки…)
-│   └── DamageablePhysicsEntity          — проп с HP/статусами (MaxHitPoints > 0)
-│       └── AnimatedPhysicsEntity        — проп со скелетной анимацией (spawnAnimProp)
-├── MissileEntity                        — снаряды (projectile-спеллы, стрелы, гранаты), пул 128
+│   ├── Avatar             : IAI         — the player's wizard
+│   └── NonPlayerCharacter               — all NPCs (and most character bosses: VladCharacter, WarlordCharacter…)
+├── PhysicsEntity                        — prop from PhysicsEntityTemplate (crates, barrels…)
+│   └── DamageablePhysicsEntity          — prop with HP/statuses (MaxHitPoints > 0)
+│       └── AnimatedPhysicsEntity        — prop with skeletal animation (spawnAnimProp)
+├── MissileEntity                        — missiles (projectile spells, arrows, grenades), pool 128
 ├── Shield (64), Barrier (128), SpellMine (64), SprayEntity (48), TeslaField (32),
 │   WaveEntity (16), Gib (256), Dispenser (32), ElementalEgg (128), BookOfMagick (64),
 │   Fairy, FrogTongue, Snare, OtherworldlyBolt, Item/Pickable …
 └── (SpecialAbilities): TornadoEntity, VortexEntity, PortalEntity, GreaseField …
 ```
 
-`Entanglement` (опутывание лианами) — компонент `Character`, не отдельная сущность.
+`Entanglement` (entangling by vines) is a component of `Character`, not a separate entity.
 
 ### 1.3 EntityManager
 
-- Хранит до 512 активных сущностей, отдельно — списки `Shields` и `Barriers` (их часто опрашивают).
-- **Пространственный индекс:** сетка 16×16 ячеек по 8 м. Индексы ячеек берутся **по модулю 16**,
-  то есть сетка «тороидальная»: объекты на расстоянии 128 м попадают в одну ячейку. Запрос `GetEntities(center, radius)`
-  после этого фильтрует по реальному расстоянию. Сетка полностью перестраивается каждый кадр после физики и ИИ.
-  Списки результатов берутся из пула и возвращаются через `ReturnEntityList`.
-- «Protected entities» — те, что стоят под щитом (`IsProtectedByShield`). Часть запросов их пропускает.
+- Holds up to 512 active entities, plus separate `Shields` and `Barriers` lists (they are queried often).
+- **Spatial index:** a 16×16 grid of 8 m cells. Cell indices are taken **modulo 16**,
+  so the grid is "toroidal": objects 128 m apart land in the same cell. A `GetEntities(center, radius)` query
+  then filters by real distance. The grid is fully rebuilt every frame after physics and AI.
+  Result lists are taken from a pool and returned via `ReturnEntityList`.
+- "Protected entities" are those standing under a shield (`IsProtectedByShield`). Some queries skip them.
 
-### 1.4 Пулы и детерминированные хэндлы
+### 1.4 Pools and deterministic handles
 
-`PlayState` при создании заполняет пулы фиксированного размера и в фиксированном порядке:
-снаряды 128, NPC 192, яйца 128, мины 64, щиты 64, барьеры 128, гибы 256, аватары 16 и т.д.
-Поскольку `Handle` — это индекс в глобальном списке, у одинаковых пулов на сервере и клиенте совпадают хэндлы.
-Аватары дополнительно получают «уникальный хэндл» на игрока (`AssignUniqueHandles`, `Player.UniqueAvatarHandle`).
+When created, `PlayState` fills fixed-size pools in a fixed order:
+missiles 128, NPCs 192, eggs 128, mines 64, shields 64, barriers 128, gibs 256, avatars 16, etc.
+Since `Handle` is an index in the global list, identical pools on the server and client get matching handles.
+Avatars additionally get a per-player "unique handle" (`AssignUniqueHandles`, `Player.UniqueAvatarHandle`).
 
-**Для OpenMagicka:** делать так же неудобно и хрупко. Лучше явный сетевой ID (`NetId`), который выдаёт сервер и
-передаёт в spawn-сообщениях. Пулы оставить только как оптимизацию.
+**For OpenMagicka:** doing the same is inconvenient and fragile. Better to use an explicit network ID (`NetId`) that the server
+assigns and sends in spawn messages. Keep pools only as an optimization.
 
-### 1.5 Порядок обновления кадра (PlayState, только в игре)
+### 1.5 Frame update order (PlayState, in-game only)
 
-1. Физика (`PhysicsManager.Update`).
-2. ИИ (`AIManager.Update`). На клиенте ИИ не работает.
-3. Перестроение сетки `EntityManager`.
-4. Анимированные части уровня.
-5. `EntityManager.Update` — у каждой сущности вызывается `Update`; у персонажей там машина состояний, статусы и анимации.
-6. Бой с боссом (`BossFight.Update`).
-7. Удаление `Removable`.
-8. Прочее (HUD, достижения).
-9. Раз в **1/30 с** — сетевые снапшоты сущностей для каждого соединения (§6.4).
-10. Ввод (`ControlManager.HandleInput`) — **в конце** кадра. Значит, ввод применяется в следующем кадре.
+1. Physics (`PhysicsManager.Update`).
+2. AI (`AIManager.Update`). AI does not run on the client.
+3. Rebuild of the `EntityManager` grid.
+4. Animated level parts.
+5. `EntityManager.Update`: `Update` is called on every entity; for characters this runs the state machine, statuses and animations.
+6. Boss fight (`BossFight.Update`).
+7. Removal of `Removable`.
+8. Misc (HUD, achievements).
+9. Every **1/30 s**: network entity snapshots for each connection (§6.4).
+10. Input (`ControlManager.HandleInput`) runs **at the end** of the frame. So input is applied in the next frame.
 
 ---
 
 ## 2. Character
 
-### 2.1 Что хранит персонаж (семантика)
+### 2.1 What a character stores (semantics)
 
-- **Шаблон** `CharacterTemplate` (общий на тип) и параметры экземпляра: HP, статусы, баффы, ауры, экипировка (8 слотов-«attachments»; у аватара слот 0 — оружие, слот 1 — посох), очередь заклинаний `SpellQueue` (до 5 элементов у игрока).
-- **Тело** `CharacterBody` — капсула (`Length`, `Radius`), желаемое направление `DesiredDirection`,
-  вектор движения `Movement` (нормирован, до 1), `SpeedMultiplier`, флаги `AllowMove` / `AllowRotate`,
-  `IsTouchingGround`, `IsJumping`, `IsPushed`, `IsInWater`, `RunBackward`, `AdditionalForce` (выставляют анимации).
-- **Флаги боя:** `Attacking`, `Dashing`, `IsBlocking`, `GripAttacking`, `IsHit`, `IsKnockedDown`, `IsStunned`, `IsEntangled`,
-  захват (`Gripper` / `GrippedCharacter`, `GripperAttached`, `AttachedToGripped`), `Boosts`, `Bloating`, `Overkilled`,
-  `Drowning`, паника/страх/спотыкание (`IsPanicing` / `IsFeared` / `IsStumbling`, `Panic` 0..1, `FearPosition`, `WanderAngle`),
-  эфирность, невидимость, левитация, очарование (`Charm`), гипноз, полиморф.
-- «Следующие» анимации, которые ставит атакующий код: `NextAttackAnimation`, `NextDashAnimation`, `NextGripAttackAnimation`,
+- **Template** `CharacterTemplate` (shared per type) and instance parameters: HP, statuses, buffs, auras, equipment (8 "attachment" slots; for the avatar slot 0 is the weapon, slot 1 is the staff), the spell queue `SpellQueue` (up to 5 elements for the player).
+- **Body** `CharacterBody`: a capsule (`Length`, `Radius`), desired direction `DesiredDirection`,
+  movement vector `Movement` (normalized, up to 1), `SpeedMultiplier`, flags `AllowMove` / `AllowRotate`,
+  `IsTouchingGround`, `IsJumping`, `IsPushed`, `IsInWater`, `RunBackward`, `AdditionalForce` (set by animations).
+- **Combat flags:** `Attacking`, `Dashing`, `IsBlocking`, `GripAttacking`, `IsHit`, `IsKnockedDown`, `IsStunned`, `IsEntangled`,
+  grip (`Gripper` / `GrippedCharacter`, `GripperAttached`, `AttachedToGripped`), `Boosts`, `Bloating`, `Overkilled`,
+  `Drowning`, panic/fear/stumbling (`IsPanicing` / `IsFeared` / `IsStumbling`, `Panic` 0..1, `FearPosition`, `WanderAngle`),
+  ethereal, invisibility, levitation, charm (`Charm`), hypnosis, polymorph.
+- "Next" animations set by attack code: `NextAttackAnimation`, `NextDashAnimation`, `NextGripAttackAnimation`,
   `SpecialIdleAnimation`, `DropAnimation`, `SpawnAnimation`, `NetworkAnimation`.
 
-### 2.2 Урон (Character.InternalDamage) — порядок обработки
+### 2.2 Damage (Character.InternalDamage): processing order
 
-Сам расчёт элементов и резистов (`Damage.ApplyResistances`) относится к системе заклинаний. Здесь — что делает персонаж с одним
-экземпляром `Damage` (атрибуты: `AttackProperty` — флаги, `Element`, `Amount`, `Magnitude`).
+The element and resistance calculation itself (`Damage.ApplyResistances`) belongs to the spell system. Here is what the character does with one
+`Damage` instance (attributes: `AttackProperty` (flags), `Element`, `Amount`, `Magnitude`).
 
-1. Персонаж мёртв или бессмертен → ничего не происходит. Таймер невидимости сбрасывается (любое попадание снимает невидимость).
-2. `Entanglement` (без горения): цель опутывается, урона нет. Если цель уже опутана, урон или огненный статус ослабляет путы.
-3. Активный self-shield поглощает урон первым.
-4. **Knockback**: импульс от точки атаки, угол ≈40° (0.698 рад), сила = `Amount`, дальность = `Magnitude`;
-   если цель можно сбить с ног, она падает. **Pushed**: то же, угол ≈10°. **Knockdown**: падение,
-   только если `Magnitude ≥ KnockdownTolerance` шаблона.
-5. **Блок:** урон Earth или Lightning при поднятом блоке → `BlockDamage` (значение блока предмета, сектор перед персонажем).
-   Полностью заблокированный удар → `Deflected`.
-6. **Статусы** (флаг `Status`): Fire→Burning, Cold→Cold, Water→Wet, Poison→Poisoned, Life→Healing, Steam→Wet.
-7. Резисты (шаблон, посох аватара, баффы, текущие статусы). `|Magnitude| ≈ 0` → `Deflected`, выход.
-8. `Stun` → таймер оглушения = `StunTime` шаблона. `Bleed` → статус Bleeding с `BleedRate` шаблона.
-9. Флаг `Damage`:
-   - Lightning: короткий «zap»-таймер 0.1 с. По мокрой цели урон ×2.
-   - Life: уменьшает величину отравления.
-   - Физика (Earth/Ice) или Arcane: по замороженной цели урон **×3**; иначе брызги крови и декаль (если включены кровь и эффекты).
-   - Итоговый урон = `Amount × Magnitude`. **HP уменьшает только не-клиент.**
-   - Урон по тому, кто тебя держит, копится в `GripDamageAccumulation`.
-   - Флаг `Hit` (и анимация попадания), если урон больше `HitTolerance` шаблона или персонаж воскресает.
-10. HP ограничивается сверху значением MaxHP. Если HP ≤ 0: при заморозке **или** «оверкилле» (HP ≤ −(0.5·MaxHP + 500), только при включённой крови) → `OverKill` (гибы), иначе `Killed`.
-11. Срабатывает триггер уровня `onDamage`, статистика, запоминается `LastAttacker` (держится 8 с).
+1. Character is dead or immortal → nothing happens. The invisibility timer is reset (any hit removes invisibility).
+2. `Entanglement` (without burning): the target becomes entangled, no damage. If the target is already entangled, damage or a fire status weakens the bonds.
+3. An active self-shield absorbs damage first.
+4. **Knockback**: impulse from the attack point, angle ≈40° (0.698 rad), power = `Amount`, range = `Magnitude`;
+   if the target can be knocked down, it falls. **Pushed**: the same, angle ≈10°. **Knockdown**: a fall,
+   only if `Magnitude ≥ KnockdownTolerance` of the template.
+5. **Block:** Earth or Lightning damage while blocking → `BlockDamage` (the item's block value, sector in front of the character).
+   A fully blocked hit → `Deflected`.
+6. **Statuses** (`Status` flag): Fire→Burning, Cold→Cold, Water→Wet, Poison→Poisoned, Life→Healing, Steam→Wet.
+7. Resistances (template, avatar staff, buffs, current statuses). `|Magnitude| ≈ 0` → `Deflected`, exit.
+8. `Stun` → stun timer = template `StunTime`. `Bleed` → Bleeding status with template `BleedRate`.
+9. `Damage` flag:
+   - Lightning: a short "zap" timer of 0.1 s. Damage ×2 against a wet target.
+   - Life: reduces the poison magnitude.
+   - Physical (Earth/Ice) or Arcane: damage **×3** against a frozen target; otherwise blood splatter and a decal (if blood and effects are enabled).
+   - Final damage = `Amount × Magnitude`. **Only a non-client reduces HP.**
+   - Damage dealt to whoever is gripping you accumulates in `GripDamageAccumulation`.
+   - `Hit` flag (and hit animation) if the damage exceeds the template `HitTolerance` or the character is resurrecting.
+10. HP is clamped from above to MaxHP. If HP ≤ 0: when frozen **or** on "overkill" (HP ≤ −(0.5·MaxHP + 500), only with blood enabled) → `OverKill` (gibs), otherwise `Killed`.
+11. The level trigger `onDamage` fires, statistics are updated, `LastAttacker` is remembered (kept for 8 s).
 
-`ResistanceAgainst(element)` (для ИИ-переменной `resistance`): по каждому затронутому элементу складываются
-модификаторы и множители (с учётом заморозки: Earth модификатор −350; смазки: Fire множитель ×2; посоха; баффов).
-Результат = 1 − clamp(сумма модификаторов/300 + сумма множителей, −1, 1).
+`ResistanceAgainst(element)` (for the AI variable `resistance`): for each affected element, modifiers and multipliers
+are summed (accounting for freezing: Earth modifier −350; grease: Fire multiplier ×2; staff; buffs).
+Result = 1 − clamp(sum of modifiers/300 + sum of multipliers, −1, 1).
 
-### 2.3 Регенерация и прочие тикеры
+### 2.3 Regeneration and other tickers
 
-- Регенерация `Regeneration` (HP/с, целое) работает, только когда персонаж жив, не горит и не отравлен. Раз в секунду над головой появляется число.
-- Всплывающий урон копится 0.333 с. Огонь, яд, кровь и лечение суммируются за 1 с.
-- `OverKilled(amount)`: порог −(0.5·MaxHP + 500) или смерть от раздувания (bloat).
-- `Undying` / `UndieTime` / `UndieHitPoints`: «неумирающие» после смерти ждут таймер и воскресают (через `RessurectionState`).
+- Regeneration `Regeneration` (HP/s, integer) works only when the character is alive, not burning and not poisoned. Once per second a number appears above the head.
+- Floating damage numbers accumulate for 0.333 s. Fire, poison, blood and healing are summed over 1 s.
+- `OverKilled(amount)`: threshold −(0.5·MaxHP + 500) or death from bloating (bloat).
+- `Undying` / `UndieTime` / `UndieHitPoints`: "undying" characters wait for a timer after death and resurrect (via `RessurectionState`).
 
-### 2.4 Сложность от числа игроков
+### 2.4 Difficulty from player count
 
-Если фракция шаблона не `FRIENDLY`, при загрузке резисты масштабируются коэффициентом
-`f = 1 − (players − 1) · 0.00666`: положительные множители и модификаторы умножаются на `f`, отрицательные делятся на `f`.
-При 4 игроках это примерно −2%. Эффект малый, но для совпадения цифр его стоит повторить.
+If the template faction is not `FRIENDLY`, resistances are scaled on load by the factor
+`f = 1 − (players − 1) · 0.00666`: positive multipliers and modifiers are multiplied by `f`, negative ones are divided by `f`.
+With 4 players this is about −2%. The effect is small, but it is worth replicating to match the numbers.
 
 ---
 
-## 3. CharacterTemplate (`Content/Data/Characters/*.xnb`, 338 шт.)
+## 3. CharacterTemplate (`Content/Data/Characters/*.xnb`, 338 files)
 
-Читается `CharacterTemplateReader` и кешируется по хешу ID. Порядок полей двоичного формата (это нужно reader'у OpenMagicka):
+Read by `CharacterTemplateReader` and cached by ID hash. Field order of the binary format (needed for the OpenMagicka reader):
 
-| # | Поле | Тип | Семантика |
+| # | Field | Type | Semantics |
 |---|---|---|---|
-| 1 | ID | string (lowercase) | тип персонажа; его хеш — `Type` у NPC |
-| 2 | DisplayID | string | ключ локализации имени |
-| 3 | Faction | int32 (флаги `Factions`) | EVIL 1, WILD 2, FRIENDLY 4, DEMON 8, UNDEAD 16, HUMAN 32, WIZARD 64, NEUTRAL 0xFF, PLAYER0..3 0x100..0x800, TEAM_RED/BLUE. Враги — это фракции **без общих битов** |
-| 4 | Blood | int32 | regular, green, black, wood, insect, none — эффекты крови, декали, звуки |
-| 5–11 | IsEthereal, LooksEthereal, Fearless, Uncharmable, Nonslippery, HasFairy, CanSeeInvisible | bool×7 | иммунитеты и особенности |
-| 12 | AttachedSounds | int32 N, затем N×(string cue, int32 bank) | постоянные звуки, не больше 4 |
-| 13 | Gibs | int32 N, затем N×(ExternalRef Model, float mass, float scale) | куски для оверкилла |
-| 14 | PointLights | int32 N ≤ 4, затем N×(string joint, float radius, vec3 diffuse, vec3 ambient, float specular, byte variationType, float variationAmount, float variationSpeed) | свет на костях |
+| 1 | ID | string (lowercase) | character type; its hash is the NPC `Type` |
+| 2 | DisplayID | string | localization key of the name |
+| 3 | Faction | int32 (`Factions` flags) | EVIL 1, WILD 2, FRIENDLY 4, DEMON 8, UNDEAD 16, HUMAN 32, WIZARD 64, NEUTRAL 0xFF, PLAYER0..3 0x100..0x800, TEAM_RED/BLUE. Enemies are factions **with no shared bits** |
+| 4 | Blood | int32 | regular, green, black, wood, insect, none: blood effects, decals, sounds |
+| 5–11 | IsEthereal, LooksEthereal, Fearless, Uncharmable, Nonslippery, HasFairy, CanSeeInvisible | bool×7 | immunities and traits |
+| 12 | AttachedSounds | int32 N, then N×(string cue, int32 bank) | persistent sounds, at most 4 |
+| 13 | Gibs | int32 N, then N×(ExternalRef Model, float mass, float scale) | pieces for overkill |
+| 14 | PointLights | int32 N ≤ 4, then N×(string joint, float radius, vec3 diffuse, vec3 ambient, float specular, byte variationType, float variationAmount, float variationSpeed) | lights on bones |
 | 15 | MaxHitpoints | float | |
-| 16 | NumberOfHealthBars | int32 (≤0 → 1) | многослойные полоски HP у боссов и элиты |
-| 17–19 | Undying, UndieTime, UndieHitPoints | bool, float, float | автоворот после смерти |
-| 20 | HitTolerance | int32 | урон, ниже которого нет реакции «hit» (и порог срыва захвата) |
-| 21 | KnockdownTolerance | float | минимальная `Magnitude` для сбивания с ног |
-| 22–25 | ScoreValue, ExperienceValue, RewardOnKill, RewardOnOverkill | int, int, bool, bool | очки |
-| 26 | Regeneration | int32 | HP/с |
+| 16 | NumberOfHealthBars | int32 (≤0 → 1) | multi-layer HP bars for bosses and elites |
+| 17–19 | Undying, UndieTime, UndieHitPoints | bool, float, float | auto-revival after death |
+| 20 | HitTolerance | int32 | damage below which there is no "hit" reaction (and the grip-break threshold) |
+| 21 | KnockdownTolerance | float | minimum `Magnitude` to knock down |
+| 22–25 | ScoreValue, ExperienceValue, RewardOnKill, RewardOnOverkill | int, int, bool, bool | score |
+| 26 | Regeneration | int32 | HP/s |
 | 27 | MaxPanic | float | |
-| 28 | ZapModifier | float | реакция на молнию |
-| 29–31 | Length, Radius, Mass | float | капсула (Length ≥ 0.01) и масса |
+| 28 | ZapModifier | float | reaction to lightning |
+| 29–31 | Length, Radius, Mass | float | capsule (Length ≥ 0.01) and mass |
 | 32–33 | Speed, TurnSpeed | float | |
-| 34 | BleedRate | float | DPS кровотечения |
-| 35 | StunTime | float | длительность оглушения |
-| 36 | SummonElementBank + cue | int32, string | звук призыва |
-| 37 | Resistances | int32 N, затем N×(int32 element, float multiplier, float modifier, bool statusResistance) | по умолчанию на 11 элементов множитель 1, модификатор 0 |
-| 38 | Models | int32 N, затем N×(ExternalRef SkinnedModel, float scale, vec3 tint) | варианты внешности; при спавне выбирается случайный или заданный (`iRandomOverride`) |
-| 39 | AnimationSkeleton | ExternalRef SkinnedModel | откуда берутся клипы и кости |
-| 40 | AttachedEffects | int32 N, затем N×(string bone, string effect) | постоянные эффекты на костях (кость обязана существовать) |
-| 41 | AnimationClips | **27 наборов** (по `WeaponClass`): для каждого int32 M, затем M×(string animationName, AnimationClipAction) | см. §4 |
-| 42 | Equipment | int32 N, затем N×(int32 slot 0..7, Attachment) | предметы на костях |
-| 43 | EventConditions | ConditionCollection | события на смерть, урон и т.д. (§8.2) |
-| 44 | AlertRadius | float | радиус «замечания» врага |
-| 45–49 | GroupChase, GroupSeparation, GroupCohesion, GroupAlignment, GroupWander | float | веса стаи (§5.6) |
-| 50–53 | FriendlyAvoidance, EnemyAvoidance, SightAvoidance, DangerAvoidance | float | веса избегания (§5.5) |
-| 54–56 | AngerWeight, DistanceWeight, HealthWeight | float | веса выбора цели (§5.4) |
+| 34 | BleedRate | float | bleeding DPS |
+| 35 | StunTime | float | stun duration |
+| 36 | SummonElementBank + cue | int32, string | summon sound |
+| 37 | Resistances | int32 N, then N×(int32 element, float multiplier, float modifier, bool statusResistance) | default for 11 elements is multiplier 1, modifier 0 |
+| 38 | Models | int32 N, then N×(ExternalRef SkinnedModel, float scale, vec3 tint) | appearance variants; on spawn a random or a specified one is chosen (`iRandomOverride`) |
+| 39 | AnimationSkeleton | ExternalRef SkinnedModel | where clips and bones come from |
+| 40 | AttachedEffects | int32 N, then N×(string bone, string effect) | persistent effects on bones (the bone must exist) |
+| 41 | AnimationClips | **27 sets** (by `WeaponClass`): for each, int32 M, then M×(string animationName, AnimationClipAction) | see §4 |
+| 42 | Equipment | int32 N, then N×(int32 slot 0..7, Attachment) | items on bones |
+| 43 | EventConditions | ConditionCollection | events on death, damage, etc. (§8.2) |
+| 44 | AlertRadius | float | enemy "noticing" radius |
+| 45–49 | GroupChase, GroupSeparation, GroupCohesion, GroupAlignment, GroupWander | float | flock weights (§5.6) |
+| 50–53 | FriendlyAvoidance, EnemyAvoidance, SightAvoidance, DangerAvoidance | float | avoidance weights (§5.5) |
+| 54–56 | AngerWeight, DistanceWeight, HealthWeight | float | target selection weights (§5.4) |
 | 57 | Flocking | bool | |
-| 58 | BreakFreeStrength | float | сила вырывания из захвата (0 — не пытается) |
-| 59 | Abilities | int32 N, затем N×Ability (§5.7) | до 16 (кулдауны хранятся массивом на 16) |
-| 60 | MoveAnimations | int32 N, затем N×(byte MovementProperties, int32 K, K×string animation) | анимации прыжка, полёта, плавания. Объединение флагов = `MoveAbilities` персонажа для навмеша |
-| 61 | Buffs | int32 N, затем N×BuffStorage | врождённые баффы |
-| 62 | Auras | int32 N, затем N×AuraStorage (TTL ≤ 0 → бесконечно) | врождённые ауры |
+| 58 | BreakFreeStrength | float | strength of breaking free from a grip (0 = does not try) |
+| 59 | Abilities | int32 N, then N×Ability (§5.7) | up to 16 (cooldowns are stored in an array of 16) |
+| 60 | MoveAnimations | int32 N, then N×(byte MovementProperties, int32 K, K×string animation) | jump, fly, swim animations. The union of flags = the character's `MoveAbilities` for the navmesh |
+| 61 | Buffs | int32 N, then N×BuffStorage | innate buffs |
+| 62 | Auras | int32 N, then N×AuraStorage (TTL ≤ 0 → infinite) | innate auras |
 
-После чтения по именам костей находятся служебные суставы: `Mouth`, `RightAttach`, `LeftAttach`, `RightLeg`, `LeftLeg`
-и кость с индексом 1 (бёдра). К bind-pose добавляется поворот на 180° по Y.
+After reading, service joints are found by bone name: `Mouth`, `RightAttach`, `LeftAttach`, `RightLeg`, `LeftLeg`
+and the bone with index 1 (hips). A 180° rotation around Y is added to the bind pose.
 
-`WeaponClass` (индекс набора анимаций): Default, Thrust/Crush/Slash/Throw × Fast/Medium/Slow, Unarmed, Handgun, Rifle,
-Machinegun, Heavy, Staff, NewAnimationSet0..7 (всего 27). Если клипа нет в наборе текущего оружия, берётся набор 0.
-Перечисление `Animations` содержит **231** значение; таблица клипов индексируется им напрямую.
+`WeaponClass` (animation set index): Default, Thrust/Crush/Slash/Throw × Fast/Medium/Slow, Unarmed, Handgun, Rifle,
+Machinegun, Heavy, Staff, NewAnimationSet0..7 (27 in total). If a clip is missing in the current weapon's set, set 0 is used.
+The `Animations` enum has **231** values; the clip table is indexed by it directly.
 
-`MovementProperties` (флаги): Default 0, Water 1, Jump 2, Fly 4, Dynamic 0x80.
+`MovementProperties` (flags): Default 0, Water 1, Jump 2, Fly 4, Dynamic 0x80.
 
 ---
 
-## 4. Анимации и AnimationActions
+## 4. Animations and AnimationActions
 
-`AnimationClipAction` = (имя клипа в скелете, скорость, время бленда, loop, список `AnimationAction`).
+`AnimationClipAction` = (clip name in the skeleton, speed, blend time, loop, list of `AnimationAction`).
 
-`AnimationAction` — команда, привязанная к нормализованному отрезку клипа `[start, end]` (доля от 0 до 1 длительности).
-В кадре, где время клипа попадает в отрезок, вызывается `Execute`. Флаг «первое выполнение» позволяет сделать однократный
-эффект на входе в отрезок. После выхода за `end` один раз вызывается `Kill`. Тип выбирается по строковому имени (без учёта регистра).
+`AnimationAction` is a command bound to a normalized clip interval `[start, end]` (fraction of the duration from 0 to 1).
+In a frame where the clip time falls inside the interval, `Execute` is called. A "first execution" flag allows a one-time
+effect on entering the interval. After passing `end`, `Kill` is called once. The type is chosen by string name (case-insensitive).
 
-| Action | Параметры (после start/end) | Поведение |
+| Action | Parameters (after start/end) | Behavior |
 |---|---|---|
-| `DealDamage` | weapon slot, target byte | на входе очищает список попаданий предмета и запускает его melee-события; затем каждый кадр отрезка — удар предметом (ArcIntersect по дальности melee) |
-| `SpawnMissile` | weapon, itemAligned | выстрел или бросок снаряда предмета |
-| `Gunfire` | weapon, accuracy | непрерывная стрельба |
-| `CastSpell` | fromStaff, source joint | каст текущей очереди (если заклинание ещё не идёт) |
-| `SpecialAbility` | weapon | спец-способность предмета |
-| `Block` | weapon | окно блока |
-| `Grip` | type (Pickup/Ride/Hold), radius, breakFreeTolerance, finishOnGrip (+ кости) | NPC хватает текущую цель ИИ, если она рядом, видна (без стены и щита между ними) и не защищена |
-| `ReleaseGrip`, `ThrowGrip`, `DamageGrip`, `OverkillGrip`, `BreakFree` | — / magnitude | управление захватом |
-| `Jump` | elevation, min/max range | прыжок NPC к цели с упреждением (половина её скорости), дистанция ×1.1 с ограничением |
-| `Move` | velocity (локальная) | добавочная сила тела в системе координат персонажа × скорость анимации |
-| `Crouch` | radius, length | временно меняет капсулу |
-| `Ethereal`, `Invisible`, `Immortal` | … | состояния |
-| `PlayEffect` | bone, effect, attach | частицы на кости (при `attach` эффект следует за костью) |
-| `PlaySound` | cue, bank | звук |
-| `Footstep` | — | шаг (звук и эффект зависят от поверхности и воды) |
+| `DealDamage` | weapon slot, target byte | on entry, clears the item's hit list and fires its melee events; then every frame of the interval, an item strike (ArcIntersect at melee range) |
+| `SpawnMissile` | weapon, itemAligned | shoots or throws the item's missile |
+| `Gunfire` | weapon, accuracy | continuous fire |
+| `CastSpell` | fromStaff, source joint | casts the current queue (if the spell is not already running) |
+| `SpecialAbility` | weapon | the item's special ability |
+| `Block` | weapon | block window |
+| `Grip` | type (Pickup/Ride/Hold), radius, breakFreeTolerance, finishOnGrip (+ bones) | the NPC grabs the current AI target if it is close, visible (no wall or shield between them) and not protected |
+| `ReleaseGrip`, `ThrowGrip`, `DamageGrip`, `OverkillGrip`, `BreakFree` | — / magnitude | grip control |
+| `Jump` | elevation, min/max range | NPC jump toward the target with lead (half its velocity), distance ×1.1 with a clamp |
+| `Move` | velocity (local) | additional body force in the character's coordinate system × animation speed |
+| `Crouch` | radius, length | temporarily changes the capsule |
+| `Ethereal`, `Invisible`, `Immortal` | … | states |
+| `PlayEffect` | bone, effect, attach | particles on a bone (with `attach`, the effect follows the bone) |
+| `PlaySound` | cue, bank | sound |
+| `Footstep` | — | footstep (sound and effect depend on the surface and water) |
 | `CameraShake` | duration, magnitude | |
-| `SetItemAttach`, `DetachItem`, `WeaponVisibility` | item, velocity / visible | экипировка |
-| `RemoveStatus` | — | снять статусы |
-| `Tongue` | maxLength | язык лягушки (`FrogTongue`) |
-| `Suicide` | overkill | самоуничтожение (бомберы) |
+| `SetItemAttach`, `DetachItem`, `WeaponVisibility` | item, velocity / visible | equipment |
+| `RemoveStatus` | — | remove statuses |
+| `Tongue` | maxLength | frog tongue (`FrogTongue`) |
+| `Suicide` | overkill | self-destruction (bombers) |
 
-Пример из данных (goblin_warrior): `attack_melee0` → клип `attack_sword_doubleslash`, действия `Move`, `DealDamage`, `Move`, `DealDamage`.
+Example from the data (goblin_warrior): `attack_melee0` → clip `attack_sword_doubleslash`, actions `Move`, `DealDamage`, `Move`, `DealDamage`.
 
 ---
 
-## 5. Машина состояний персонажа (CharacterStates)
+## 5. Character state machine (CharacterStates)
 
-Состояния — синглтоны без данных (все данные в `Character`), интерфейс `OnEnter` / `Update → следующее состояние или null` / `OnExit`.
-`ChangeState` запоминает `PreviousState` (по нему, например, `HitState` знает, что прервали заряд, и выстреливает заклинание).
+States are data-less singletons (all data is in `Character`), with the interface `OnEnter` / `Update → next state or null` / `OnExit`.
+`ChangeState` remembers `PreviousState` (for example, `HitState` uses it to know that a charge was interrupted, and fires the spell).
 
-### 5.1 Общие проверки (приоритет сверху вниз)
+### 5.1 Common checks (priority from top to bottom)
 
-Большинство состояний сначала вызывают общие функции базы:
+Most states first call the shared base functions:
 
-1. **UpdateBloatDeath:** раздувается → `Bloat`; оверкилл или HP ≤ 0 (если нет флага «умирает только явно») → `Dead`.
+1. **UpdateBloatDeath:** bloating → `Bloat`; overkill or HP ≤ 0 (unless the "dies only explicitly" flag is set) → `Dead`.
 2. **UpdateHit:**
-   - толкнули и в воздухе (не прыжок, не схвачен) → `Flying`;
-   - опутан, или схвачен без прикрепления, и не атакует → `Entangled`;
-   - толкнули по земле → `Pushed`;
-   - сбит с ног → `KnockDown`;
-   - держит кого-то, но должен отпустить (или урон от жертвы > HitTolerance) → `Drop` (на земле) либо импульс и knockdown;
+   - pushed and airborne (not a jump, not gripped) → `Flying`;
+   - entangled, or gripped without attachment, and not attacking → `Entangled`;
+   - pushed along the ground → `Pushed`;
+   - knocked down → `KnockDown`;
+   - holding someone but must release (or damage from the victim > HitTolerance) → `Drop` (on the ground) or an impulse and knockdown;
    - `IsHit` → `Hit`;
-   - оглушён (и ничего из выше) → `Stun`.
+   - stunned (and none of the above) → `Stun`.
 3. **UpdateActions:**
-   - прыгает (и никого не держит) → `Jump`;
-   - паника, спотыкание или страх (не опутан) → `Panic`;
-   - есть «бусты» и есть что бустить (щит впереди или свой self-shield) → `Boost`;
-   - держит, но не прикреплён → `Gripping`.
+   - jumping (and not holding anyone) → `Jump`;
+   - panic, stumbling or fear (not entangled) → `Panic`;
+   - has "boosts" and something to boost (a shield in front or its own self-shield) → `Boost`;
+   - holding but not attached → `Gripping`.
 
-### 5.2 Диаграмма (основные переходы)
+### 5.2 Diagram (main transitions)
 
 ```mermaid
 stateDiagram-v2
@@ -286,111 +286,111 @@ stateDiagram-v2
     Idle --> Move: Movement > 0
     Idle --> Alarm: IsAlerted (NPC)
     Idle --> Cast: Avatar CastType != None
-    Idle --> Charge: Avatar, charge unlocked и (Force+Projectile или Force/Area+Push)
+    Idle --> Charge: Avatar, charge unlocked and (Force+Projectile or Force/Area+Push)
     Idle --> Dash: Dashing
     Idle --> Attack: Attacking
     Idle --> GripAttack: GripAttacking
     Idle --> Block: IsBlocking
-    Idle --> Entangled: схвачен прикреплённым
+    Idle --> Entangled: gripped by an attached gripper
     Move --> Idle: Movement² ≤ 0.01
     Move --> Dash
     Move --> Attack
     Move --> Block
     Move --> Cast
     Move --> Charge
-    Attack --> Idle: клип кончился, нет следующей атаки
+    Attack --> Idle: clip ended, no next attack
     Attack --> Move
     Block --> Attack
-    Block --> Idle: блок отпущен
-    Cast --> Idle: клип кончился / спелл неактивен / заморожен
+    Block --> Idle: block released
+    Cast --> Idle: clip ended / spell inactive / frozen
     Cast --> Move
-    Cast --> Attack: спелл кончился, а атака зажата
+    Cast --> Attack: spell ended while attack is held
     Cast --> Pushed
     Cast --> KnockDown
-    Charge --> Cast: кнопку отпустили
-    Charge --> Idle: катсцена
+    Charge --> Cast: button released
+    Charge --> Idle: cutscene
     Dash --> Gripping
     Dash --> Idle
     Jump --> Land: !IsJumping
     Jump --> Gripping
-    Land --> Idle: приземлился, клип кончился
-    Hit --> Idle: клип кончился / заморожен
+    Land --> Idle: landed, clip ended
+    Hit --> Idle: clip ended / frozen
     Hit --> Move
-    KnockDown --> Idle: stun_begin → stun_end → конец
-    Flying --> KnockDown: на земле и сбит
-    Flying --> Idle: на земле
+    KnockDown --> Idle: stun_begin → stun_end → end
+    Flying --> KnockDown: on ground and knocked down
+    Flying --> Idle: on ground
     Pushed --> Idle: !IsPushed
     Stun --> Idle: !IsStunned
-    Panic --> PanicCast: Avatar кастует
+    Panic --> PanicCast: Avatar casts
     Panic --> Entangled
-    Panic --> Idle: паника прошла
-    PanicCast --> Panic: спелл кончился / weapon-каст
-    Entangled --> Cast: Avatar кастует
+    Panic --> Idle: panic over
+    PanicCast --> Panic: spell ended / weapon cast
+    Entangled --> Cast: Avatar casts
     Entangled --> Attack
-    Entangled --> Idle: освободился
+    Entangled --> Idle: freed
     Gripping --> GripAttack
     Gripping --> Attack
-    Gripping --> Drop: отпускает
+    Gripping --> Drop: releases
     Gripping --> KnockDown
-    GripAttack --> Gripping: получил урон от жертвы
+    GripAttack --> Gripping: took damage from the victim
     GripAttack --> Idle: ShouldReleaseGrip
     Drop --> Idle
-    Boost --> Idle: нечего бустить / кулдаун 0.25 с
-    Alarm --> Idle: клип тревоги кончился
-    Busy --> Idle: инвентарь закрыт
-    Dead --> Ressurection: HP > 0 и undying-таймер
-    Ressurection --> Dead: HP ≤ 0 после анимации
+    Boost --> Idle: nothing to boost / cooldown 0.25 s
+    Alarm --> Idle: alarm clip ended
+    Busy --> Idle: inventory closed
+    Dead --> Ressurection: HP > 0 and undying timer
+    Ressurection --> Dead: HP ≤ 0 after the animation
     Ressurection --> Idle
     Bloat --> Dead: BloatKilled
     Dead --> [*]
 ```
 
-(Почти из любого состояния есть переходы в `Dead` / `Bloat` и по `UpdateHit` — на диаграмме они опущены.)
+(Almost every state has transitions to `Dead` / `Bloat` and via `UpdateHit`; they are omitted from the diagram.)
 
-### 5.3 Особенности состояний
+### 5.3 State details
 
-| Состояние | Вход | Поведение / выход |
+| State | Entry | Behavior / exit |
 |---|---|---|
-| `Idle` | разрешает движение и поворот (если не опутан); анимация: сетевая → special idle → `special1` (держит) → `idle_wnd` (отравлен) → `idle_agg` (агрессивен) → `idle` | по окончании клипа заново выбирает idle. На выходе запрещает движение и сбрасывает special idle |
-| `Move` | разрешает движение и поворот | анимация по нормированной скорости: ≥ 0.6 → `move_run`, < 0.4 → `move_walk`, между — оставляет текущую; отравлен → `move_wnd`. Во время zap не меняет состояние |
-| `Attack` | снимает эфирность и невидимость; играет `NextAttackAnimation` (бленд 0.075) | поворот разрешён в окне бленда, при флаге `AllowAttackRotate` или в первые 0.1 с клипа. Комбо: если по окончании клипа задана следующая атака — играет её (кроме `attack_recoil`). Выход останавливает спелл и огонь оружия |
-| `Cast` | анимация по паре (CastType, SpellType): Force → `cast_force_{push,spray,projectile,shield,railgun,lightning}`; Area → `cast_area_{push,blast,ground,fireworks,blast,lightning}`; Self → `cast_self`; Weapon → `cast_sword_*` (зависит от «заряженного» оружия); Magick → анимация магика (поворот запрещён) | выход: клип кончился, loop-клип (кроме Force — его держат), спелл неактивен, заморожен |
-| `Charge` | `charge_force` / `charge_area`, звук заряда, TurnSpeed ×0.125, SpellPower = 0 | SpellPower растёт с долей клипа до 1, затем loop-клип. Отпустили кнопку → `Cast`. На выходе — каст «из посоха» |
-| `Boost` | `boost` | каждый «буст» лечит свой self-shield на 50 (если он не «solid»), иначе +100 HP щиту впереди (луч 20 м, конус 45°, ближайший в пределах √400) |
-| `Panic` / `PanicCast` | `move_panic` или `move_stumble` (спотыкание = бег назад) | случайное блуждание угла (±30°/с) плюс направление взгляда ×4. Паника смешивает ввод игрока и блуждание в пропорции `Panic`. Страх — бег от `FearPosition`. Множители скорости 0.8 / 0.6 / 0.666. На клиенте угол блуждания крутит только владелец |
-| `Dead` | отпускает захваты, отключает ИИ (если не undying), роняет экипировку, `die0` / `die1`, утонул → `die_drown{,1,2}` | по окончании клипа сервер шлёт `CharacterDie`, не-клиент вызывает `Die()`. Оверкилл: гибы, `RemoveAfterDeath` |
-| `KnockDown` | `hit_stun_begin` | → `hit_stun_end` → выход. Прерывание заряда выпускает спелл |
-| `Flying` | `hit_fly`, отпускает захваченного | до приземления |
-| `Pushed` | `hit_slide` | пока тело толкают |
-| `Stun` | `stunned` или `idle_wnd`, движение запрещено | пока `IsStunned` |
-| `Entangled` | `spec_entangled` | Avatar может кастовать и атаковать (вырываться) |
-| `Jump` / `Land` | `move_jump_up` / `move_jump_mid` → `move_jump_down` при падении → `move_jump_end` | |
-| `Alarm` | `spec_alert0` (Discover) / `spec_alert1` (Danger) | только NPC |
-| `Busy` | `emote_confused0`, движение запрещено | открыт инвентарь (versus/инвентарь) |
+| `Idle` | allows movement and rotation (if not entangled); animation: network → special idle → `special1` (holding) → `idle_wnd` (poisoned) → `idle_agg` (aggressive) → `idle` | when the clip ends, re-selects idle. On exit, forbids movement and resets special idle |
+| `Move` | allows movement and rotation | animation by normalized speed: ≥ 0.6 → `move_run`, < 0.4 → `move_walk`, in between keeps the current one; poisoned → `move_wnd`. Does not change state during a zap |
+| `Attack` | removes ethereal and invisibility; plays `NextAttackAnimation` (blend 0.075) | rotation is allowed within the blend window, with the `AllowAttackRotate` flag, or in the first 0.1 s of the clip. Combo: if a next attack is set when the clip ends, plays it (except `attack_recoil`). Exit stops the spell and weapon fire |
+| `Cast` | animation by the pair (CastType, SpellType): Force → `cast_force_{push,spray,projectile,shield,railgun,lightning}`; Area → `cast_area_{push,blast,ground,fireworks,blast,lightning}`; Self → `cast_self`; Weapon → `cast_sword_*` (depends on the "charged" weapon); Magick → the magick's animation (rotation forbidden) | exit: clip ended, loop clip (except Force, which is held), spell inactive, frozen |
+| `Charge` | `charge_force` / `charge_area`, charge sound, TurnSpeed ×0.125, SpellPower = 0 | SpellPower grows with the clip fraction up to 1, then a loop clip. Button released → `Cast`. On exit, a cast "from the staff" |
+| `Boost` | `boost` | each "boost" heals its own self-shield by 50 (if it is not "solid"), otherwise +100 HP to the shield in front (ray 20 m, cone 45°, nearest within √400) |
+| `Panic` / `PanicCast` | `move_panic` or `move_stumble` (stumbling = running backward) | random wander of the angle (±30°/s) plus look direction ×4. Panic blends player input and wander in the proportion `Panic`. Fear = running away from `FearPosition`. Speed multipliers 0.8 / 0.6 / 0.666. On the client only the owner turns the wander angle |
+| `Dead` | releases grips, disables AI (unless undying), drops equipment, `die0` / `die1`, drowned → `die_drown{,1,2}` | when the clip ends, the server sends `CharacterDie`, a non-client calls `Die()`. Overkill: gibs, `RemoveAfterDeath` |
+| `KnockDown` | `hit_stun_begin` | → `hit_stun_end` → exit. Interrupting a charge releases the spell |
+| `Flying` | `hit_fly`, releases the gripped character | until landing |
+| `Pushed` | `hit_slide` | while the body is being pushed |
+| `Stun` | `stunned` or `idle_wnd`, movement forbidden | while `IsStunned` |
+| `Entangled` | `spec_entangled` | Avatar can cast and attack (break free) |
+| `Jump` / `Land` | `move_jump_up` / `move_jump_mid` → `move_jump_down` when falling → `move_jump_end` | |
+| `Alarm` | `spec_alert0` (Discover) / `spec_alert1` (Danger) | NPC only |
+| `Busy` | `emote_confused0`, movement forbidden | inventory is open (versus/inventory) |
 
 ---
 
-## 6. Avatar (игрок)
+## 6. Avatar (player)
 
-### 6.1 Ввод → действия
+### 6.1 Input → actions
 
-Контроллер вызывает методы аватара (дискретные события):
+The controller calls avatar methods (discrete events):
 
-| Функция контроллера | Метод | Суть |
+| Controller function | Method | Essence |
 |---|---|---|
-| Spell_Up/Down/Left/Right | `HandleCombo(direction)` | каждый элемент — **пара направлений** (на геймпаде — жест правым стиком, см. ниже). Пара складывается во входную очередь игрока, `SpellManager.HandleCombo` распознаёт элемент |
-| Q W E R A S D F (клавиатура) | `ConjureX()` | обёртка над двумя `HandleCombo`, например Water = Left+Up, Fire = Right+Down |
-| Cast_Force (ПКМ) | `ForcePressed` / `ForceReleased` | только с посохом; CastType = Force. Отпускание разрешает заряд (`ChargeUnlocked`) |
-| Cast_Area (Shift+ПКМ) | `AreaPressed` / `AreaReleased` | CastType = Area |
-| Cast_Self (СКМ) / Special | `Special` | есть очередь → CastType Self; иначе спец-способность предмета (слот источника) |
-| Attack (ЛКМ) | `Attack` | есть очередь (или оружие заряжено) → CastType Weapon; иначе melee: случайно `attack_melee0` / `attack_melee1` (у Heavy — чередование). В захвате Pickup — копит вырывание |
-| Cast_Magick / Boost (Space) | `Boost` | если очередь складывается в магик → CastType Magick (мгновенные магики работают даже замороженным или сбитым); иначе в путах — вырывание; иначе буст щита |
-| Interact / Action | `Action` / `Interact` | NPC-диалог → подбор предмета → интерактив (в бою разговоры недоступны) |
-| Block | блок | |
+| Spell_Up/Down/Left/Right | `HandleCombo(direction)` | each element is a **pair of directions** (on a gamepad, a right-stick gesture, see below). The pair goes into the player's input queue, `SpellManager.HandleCombo` recognizes the element |
+| Q W E R A S D F (keyboard) | `ConjureX()` | wrapper over two `HandleCombo` calls, for example Water = Left+Up, Fire = Right+Down |
+| Cast_Force (RMB) | `ForcePressed` / `ForceReleased` | only with a staff; CastType = Force. Releasing allows charging (`ChargeUnlocked`) |
+| Cast_Area (Shift+RMB) | `AreaPressed` / `AreaReleased` | CastType = Area |
+| Cast_Self (MMB) / Special | `Special` | queue present → CastType Self; otherwise the item's special ability (source slot) |
+| Attack (LMB) | `Attack` | queue present (or weapon charged) → CastType Weapon; otherwise melee: random `attack_melee0` / `attack_melee1` (Heavy alternates). In a Pickup grip, accumulates breaking free |
+| Cast_Magick / Boost (Space) | `Boost` | if the queue forms a magick → CastType Magick (instant magicks work even when frozen or knocked down); otherwise when entangled, break free; otherwise shield boost |
+| Interact / Action | `Action` / `Interact` | NPC dialog → item pickup → interactive (conversations are unavailable in combat) |
+| Block | block | |
 
-Таблица «элемент → пара направлений» (`ConjureX`):
+"Element → direction pair" table (`ConjureX`):
 
-| Элемент | Пара |
+| Element | Pair |
 |---|---|
 | Earth | Down, Left |
 | Water | Left, Up |
@@ -401,494 +401,494 @@ stateDiagram-v2
 | Life | Up, Left |
 | Shield | Down, Right |
 
-Особые правила при добавлении элемента в очередь:
-- Lightning, когда ты мокрый (без пассивки WetLightning), или Fire, когда ты в смазке, — бьёт по себе:
-  self-lightning-урон с величиной ×0.5, очередь ввода очищается.
-- `TryAddToQueue(…, max 5)` — комбинирование и отмена противоположных элементов в `SpellManager` (это область заклинаний).
-- Пока идёт заряд, событие или полиморф, ввод элементов игнорируется.
+Special rules when adding an element to the queue:
+- Lightning while you are wet (without the WetLightning passive), or Fire while you are greased, hits yourself:
+  self-lightning damage with magnitude ×0.5, the input queue is cleared.
+- `TryAddToQueue(…, max 5)`: combining and cancelling opposite elements in `SpellManager` (this is the spell area).
+- While a charge, an event or a polymorph is active, element input is ignored.
 
-Каждое из этих действий в сети отправляется как `CharacterAction(ActionType, Param…)` (§9.3).
+Each of these actions is sent over the network as `CharacterAction(ActionType, Param…)` (§9.3).
 
-### 6.2 Прочее
+### 6.2 Misc
 
-- Направление: мышь (проекция на плоскость), стик (с инверсией). `DesiredInputDirection` нужен состоянию паники.
-- Avatar реализует `IAI`: скрипт уровня может вести аватар событиями (катсцены, `PushState` / `PopState`, `EventComplete` по сети).
-- Кэш аватаров: 16 штук. Аватар привязан к `Player` и при смерти не теряется.
-- Смена оружия и посоха (`ChangeWeapon` / `ChangeStaff`), подбор `Pickable`, книги магиков (`BookOfMagick`).
+- Direction: mouse (projection onto a plane), stick (with inversion). `DesiredInputDirection` is needed by the panic state.
+- Avatar implements `IAI`: a level script can drive the avatar with events (cutscenes, `PushState` / `PopState`, `EventComplete` over the network).
+- Avatar cache: 16. The avatar is bound to a `Player` and is not lost on death.
+- Weapon and staff switching (`ChangeWeapon` / `ChangeStaff`), picking up `Pickable`, magick books (`BookOfMagick`).
 
 ---
 
-## 7. ИИ (`Magicka.AI`)
+## 7. AI (`Magicka.AI`)
 
 ### 7.1 AIManager
 
-- Только на хосте (на клиенте выход сразу).
-- Сначала доставляет отложенные AI-сообщения (`MessageDispatcher`).
-- **Квантование:** за кадр полноценно обновляются максимум **20 агентов**. Окно сдвигается по кругу на 20 каждый кадр.
-  Время копится у каждого агента в `TimeSinceLastUpdate` и тратится при его обновлении. Значит, «мозг» тикает реже,
-  чем раз в кадр, но с правильным dt.
-- Флаг «угроза» для музыки боя: есть хотя бы один агент с текущей целью.
+- Host only (on the client it exits immediately).
+- First delivers deferred AI messages (`MessageDispatcher`).
+- **Time slicing:** at most **20 agents** are fully updated per frame. The window shifts cyclically by 20 every frame.
+  Time accumulates per agent in `TimeSinceLastUpdate` and is consumed when it is updated. So the "brain" ticks less often
+  than once per frame, but with the correct dt.
+- "Threat" flag for combat music: at least one agent has a current target.
 
-### 7.2 Agent: данные
+### 7.2 Agent: data
 
-Стек AI-состояний и их возраст; стек целей (`CurrentTarget` — верх стека) и их возраст; `NextAbility` и `BusyAbility`
-(выполняемая сейчас); «таблица обид» `AttackedBy` (хэндл → накопленный урон, не больше 500; убывает на 25 в секунду;
-пассивки посоха ReduceAggro и ZombieDeterrent для нежити режут её вдвое); `Order`, `ReactsTo`, `ReactionOrder`, `ReactionTrigger`;
-приоритетная цель и приоритетная способность (из скрипта); путь (список `PathNode`); `WayPoint` (для атаки — **смещение от цели**,
-для движения — абсолютная точка); лидер стаи; события скрипта (`AIEvent[]`, индекс, задержка, loop); параметры блуждания;
-`AlertMode` (None / Discover / Danger); `TargetArea` (хеш триггер-зоны или локатора).
+A stack of AI states and their age; a stack of targets (`CurrentTarget` is the top of the stack) and their age; `NextAbility` and `BusyAbility`
+(the one currently executing); the "grudge table" `AttackedBy` (handle → accumulated damage, at most 500; decays by 25 per second;
+the staff passives ReduceAggro and ZombieDeterrent (for undead) halve it); `Order`, `ReactsTo`, `ReactionOrder`, `ReactionTrigger`;
+priority target and priority ability (from the script); path (list of `PathNode`); `WayPoint` (for attack, an **offset from the target**;
+for movement, an absolute point); flock leader; script events (`AIEvent[]`, index, delay, loop); wander parameters;
+`AlertMode` (None / Discover / Danger); `TargetArea` (hash of a trigger zone or locator).
 
-`Order`: None, Idle, Attack, Defend, Flee, Wander, Panic. `ReactTo` (флаги): Attack 1, Proximity 2.
-После `Initialize` по умолчанию `Order = Attack`, `ReactTo = None`. Агрессией управляет только скрипт: спавн и `giveOrder`.
+`Order`: None, Idle, Attack, Defend, Flee, Wander, Panic. `ReactTo` (flags): Attack 1, Proximity 2.
+After `Initialize` the defaults are `Order = Attack`, `ReactTo = None`. Aggression is controlled only by the script: spawn and `giveOrder`.
 
-### 7.3 Цикл Agent.Update
+### 7.3 Agent.Update loop
 
-1. Уменьшение обид, «старение» состояний, целей и лидера.
-2. **Реакция:**
-   - `ReactTo.Attack` — есть обидчик в таблице;
-   - `ReactTo.Proximity` — в радиусе `AlertRadius` есть персонаж чужой фракции (видимый, или агент видит невидимых).
-     Если реакционный приказ отличается от текущего, `AlertMode = Danger`.
-   Реакция: `Order = ReactionOrder` (если задан) и запуск `ReactionTrigger` скрипта.
-3. `OnExecute` верхнего AI-состояния.
-4. `NextAbility.Update` — подготовка способности (например, NPC «напевает» элементы).
+1. Grudge decay, "aging" of states, targets and the leader.
+2. **Reaction:**
+   - `ReactTo.Attack`: there is an attacker in the table;
+   - `ReactTo.Proximity`: within `AlertRadius` there is a character of a foreign faction (visible, or the agent sees invisible).
+     If the reaction order differs from the current one, `AlertMode = Danger`.
+   Reaction: `Order = ReactionOrder` (if set) and the script's `ReactionTrigger` is fired.
+3. `OnExecute` of the top AI state.
+4. `NextAbility.Update`: ability preparation (for example, the NPC "chants" elements).
 
-`HandleMessage(TakingDamage)` → `AddAttackedBy`: урон от чужой фракции добавляется в таблицу обид. Союзники той же фракции
-в радиусе тревоги тоже получают обиду на атакующего. Урон от «своих» обнуляется (множитель 0).
+`HandleMessage(TakingDamage)` → `AddAttackedBy`: damage from a foreign faction is added to the grudge table. Allies of the same faction
+within the alert radius also get a grudge against the attacker. Damage from "own" faction is zeroed (multiplier 0).
 
-### 7.4 Выбор цели и способности (fuzzy)
+### 7.4 Target and ability selection (fuzzy)
 
 `ChooseTarget`:
-- Кандидаты: сущности в радиусе 40 м, все аватары игроков, приоритетная цель. Отбрасываются мёртвые, сам агент,
-  не-персонажи (кроме приоритетной цели), невидимые.
-- Оценка: +1 приоритетной цели; `+ FuzzyAnger · AngerWeight`; `+ (1 − HP/MaxHP) · HealthWeight`;
-  `+ FuzzyDistanceExponential(dist, AlertRadius) · DistanceWeight`; всё умножается на агро-множитель цели (баффы ReduceAgro).
-- Держатся два топ-4 списка: **враги** (фракции без пересечения) и **остальные** (союзники — для лечения и баффов).
-- К оценке каждого кандидата прибавляется лучшая желательность способности против него. Отдельно оценивается «цель = я сам»
-  (для способностей с `Target.Self`). Победитель — максимум суммы.
+- Candidates: entities within 40 m, all player avatars, the priority target. Discarded: dead, the agent itself,
+  non-characters (except the priority target), invisible.
+- Score: +1 for the priority target; `+ FuzzyAnger · AngerWeight`; `+ (1 − HP/MaxHP) · HealthWeight`;
+  `+ FuzzyDistanceExponential(dist, AlertRadius) · DistanceWeight`; everything is multiplied by the target's aggro multiplier (ReduceAgro buffs).
+- Two top-4 lists are kept: **enemies** (factions with no overlap) and **others** (allies, for healing and buffs).
+- The best ability desirability against each candidate is added to its score. "Target = myself" is scored separately
+  (for abilities with `Target.Self`). The winner is the maximum sum.
 
-`ChooseAbility(args)`: перебираются способности без кулдауна, подходящие по `Target` (Self — только на себя; Friendly — союзник,
-не сам; Enemy — чужая фракция). Если в очереди NPC уже есть элементы, подходят только `CastSpell` с теми же элементами.
-Желательность = значение fuzzy-выражения способности (или встроенная `Desirability`), +0.5 приоритетной способности
-против приоритетной цели. Берётся максимум > 0. Если ничего не подошло, а элементы уже напеты, ставится служебная
-«spell recovery»-способность, которая докастует очередь как последняя использованная.
+`ChooseAbility(args)`: iterates abilities that are off cooldown and match by `Target` (Self: only on self; Friendly: an ally,
+not self; Enemy: a foreign faction). If the NPC queue already has elements, only `CastSpell` with the same elements qualifies.
+Desirability = the value of the ability's fuzzy expression (or the built-in `Desirability`), +0.5 for the priority ability
+against the priority target. The maximum > 0 is taken. If nothing qualifies and elements are already chanted, a service
+"spell recovery" ability is set, which finishes casting the queue as the last used one.
 
-### 7.5 Fuzzy-арифметика (`Arithmetics`) — язык выражений в шаблонах
+### 7.5 Fuzzy arithmetic (`Arithmetics`): the expression language in templates
 
-Строка-выражение из `.xnb` разбирается в дерево:
-- операторы `+ -` (приоритет 50), `* /` (100), `!` (унарное **NOT = 1 − x**, 150), `^` (степень, 200), скобки;
-- уровень вложенности скобок повышает приоритет; корнем становится оператор с минимальным (уровень, приоритет);
-- лист — число или переменная `[scope.]Name(args)`, где scope — `g` / `s` / `t` (Global / Self / Target, по умолчанию Global);
-- пробелы и переводы строк игнорируются, имена без учёта регистра. Есть синонимы: `DistExp` = `DistanceExponential`,
-  `FDensity` = `FriendlyDensity`, `Status` = `HasStatus`, `Res` = `Resistance`, `LOS` = `LineOfSight` и т.д.
+The expression string from `.xnb` is parsed into a tree:
+- operators `+ -` (priority 50), `* /` (100), `!` (unary **NOT = 1 − x**, 150), `^` (power, 200), parentheses;
+- the parenthesis nesting level raises priority; the root becomes the operator with the minimal (level, priority);
+- a leaf is a number or a variable `[scope.]Name(args)`, where scope is `g` / `s` / `t` (Global / Self / Target, Global by default);
+- spaces and line breaks are ignored, names are case-insensitive. There are aliases: `DistExp` = `DistanceExponential`,
+  `FDensity` = `FriendlyDensity`, `Status` = `HasStatus`, `Res` = `Resistance`, `LOS` = `LineOfSight`, etc.
 
-Переменные:
+Variables:
 
-| Переменная | Аргументы | Значение (0..1) |
+| Variable | Arguments | Value (0..1) |
 |---|---|---|
-| `DistanceLinear(max)` / `(min,max)` | одно число → диапазон (−max, max) | треугольная функция с пиком посередине диапазона |
-| `DistanceExponential(max)` / `(min,max)` | то же | экспоненциальный колокол с центром посередине: на краях ≈ 0.1, в центре 1 |
-| `Behind` | — | (dot(dir от AI к цели, forward цели) + 1)/2 — насколько AI за спиной цели |
-| `Angle` | — | dot(направление на цель, взгляд AI) в плоскости XZ |
-| `Danger(elements)` | имя `Elements`, `|` = или (`Offensive`, `Fire`…) | 1 − 0.25^(Σ угроз врагов в радиусе тревоги + своя опасность [+1, если бьёт молния]) |
-| `Threat(elements)` | scope Target | угроза цели: угол её взгляда на AI и близость (до 20 м) × сила элементов в её очереди (в Charge/Cast — корень 4-й степени) |
-| `HasStatus(status)` | имя `StatusEffects` | 0/1 |
+| `DistanceLinear(max)` / `(min,max)` | a single number → range (−max, max) | triangular function peaking at the middle of the range |
+| `DistanceExponential(max)` / `(min,max)` | same | exponential bell centered in the middle: ≈ 0.1 at the edges, 1 at the center |
+| `Behind` | — | (dot(dir from AI to target, target forward) + 1)/2: how much the AI is behind the target |
+| `Angle` | — | dot(direction to target, AI look direction) in the XZ plane |
+| `Danger(elements)` | `Elements` name, `|` = or (`Offensive`, `Fire`…) | 1 − 0.25^(Σ threats of enemies in alert radius + own danger [+1 if lightning hits]) |
+| `Threat(elements)` | scope Target | the target's threat: the angle of its gaze at the AI and proximity (up to 20 m) × strength of the elements in its queue (in Charge/Cast, 4th root) |
+| `HasStatus(status)` | `StatusEffects` name | 0/1 |
 | `Gripped`, `Gripping`, `Entangled`, `IsOnGround`, `IsCharacter`, `IsEthereal`, `IsShield`, `IsBarrier`, `Shielded` | — | 0/1 |
-| `Speed`, `Health` | — | нормированные |
-| `Resistance(element)` | | см. §2.2 |
-| `FriendlyDensity(r=6)`, `EnemyDensity(r=6)` | радиус | 1 − 0.5^count |
-| `LOS` | — | 1, если на отрезке AI→цель нет других сущностей |
-| `LOSC(dx,dy,dz,len)` | смещение начала и длина | луч с коллизией уровня |
+| `Speed`, `Health` | — | normalized |
+| `Resistance(element)` | | see §2.2 |
+| `FriendlyDensity(r=6)`, `EnemyDensity(r=6)` | radius | 1 − 0.5^count |
+| `LOS` | — | 1 if there are no other entities on the AI→target segment |
+| `LOSC(dx,dy,dz,len)` | start offset and length | ray with level collision |
 | `GripDamageAccumulation[Normalized]` | | |
 
-Частые выражения в реальных данных: `distExp(3)`, `distExp(6)`, `(distexp(0,15)*0.75) - (s.FriendlyDensity*0.5) - Danger(Offensive)`,
-`(s.status(wet)+s.status(cold)+s.status(frozen))*2` (для self-лечения или очистки), `(distExp(6,20))*LOS*!t.shielded*!t.resistance(cold)`.
+Common expressions in real data: `distExp(3)`, `distExp(6)`, `(distexp(0,15)*0.75) - (s.FriendlyDensity*0.5) - Danger(Offensive)`,
+`(s.status(wet)+s.status(cold)+s.status(frozen))*2` (for self-healing or cleansing), `(distExp(6,20))*LOS*!t.shielded*!t.resistance(cold)`.
 
-> Тонкость: при равных приоритетах (`a - b - c`) порядок задаётся несортированной стабильностью `List.Sort`
-> исходного .NET, так что ассоциативность формально не определена. Для OpenMagicka нужно выбрать **левую ассоциативность**
-> и сверить результаты на всех выражениях из `Data/Characters` (см. открытые вопросы).
+> Subtlety: with equal priorities (`a - b - c`) the order is determined by the unsorted stability of `List.Sort`
+> in the original .NET, so associativity is formally undefined. For OpenMagicka, choose **left associativity**
+> and verify the results on all expressions from `Data/Characters` (see open questions).
 
-### 7.6 AI-состояния (стек)
+### 7.6 AI states (stack)
 
 ```mermaid
 stateDiagram-v2
-    Idle --> BreakFree: схвачен/опутан и BreakFreeStrength > 0
-    Idle --> Move: |avoidance| > 20 (убегать от опасности), кроме Defend
-    Idle --> Attack: Order=Attack/Defend и нашлась цель
-    Idle --> Move: Defend — вне зоны/локатора (> 1 м)
+    Idle --> BreakFree: gripped/entangled and BreakFreeStrength > 0
+    Idle --> Move: |avoidance| > 20 (flee from danger), except Defend
+    Idle --> Attack: Order=Attack/Defend and a target was found
+    Idle --> Move: Defend — outside the zone/locator (> 1 m)
     Idle --> Wander: Order=Wander
     Idle --> Panic: Order=Panic
-    Idle --> Move: скриптовое событие Move
-    Attack --> Move: не в радиусе — точка вокруг цели (ChooseAttackAngle)
-    Attack --> Idle: (pop) цели нет / мертва / невидима / avoidance > 20 / нет способности
+    Idle --> Move: scripted Move event
+    Attack --> Move: not in range — point around the target (ChooseAttackAngle)
+    Attack --> Idle: (pop) no target / dead / invisible / avoidance > 20 / no ability
     Attack --> BreakFree
-    Move --> Attack: путь перекрыт твёрдым барьером или щитом — атаковать его
-    Move --> [*]: pop — пришёл (< 0.5 м), возраст > 1 с (0.333 с на dynamic-узлах), в воздухе, лидер не в Move
-    Wander --> [*]: pop — Order != Wander или в воздухе
-    Panic --> [*]: pop — паника кончилась
-    BreakFree --> [*]: pop — свободен
+    Move --> Attack: path blocked by a solid barrier or shield — attack it
+    Move --> [*]: pop — arrived (< 0.5 m), age > 1 s (0.333 s on dynamic nodes), airborne, leader not in Move
+    Wander --> [*]: pop — Order != Wander or airborne
+    Panic --> [*]: pop — panic ended
+    BreakFree --> [*]: pop — free
 ```
 
-- **Idle**. Защита от «зависания»: если цели нет, а элементы напеты дольше 2 с — очередь очищается.
-  Затем обрабатываются **скриптовые события** (`giveOrder` с вложенными тегами), с задержками:
-  - `Move position= speed= facingDirection= delay= trigger=` — идти к локатору (дистанция < 0.5 м), при `facingDirection` — довернуться;
-  - `Animation animation= blendTime= idleanimation= delay=` (рассылается по сети как `EventAnimation`);
-  - `Face target=|facingDirection= delay=` — повернуться к сущности, локатору или направлению (dot ≥ 0.99);
+- **Idle**. Protection against "hanging": if there is no target and elements have been chanted for more than 2 s, the queue is cleared.
+  Then **scripted events** are processed (`giveOrder` with nested tags), with delays:
+  - `Move position= speed= facingDirection= delay= trigger=`: walk to a locator (distance < 0.5 m), with `facingDirection`, turn to face it;
+  - `Animation animation= blendTime= idleanimation= delay=` (broadcast over the network as `EventAnimation`);
+  - `Face target=|facingDirection= delay=`: turn toward an entity, locator or direction (dot ≥ 0.99);
   - `Kill remove=`;
   - `Loop type=Loop|Reverse`.
-  Задержка `NaN` означает «ждать конца анимации».
-- **Attack**. Пока выполняется способность (`BusyAbility`), агент стоит и доворачивается. Способность выбирается заново, если
-  текущая бесполезна или цель «старше» 1 с. В радиусе и лицом к цели → `Execute`; при успехе ставится кулдаун способности
-  и цель выбирается заново (переключение). Если `ForceNavMesh`, цель должна быть ≤ 3 м от навмеша.
-- **Move**. При входе: ищется **лидер** — NPC того же типа в радиусе AlertRadius/3, впереди, в Move, с той же целью или
-  той же точкой. Если лидер есть, агент следует за ним стайно (`FollowGroup`), иначе считает путь A* по навмешу.
-  Каждый кадр: срезает пройденные узлы; узел с `Jump` → прыжок на 60°; добавляет избегание; результат проецирует на навмеш.
-  Скорость умножается на `MoveEvent.Speed`.
-- **Wander**. Блуждающий угол плюс направление вперёд с проекцией на навмеш. Ограничение триггер-зоной (у края — разворот на 180°).
-  Ходит 10–20 с, стоит 2–5 с, скорость `WanderSpeed`.
-- **Panic**. Блуждающий угол плюс направление ±1.25 (при спотыкании — назад).
-- **BreakFree**. Каждый тик вызывает `BreakFree()`.
+  A `NaN` delay means "wait for the animation to end".
+- **Attack**. While an ability is executing (`BusyAbility`), the agent stands and turns to face. The ability is re-selected if
+  the current one is useless or the target is "older" than 1 s. In range and facing the target → `Execute`; on success, the ability
+  cooldown is set and the target is re-selected (switching). With `ForceNavMesh`, the target must be ≤ 3 m from the navmesh.
+- **Move**. On entry: a **leader** is searched for, an NPC of the same type within AlertRadius/3, ahead, in Move, with the same target or
+  the same point. If there is a leader, the agent follows it as a flock (`FollowGroup`), otherwise it computes an A* path on the navmesh.
+  Every frame: cuts passed nodes; a node with `Jump` → a 60° jump; adds avoidance; projects the result onto the navmesh.
+  Speed is multiplied by `MoveEvent.Speed`.
+- **Wander**. Wander angle plus forward direction projected onto the navmesh. Constrained by a trigger zone (at the edge, a 180° turn).
+  Walks for 10–20 s, stands for 2–5 s, speed `WanderSpeed`.
+- **Panic**. Wander angle plus direction ±1.25 (when stumbling, backward).
+- **BreakFree**. Calls `BreakFree()` every tick.
 
-### 7.7 Избегание и стая
+### 7.7 Avoidance and flocking
 
-`GetAvoidance` (радиус 12 м), четыре компоненты с весами шаблона:
-- **Friendly** — от союзников, пропорционально их `GetDanger` и близости;
-- **Enemy** — от врагов, пропорционально их опасности;
-- **Sight** — уход **из линии взгляда** врага: перпендикуляр к направлению на него, сила зависит от того, смотрит ли враг на агента,
-  и от дистанции (пик на 2/3 радиуса);
-- **Danger** — от прочих опасных сущностей (мины, лужи, снаряды).
-Длина суммы ограничивается 1e5. Порог «надо убегать» — 20.
+`GetAvoidance` (radius 12 m), four components with template weights:
+- **Friendly**: away from allies, proportional to their `GetDanger` and proximity;
+- **Enemy**: away from enemies, proportional to their danger;
+- **Sight**: moving **out of an enemy's line of sight**: perpendicular to the direction to the enemy, the strength depends on whether the enemy is looking at the agent,
+  and on the distance (peak at 2/3 of the radius);
+- **Danger**: away from other dangerous entities (mines, puddles, missiles).
+The length of the sum is clamped to 1e5. The "must flee" threshold is 20.
 
-`FollowGroup`: до 8 случайных соседей, без повторов. Separation `−r̂·w/|r|` (обратно расстоянию), Cohesion `r·w`,
-Alignment — направление лидера, Wander — блуждание. Сумма нормируется до 1 и проецируется на навмеш.
+`FollowGroup`: up to 8 random neighbors, without repeats. Separation `−r̂·w/|r|` (inversely proportional to distance), Cohesion `r·w`,
+Alignment is the leader's direction, Wander is wandering. The sum is normalized to 1 and projected onto the navmesh.
 
-### 7.8 Способности NPC (`Abilities`, 15 типов)
+### 7.8 NPC abilities (`Abilities`, 15 types)
 
-Общий заголовок в `.xnb`: имя типа (string), cooldown (float), target (byte: Self 1 / Enemy 2 / Friendly 3),
-флаг и строка fuzzy-выражения (если флаг true), список анимаций (int32 N, затем N строк). Дальше — поля типа:
+Common header in `.xnb`: type name (string), cooldown (float), target (byte: Self 1 / Enemy 2 / Friendly 3),
+a flag and a fuzzy expression string (if the flag is true), an animation list (int32 N, then N strings). Then the type's fields:
 
-| Тип | Поля | Суть |
+| Type | Fields | Essence |
 |---|---|---|
-| `Melee` | min/max range, arc, weapons[], rotate | атака анимацией (урон наносит `DealDamage` в анимации) |
-| `Ranged` | min/max range, elevation, arc, accuracy, weapons[] | снаряд или стрельба |
-| `CastSpell` | min/max range, arc, chantSpeed, power, castType, elements[] | NPC напевает элементы по одному раз в `chantSpeed` (Weapon — все сразу), в пределах 1.25·maxRange; когда очередь полна — ставит SpellPower и CastType и играет анимацию каста |
+| `Melee` | min/max range, arc, weapons[], rotate | attack by animation (damage is dealt by `DealDamage` in the animation) |
+| `Ranged` | min/max range, elevation, arc, accuracy, weapons[] | missile or gunfire |
+| `CastSpell` | min/max range, arc, chantSpeed, power, castType, elements[] | the NPC chants elements one at a time every `chantSpeed` (Weapon: all at once), within 1.25·maxRange; when the queue is full, sets SpellPower and CastType and plays the cast animation |
 | `Block` | arc, shield slot | |
-| `Dash` | min/max range, arc, vector | рывок |
+| `Dash` | min/max range, arc, vector | dash |
 | `Jump` | min/max range, angle, elevation | |
 | `ElementSteal` | range, angle | |
-| `GripCharacterFromBehind`, `PickUpCharacter`, `ZombieGrip` | min/max range, angle, maxWeight | захваты (по массе цели) |
-| `ThrowGrip` | min/max range, elevation | бросок схваченного |
+| `GripCharacterFromBehind`, `PickUpCharacter`, `ZombieGrip` | min/max range, angle, maxWeight | grips (by target mass) |
+| `ThrowGrip` | min/max range, elevation | throwing the gripped character |
 | `DamageGrip`, `ConfuseGrip`, `RemoveStatus` | — | |
-| `SpecialAbilityAbility` | min/max range, angle, weapon | вызывает спец-способность предмета |
+| `SpecialAbilityAbility` | min/max range, angle, weapon | invokes the item's special ability |
 
-Общие проверки: `InRange` (по XZ, с радиусами), `FacingTarget` (угол меньше arc), `ChooseAttackAngle` — до 3 случайных точек
-на полуокружности вокруг цели на средней дистанции способности, первая без препятствий.
+Common checks: `InRange` (in XZ, with radii), `FacingTarget` (angle less than arc), `ChooseAttackAngle`: up to 3 random points
+on a half-circle around the target at the ability's middle distance, the first one without obstacles.
 
-`MoveAbilities` (`Jump`, `Run`) — **мёртвый код**: на них нигде нет ссылок. Движение NPC задаётся `MovementProperties` + `MoveAnimations` шаблона.
+`MoveAbilities` (`Jump`, `Run`) is **dead code**: nothing references them. NPC movement is defined by the template's `MovementProperties` + `MoveAnimations`.
 
 ### 7.9 Messaging
 
-`MessageDispatcher` — очередь отложенных сообщений агент→агент (`TakingDamage`, `AttackingTarget`) с задержкой.
-Используется только для распространения агрессии.
+`MessageDispatcher` is a queue of deferred agent→agent messages (`TakingDamage`, `AttackingTarget`) with a delay.
+It is used only to propagate aggression.
 
-### 7.10 giveOrder (скрипт уровня) → ИИ
+### 7.10 giveOrder (level script) → AI
 
-Атрибуты (встречаемость в данных): `order` (848), `delay` (771), `id` (681), `reactto`/`reactTo` (512), `area` (296),
-`type` (196, `any` — все в зоне), `animation` (187), `reaction` (104), `factions` (83), `priorityTarget` (32),
+Attributes (occurrence in data): `order` (848), `delay` (771), `id` (681), `reactto`/`reactTo` (512), `area` (296),
+`type` (196, `any` = everyone in the zone), `animation` (187), `reaction` (104), `factions` (83), `priorityTarget` (32),
 `idleAnimation` (13), `trigger` (7), `explicit` (7), `targetArea` (3), `speed` (3).
-Имена атрибутов **регистронезависимы**. Действие: отпустить захваты, задать `WanderSpeed`, `TargetArea`, вызвать `SetOrder`
-(при смене приказа стек AI-состояний сворачивается до Idle), поставить анимации; `Panic` — сразу паника.
+Attribute names are **case-insensitive**. Action: release grips, set `WanderSpeed`, `TargetArea`, call `SetOrder`
+(when the order changes, the AI state stack collapses down to Idle), set animations; `Panic` means immediate panic.
 
 ---
 
-## 8. Предметы, баффы, физобъекты
+## 8. Items, buffs, physics objects
 
-### 8.1 Item (`Data/items/*.xnb`, 454 шт.)
+### 8.1 Item (`Data/items/*.xnb`, 454 files)
 
-Семантика полей (в порядке файла): имя (хеш — тип предмета), отображаемое имя и описание (ключи локализации), звуки,
-`Pickable`, `Bound`, `BlockValue`, `WeaponClass`, `CooldownTime`, HideModel / HideEffect / PauseSounds, резисты (посох даёт резисты
-владельцу), **пассивная способность** (byte + float): ShieldBoost, AreaLifeDrain, ZombieDeterrent, ReduceAggro, EnhanceAllyMelee,
+Field semantics (in file order): name (hash = item type), display name and description (localization keys), sounds,
+`Pickable`, `Bound`, `BlockValue`, `WeaponClass`, `CooldownTime`, HideModel / HideEffect / PauseSounds, resistances (a staff gives resistances
+to its owner), **passive ability** (byte + float): ShieldBoost, AreaLifeDrain, ZombieDeterrent, ReduceAggro, EnhanceAllyMelee,
 AreaRegeneration, InverseArcaneLife, Zap, BirchSteam, WetLightning, MoveSpeed, Glow, Mjolnr, Gungner, MasterSword, DragonSlayer;
-эффекты, свет (≤ 1), необязательная спец-способность (время перезарядки + `SpecialAbility`), melee (range, multiHit, conditions),
-ranged (range, facing, homing, elevation в градусах, danger), огнестрел (range, clip, rate, accuracy, звук, вспышка, гильзы,
-скорость трассера, conditions), модель снаряда, ranged conditions, масштаб, модель, ауры.
+effects, light (≤ 1), optional special ability (cooldown time + `SpecialAbility`), melee (range, multiHit, conditions),
+ranged (range, facing, homing, elevation in degrees, danger), firearm (range, clip, rate, accuracy, sound, muzzle flash, shell casings,
+tracer speed, conditions), missile model, ranged conditions, scale, model, auras.
 
-`ChantEffects`: при заряде оружия элементом на клинке горит эффект `swordelementeffect_<element>`.
+`ChantEffects`: when the weapon is charged with an element, the `swordelementeffect_<element>` effect burns on the blade.
 
-### 8.2 События: ConditionCollection / EventCollection
+### 8.2 Events: ConditionCollection / EventCollection
 
-До 5 групп «условие → список событий». Условие: тип (флаги: Default 1, Hit 2, Collision 4, Damaged 8, Timer 16, Death 32,
-OverKill 64), порог HP, элементы, порог, время, флаг повтора. События (`EventType`): Damage, Splash, Sound, Effect, Remove,
+Up to 5 "condition → event list" groups. Condition: type (flags: Default 1, Hit 2, Collision 4, Damaged 8, Timer 16, Death 32,
+OverKill 64), HP threshold, elements, threshold, time, repeat flag. Events (`EventType`): Damage, Splash, Sound, Effect, Remove,
 CameraShake, Decal, Blast, Spawn, Overkill, SpawnGibs, SpawnItem, SpawnMagick, SpawnMissile, Light, CastMagick, DamageOwner, Callback.
-Тот же механизм используют предметы (melee / gun / ranged), шаблоны персонажей и физобъектов.
+The same mechanism is used by items (melee / gun / ranged), character templates and physics object templates.
 
-### 8.3 Баффы и ауры
+### 8.3 Buffs and auras
 
-- `BuffStorage`: тип (byte), визуальная категория (None / Offensive / Defensive / Special), цвет, TTL, имя эффекта, затем данные типа:
-  BoostDamage (Damage), DealDamage (Damage), Resistance (element, **modifier, затем multiplier** — порядок обратный шаблону!),
+- `BuffStorage`: type (byte), visual category (None / Offensive / Defensive / Special), color, TTL, effect name, then the type's data:
+  BoostDamage (Damage), DealDamage (Damage), Resistance (element, **modifier, then multiplier**: the order is reversed relative to the template!),
   Undying, Boost (amount), ReduceAgro (amount), ModifyHitPoints (mult, add), ModifySpellTTL (mult, add), ModifySpellRange (mult, add).
-- `AuraStorage`: цель (Friendly, FriendlyButSelf, Enemy, All, AllButSelf, Self, Type, TypeButSelf, Faction, FactionButSelf),
-  тип (Buff — раздаёт BuffStorage, Deflect — strength, Boost — magnitude, LifeSteal — amount, Love — radius и TTL), категория, цвет,
-  эффект, TTL, радиус, тип-фильтр, фракция-фильтр. Ауры «тикают» циклом (`AuraCycleTimer`) и раздают баффы попавшим в радиус.
-- Источники: шаблон персонажа, предмет (посох), магики (Haste и др.).
+- `AuraStorage`: target (Friendly, FriendlyButSelf, Enemy, All, AllButSelf, Self, Type, TypeButSelf, Faction, FactionButSelf),
+  type (Buff: hands out BuffStorage, Deflect: strength, Boost: magnitude, LifeSteal: amount, Love: radius and TTL), category, color,
+  effect, TTL, radius, type filter, faction filter. Auras "tick" in a cycle (`AuraCycleTimer`) and hand out buffs to those within the radius.
+- Sources: character template, item (staff), magicks (Haste and others).
 
-### 8.4 PhysicsEntityTemplate (`Data/PhysicsEntities`, 69 шт.)
+### 8.4 PhysicsEntityTemplate (`Data/PhysicsEntities`, 69 files)
 
-Movable, Pushable, Solid, Mass, MaxHitPoints (> 0 → `DamageablePhysicsEntity`), CanHaveStatus, резисты, гибы, эффекты и звуки,
-модель (или вложенная модель), необязательная коллизионная сетка (вершины и треугольники), коллизионные боксы, прикреплённые эффекты
-(хеш и матрица), свет, события, ID, а дальше — необязательная скелетная часть (радиус, модели, скелет, анимации) для анимированных
-пропов. Пропы уровня (из `LevelModel`) создаются при загрузке сцены; `spawnPhys` / `spawnAnimProp` — триггерами.
+Movable, Pushable, Solid, Mass, MaxHitPoints (> 0 → `DamageablePhysicsEntity`), CanHaveStatus, resistances, gibs, effects and sounds,
+model (or a nested model), optional collision mesh (vertices and triangles), collision boxes, attached effects
+(hash and matrix), light, events, ID, and then an optional skeletal part (radius, models, skeleton, animations) for animated
+props. Level props (from `LevelModel`) are created when the scene loads; `spawnPhys` / `spawnAnimProp` are created by triggers.
 
 ---
 
-## 9. Спец-способности (`SpecialAbilities`, 114 файлов, ~106 типов)
+## 9. Special abilities (`SpecialAbilities`, 114 files, ~106 types)
 
-Это реализации **магиков** и спец-способностей предметов: общий базовый класс, создание по строковому имени
-(имя, анимация — по умолчанию `cast_self`, эффект, список элементов). Варианты `Execute`: от кастера, от кастера с элементами,
-в точке. Для сети есть пара `GetNetworkMessage` / `NetworkMessage` через `NetworkSpellCast`, плюс `NetworkConditionsMet`:
-на клиенте эффект запускает **только локальный владелец**, хост исполняет за остальных.
+These are implementations of **magicks** and item special abilities: a shared base class, creation by string name
+(name, animation (default `cast_self`), effect, element list). `Execute` variants: from the caster, from the caster with elements,
+at a point. For the network there is a `GetNetworkMessage` / `NetworkMessage` pair via `NetworkSpellCast`, plus `NetworkConditionsMet`:
+on the client the effect is started **only by the local owner**, the host executes for the others.
 
-Грубая группировка по названиям (детали — в документе по заклинаниям):
+Rough grouping by name (details are in the spells document):
 
-| Группа | Типы |
+| Group | Types |
 |---|---|
-| Атакующие (стихийные) | Arcanebolt, Firebolt, Thunderbolt, Thunderstorm, MeteorShower, Starfall, Blizzard, Rain, Conflagration, Napalm, ChillyBlast, Zap, Doom_Zap, VladZap, JudgementSpray, PoisonSpray, OtherworldlyDischarge, HomingCharge, Grenade, HolyGrenade, Fireflask, ArrowRain, EarthQuake, FloorStomp, Tornado (+TornadoEntity), Vortex (+VortexEntity), Wave (+WaveEntity), Amalgameddon, CTD, NorthPole, StarGaze, WardedExpulsion, AlucartDeathExplosion |
-| Пассивный урон / модификаторы | LightningDamageAura, RadioactiveDamage, InflictBleedDamage, InflictPoisonDamage, KnockDownChance, BreakBarriers |
-| Призыв | SummonDeath, SummonElemental, SummonFlamer, SummonPhoenix, SummonSpirit, SummonUndead, SummonZombie, SummonBug, SummonCross, SpawnSlime (+Overkill), RandomMine, EtherealClone |
-| Контроль | Charm, CharmMetal, RandomCharm, Confuse, ConfuseWho, SelfConfuse, Fear, FearLight, Ensnare, Polymorph, MutateBeastman, TimeWarp, TimeWarpStaff, Nullify, IceCacoon, Grease / GreaseLump / GreaseSplash / GreaseTrail (GreaseField), TractorPull, TractorPush, StopCharge, Shrink, Grow, Levitate |
-| Поддержка | Haste, CoffeeBoost, EpicBuff, Invisibility, Etherealize, Corporealize, DamageImmunity, DeflectionAura, FireImmunityAura, LoveAura, NonTimeSensitiveShield, StaffShield, Regenerate, HealFriendlies, HealingRain, Revive, DrainLife, DrinkBlood, Potion / PotionLeft / PotionRight, PerformanceEnchantment, ProppMagick, SmokeBomb, Votal |
-| Перемещение | Teleport, RandomTeleport, RandomTeleportOther, Portal (PortalEntity), Zoom, RapidStrike, SpecialAnimation |
+| Offensive (elemental) | Arcanebolt, Firebolt, Thunderbolt, Thunderstorm, MeteorShower, Starfall, Blizzard, Rain, Conflagration, Napalm, ChillyBlast, Zap, Doom_Zap, VladZap, JudgementSpray, PoisonSpray, OtherworldlyDischarge, HomingCharge, Grenade, HolyGrenade, Fireflask, ArrowRain, EarthQuake, FloorStomp, Tornado (+TornadoEntity), Vortex (+VortexEntity), Wave (+WaveEntity), Amalgameddon, CTD, NorthPole, StarGaze, WardedExpulsion, AlucartDeathExplosion |
+| Passive damage / modifiers | LightningDamageAura, RadioactiveDamage, InflictBleedDamage, InflictPoisonDamage, KnockDownChance, BreakBarriers |
+| Summoning | SummonDeath, SummonElemental, SummonFlamer, SummonPhoenix, SummonSpirit, SummonUndead, SummonZombie, SummonBug, SummonCross, SpawnSlime (+Overkill), RandomMine, EtherealClone |
+| Control | Charm, CharmMetal, RandomCharm, Confuse, ConfuseWho, SelfConfuse, Fear, FearLight, Ensnare, Polymorph, MutateBeastman, TimeWarp, TimeWarpStaff, Nullify, IceCacoon, Grease / GreaseLump / GreaseSplash / GreaseTrail (GreaseField), TractorPull, TractorPush, StopCharge, Shrink, Grow, Levitate |
+| Support | Haste, CoffeeBoost, EpicBuff, Invisibility, Etherealize, Corporealize, DamageImmunity, DeflectionAura, FireImmunityAura, LoveAura, NonTimeSensitiveShield, StaffShield, Regenerate, HealFriendlies, HealingRain, Revive, DrainLife, DrinkBlood, Potion / PotionLeft / PotionRight, PerformanceEnchantment, ProppMagick, SmokeBomb, Votal |
+| Movement | Teleport, RandomTeleport, RandomTeleportOther, Portal (PortalEntity), Zoom, RapidStrike, SpecialAnimation |
 
 ---
 
-## 10. Боссы
+## 10. Bosses
 
-- `IBoss` — **не** `Entity`: у босса несколько частей (`iPartIndex`) со своими HP и статусами (`BossDamageZone`, `BossCollisionZone`,
-  `BossSpellCasterZone`, `BossStatusEffected`). Методы: `UpdateBoss(dt, fightStarted)`, `Damage(part, …)`, `ScriptMessage(BossMessages)`,
-  сетевые `NetworkInitialize` / `NetworkUpdate`.
-- `IBossState<T>` — машины состояний каждого босса (`OnEnter` / `OnUpdate` / `OnExit`), обычно enum + синглтоны.
-- `BossFight` — синглтон боя: титры (`SetTitles`), freeze-time, полоска HP, старт и сброс, пересылка скриптовых сообщений,
-  обёртка сетевых сообщений (`BossInitialize`, `BossUpdate` с полезной нагрузкой конкретного босса, reliable или нет).
-- `BossMessages` из скриптов: OrcBipedal, GunterFight, KingTalk1/2, FafnirFight, VladMortal, CloneDone, GrimnirHurt, FutureVladDone,
+- `IBoss` is **not** an `Entity`: a boss has several parts (`iPartIndex`) with their own HP and statuses (`BossDamageZone`, `BossCollisionZone`,
+  `BossSpellCasterZone`, `BossStatusEffected`). Methods: `UpdateBoss(dt, fightStarted)`, `Damage(part, …)`, `ScriptMessage(BossMessages)`,
+  network `NetworkInitialize` / `NetworkUpdate`.
+- `IBossState<T>`: the state machines of each boss (`OnEnter` / `OnUpdate` / `OnExit`), usually an enum + singletons.
+- `BossFight`: the fight singleton: titles (`SetTitles`), freeze-time, HP bar, start and reset, forwarding of script messages,
+  wrapping of network messages (`BossInitialize`, `BossUpdate` with a boss-specific payload, reliable or not).
+- `BossMessages` from scripts: OrcBipedal, GunterFight, KingTalk1/2, FafnirFight, VladMortal, CloneDone, GrimnirHurt, FutureVladDone,
   KillGrimnir, Assatur_Cut, KillAssatur, StartFight.
-- `GenericBoss` (пул 16) — босс из обычного шаблона персонажа (`spawnGenericBoss`).
+- `GenericBoss` (pool 16): a boss built from a regular character template (`spawnGenericBoss`).
 
-| Босс (`BossEnum`) | Состояния |
+| Boss (`BossEnum`) | States |
 |---|---|
 | Jormungandr | Sleep, Intro, Underground, Leap, Risen, Spit, Bite, HitRisen, HitLeap, Dead |
 | Fafnir | Sleep, Intro, Idle, Decision, Tail, Wing, Confuse, Fireball, LanceHigh, LanceLow, Ceiling, EarthQuake, Defeated |
 | Machine (+Warlock/King) | Idle, Drill, Broken, KillKing, Intro, PreGunter, Warlock, Final, PostFinal, KingKilled |
 | Khan (`Warlord`) | Intro, Battle, Death |
-| Grimnir / Grimnir2 | Action/Fade-переходы; Idle, Spirit, Magick, Spell, Heal, Die |
+| Grimnir / Grimnir2 | Action/Fade transitions; Idle, Spirit, Magick, Spell, Heal, Die |
 | Cult | Intro, Battle, Revive, Spectator, Final, Dead |
-| Vlad / Vlad2 / Vlad3 | (через VladCharacter) |
+| Vlad / Vlad2 / Vlad3 | (via VladCharacter) |
 | Death | Idle, SitIntro, RiseIntro, Prep, Attack, Move, Hit, Defeat, DefeatPreSit, WarpTime, RaiseDead, MultiDeath, PreMultiDeath, Appear |
 | Assatur | Battle, MagickMissiles, Vortex, MeteorShower, Lightning, Life, Blizzard, Water, TimeWarp, ArcaneBlade, Shield, StaffBeam, Nullify, Barrier, Intro, Dead |
-| Parker (паук) | Intro, Battle, LeaveCave, EnterCave, Swipe, Bite, Rush, Backup, Stun, Web, Spawn, CallMinions, Defend, Rotate, MoveToBattle, MoveToCave, Cave, Dead |
+| Parker (spider) | Intro, Battle, LeaveCave, EnterCave, Swipe, Bite, Rush, Backup, Stun, Web, Spawn, CallMinions, Defend, Rotate, MoveToBattle, MoveToCave, Cave, Dead |
 | Cthulhu (+Tentacle) | Idle, Emerge, Submerge, Devour, DevourHit, Lightning, Mist, Call_of_Cthulhu, Lesser_Call_of_Cthulhu, Timewarp, Hypnotize, NewStage, OtherworldlyBolt, Death |
 | CountryDefense | (DLC) |
 
-Код боссов большой (до 4300 строк на босса) и полностью захардкожен. Это отдельный этап реимплементации: для каждого босса
-нужно описание поведения по наблюдению и по коду.
+Boss code is large (up to 4300 lines per boss) and fully hardcoded. This is a separate reimplementation stage: each boss
+needs a behavior description based on observation and on the code.
 
 ---
 
-## 11. Навигация (`Magicka.PathFinding`)
+## 11. Navigation (`Magicka.PathFinding`)
 
-### 11.1 Откуда навмеш
+### 11.1 Where the navmesh comes from
 
-- **Статический навмеш** хранится внутри `LevelModel` (`.xnb` геометрии сцены, `LevelModelReader`). Его готовит редактор и
-  сериализует целиком — в рантайме он не строится.
-- **Анимированные навмеши** — у `AnimatedLevelPart` (лифты, мосты, платформы), каждый со своей матрицей transform / invTransform.
-- Флаг сцены `ForceNavMesh` (атрибут XML сцены) и флаг спавна `ForceNavMesh` / `ForceCamera` заставляют ИИ не отходить от навмеша
-  и камеры.
+- The **static navmesh** is stored inside `LevelModel` (the scene geometry `.xnb`, `LevelModelReader`). It is prepared by the editor and
+  serialized whole; it is not built at runtime.
+- **Animated navmeshes** belong to `AnimatedLevelPart` (elevators, bridges, platforms), each with its own transform / invTransform matrix.
+- The scene flag `ForceNavMesh` (a scene XML attribute) and the spawn flags `ForceNavMesh` / `ForceCamera` force the AI not to leave the navmesh
+  and the camera.
 
-Формат блока навмеша: uint16 число вершин, затем вершины (vec3); uint16 число треугольников, затем для каждого:
-вершины A, B, C (uint16), соседи по рёбрам AB, BC, CA (uint16, 0xFFFF — нет соседа), стоимости переходов CostAB, CostBC, CostCA (float),
+Navmesh block format: uint16 vertex count, then vertices (vec3); uint16 triangle count, then for each:
+vertices A, B, C (uint16), neighbors across edges AB, BC, CA (uint16, 0xFFFF = no neighbor), transition costs CostAB, CostBC, CostCA (float),
 `MovementProperties` (byte).
 
-Индексы uint16 → не больше 65535 треугольников на меш. Треугольник с `Dynamic` — граничный: он может стыковаться с
-анимированными мешами.
+uint16 indices → at most 65535 triangles per mesh. A triangle with `Dynamic` is a boundary triangle: it can connect to
+animated meshes.
 
-### 11.2 Поиск ближайшей точки
+### 11.2 Nearest point search
 
-Октодерево по треугольникам (`NavMeshOctree`). Обход с отсечением узлов по расстоянию до AABB и фильтром по свойствам:
-треугольник проходим, если его свойства `Default` **или** пересекаются с возможностями персонажа. Анимированные меши проверяются
-в своей локальной системе, результат переводится в мир.
+An octree over triangles (`NavMeshOctree`). Traversal culls nodes by distance to the AABB and filters by properties:
+a triangle is walkable if its properties are `Default` **or** intersect with the character's capabilities. Animated meshes are checked
+in their local space, and the result is transformed to world space.
 
 ### 11.3 A*
 
-- Узел = треугольник, ключ = (меш << 16 | треугольник); меш 0xFFFF = статический.
-- Открытый список — бинарная куча (`TriangleHeap`, по `TotalCost`), закрытый — словарь, плюс словарь лучших стоимостей.
-- Старт и финиш — ближайшие к позициям треугольники.
-- Возможности персонажа всегда дополняются `Dynamic` и `Water`. Водный треугольник проходим, только если под ним реально есть
-  жидкость (луч вниз по жидкостям уровня, лёд игнорируется) — так учитывается замерзание и высыхание воды.
-- Стоимость шага: для первого шага — расстояние от стартовой точки до середины ребра; дальше — заранее посчитанная стоимость
-  «ребро входа → ребро выхода» из данных (`GetCostFrom`); переход между мешами стоит 0.5. На финишном треугольнике добавляется
-  расстояние до финишной точки.
-- Эвристика: **|dx| + 1.75·|dz|** (анизотропная, не admissible — путь не гарантированно оптимален).
-- Динамические соседи (статический ↔ анимированный ↔ анимированный) пересчитываются **при каждом поиске**: треугольники с
-  `Dynamic`, расстояние между треугольниками ≤ 0.25 м (квадрат 0.0625), AABB с запасом 0.25. Стоимость = расстояние между центрами.
-- Путь не найден → путь строится до узла с минимальной `TotalCost` (частичный путь «как можно ближе»).
+- Node = triangle, key = (mesh << 16 | triangle); mesh 0xFFFF = static.
+- The open list is a binary heap (`TriangleHeap`, by `TotalCost`), the closed list is a dictionary, plus a dictionary of best costs.
+- Start and goal are the triangles nearest to the positions.
+- Character capabilities are always extended with `Dynamic` and `Water`. A water triangle is walkable only if there is actually
+  liquid under it (a ray down through the level's liquids, ice is ignored); this accounts for water freezing and drying up.
+- Step cost: for the first step, the distance from the start point to the edge midpoint; after that, the precomputed cost
+  "entry edge → exit edge" from the data (`GetCostFrom`); a transition between meshes costs 0.5. On the goal triangle the
+  distance to the goal point is added.
+- Heuristic: **|dx| + 1.75·|dz|** (anisotropic, not admissible; the path is not guaranteed to be optimal).
+- Dynamic neighbors (static ↔ animated ↔ animated) are recomputed **on every search**: triangles with
+  `Dynamic`, distance between triangles ≤ 0.25 m (squared 0.0625), AABB with a 0.25 margin. Cost = distance between centers.
+- Path not found → the path is built to the node with the minimal `TotalCost` (a partial path "as close as possible").
 
-### 11.4 Сглаживание
+### 11.4 Smoothing
 
-`StraightenPath` — алгоритм «funnel» (string pulling) по порталам (рёбрам) между треугольниками. Между мешами порталом служит
-центр треугольника. На выходе — список `PathNode(Position, Properties)`; свойство узла используется в `AIStateMove`
-(Jump → прыжок, Dynamic → перепланирование каждые 0.333 с вместо 1 с).
+`StraightenPath` is a "funnel" algorithm (string pulling) over portals (edges) between triangles. Between meshes, the triangle
+center serves as the portal. The output is a list of `PathNode(Position, Properties)`; the node property is used in `AIStateMove`
+(Jump → jump, Dynamic → replanning every 0.333 s instead of 1 s).
 
 ---
 
-## 12. Сеть (`Magicka.Network`) — для проектирования своего протокола
+## 12. Network (`Magicka.Network`): for designing our own protocol
 
-### 12.1 Архитектура
+### 12.1 Architecture
 
-- Транспорт: **Steam P2P** (`SteamGameServerNetworking` / `SteamNetworking.SendP2PPacket`), режимы Reliable,
-  ReliableWithBuffering (по умолчанию), UnreliableNoDelay. Обнаружение — лобби и game server Steam, NAT-traversal средствами Steam.
-  Для OpenMagicka всё это заменяется: свой UDP + надёжный канал (например, ENet / LiteNetLib / Steamworks.NET как опция).
-- Роли (`NetworkState`): Offline, Server (хост — это тоже игрок), Client, HotJoinClient. До **4 игроков** (хост открыт, пока клиентов ≤ 3).
-- Топология **гибридная**:
-  - надёжные игровые сообщения идут по **звезде** через хост (хост ретранслирует, например, `GamerJoin` и спавн игрока остальным);
-  - после `ClientConnected` клиенты открывают **прямые P2P-соединения друг с другом**, и ненадёжные снапшоты своего аватара
-    рассылаются **всем соединениям** (mesh).
-- Пакет: 1 байт `PacketType`, затем тело. Бит 0x80 = «запрос» (клиент → хост: Ping, Connect, Authenticate, JoinSession,
-  AvatarRequest, Damage, SpawnShield/Barrier/Mine/Wave-запросы…). Unreliable-сообщения **батчатся** в один датаграм до ~1100 байт.
-  Буфер соединения 4400 байт.
-- Подключение: Connect → ConnectReply (ID сервера, VAC, имя) → Authenticate (версия игры должна совпасть, Steam-тикет) → лобби
-  → GamerJoin. Пинг раз в 1 с; 10 пропущенных пингов (> 5 с каждый) → разрыв.
-- **Sync points** (`EnterSync` / `LeaveSync`): блокирующий барьер при загрузке и смене сцены — хост ждёт, пока все клиенты дойдут
-  до точки, с таймаутом 60 с (кто не дошёл — kick). Пока игрок в состоянии Sync, «кешируемые» сообщения складываются в его
-  очередь и досылаются потом. Hot-join: `WorldSyncRequest` → хост сериализует мир (`WorldSync`: триггер-действия спавна,
-  нужные шаблоны).
+- Transport: **Steam P2P** (`SteamGameServerNetworking` / `SteamNetworking.SendP2PPacket`), modes Reliable,
+  ReliableWithBuffering (default), UnreliableNoDelay. Discovery: Steam lobbies and game servers, NAT traversal by Steam.
+  For OpenMagicka all of this is replaced: our own UDP + a reliable channel (for example, ENet / LiteNetLib / Steamworks.NET as an option).
+- Roles (`NetworkState`): Offline, Server (the host is also a player), Client, HotJoinClient. Up to **4 players** (the host is open while clients ≤ 3).
+- The topology is **hybrid**:
+  - reliable game messages go through a **star** via the host (the host relays, for example, `GamerJoin` and player spawn to the others);
+  - after `ClientConnected`, clients open **direct P2P connections to each other**, and unreliable snapshots of their own avatar
+    are sent **to all connections** (mesh).
+- Packet: 1 byte `PacketType`, then the body. Bit 0x80 = "request" (client → host: Ping, Connect, Authenticate, JoinSession,
+  AvatarRequest, Damage, SpawnShield/Barrier/Mine/Wave requests…). Unreliable messages are **batched** into one datagram of up to ~1100 bytes.
+  Connection buffer is 4400 bytes.
+- Connecting: Connect → ConnectReply (server ID, VAC, name) → Authenticate (the game version must match, Steam ticket) → lobby
+  → GamerJoin. Ping once per 1 s; 10 missed pings (> 5 s each) → disconnect.
+- **Sync points** (`EnterSync` / `LeaveSync`): a blocking barrier during loading and scene change: the host waits until all clients reach
+  the point, with a 60 s timeout (whoever does not arrive is kicked). While a player is in the Sync state, "cacheable" messages are put into their
+  queue and sent later. Hot-join: `WorldSyncRequest` → the host serializes the world (`WorldSync`: spawn trigger actions,
+  required templates).
 
-### 12.2 Авторитетность (кто что решает)
+### 12.2 Authority (who decides what)
 
-| Данные | Авторитет |
+| Data | Authority |
 |---|---|
-| ИИ, NPC, пропы, боссы, триггеры уровня, HP и статусы всех | хост |
-| **Позиция, направление и движение своего аватара** | **владелец-клиент** (client-authoritative). Хост, пересылая аватар удалённого игрока, вырезает Position / Direction / Movement / Ethereal |
-| HP, статусы и self-shield аватара | хост (клиент их не шлёт) |
-| **Попадания**, нанесённые своим аватаром | клиент-владелец: локально проигрывает knockback / notify / effects и шлёт `DamageRequest` (attacker, target, урон, позиция атаки относительно цели, timestamp). Хост применяет урон (Damage + Notify + Knockback) |
-| Ввод и действия аватара | событиями `CharacterAction` (см. ниже); у других участников аватар воспроизводит действие |
-| Спавн щитов, барьеров, мин, волн | клиент шлёт *Request*, хост создаёт сущность и рассылает `Spawn*` с хэндлом |
-| Магики | `NetworkSpellCast` |
+| AI, NPCs, props, bosses, level triggers, HP and statuses of everyone | host |
+| **Position, direction and movement of one's own avatar** | **owner client** (client-authoritative). When forwarding a remote player's avatar, the host strips Position / Direction / Movement / Ethereal |
+| Avatar HP, statuses and self-shield | host (the client does not send them) |
+| **Hits** dealt by one's own avatar | owner client: locally plays knockback / notify / effects and sends `DamageRequest` (attacker, target, damage, attack position relative to the target, timestamp). The host applies the damage (Damage + Notify + Knockback) |
+| Avatar input and actions | via `CharacterAction` events (see below); for other participants the avatar replays the action |
+| Spawning shields, barriers, mines, waves | the client sends a *Request*, the host creates the entity and broadcasts `Spawn*` with the handle |
+| Magicks | `NetworkSpellCast` |
 
-Это «доверие клиенту» по движению и попаданиям: для кооператива с друзьями это нормально, для публичного versus — уязвимо.
+This is "trust the client" for movement and hits: fine for co-op with friends, vulnerable for public versus.
 
-### 12.3 Снапшоты сущностей (`EntityUpdate`)
+### 12.3 Entity snapshots (`EntityUpdate`)
 
-- Частота: **30 Гц** (`NETWORK_UPDATE_PERIOD = 1/30`) на каждое соединение. Прогноз = половина RTT этого соединения:
-  хост **экстраполирует позицию вперёд** на `RTT/2` (с гравитацией, если персонаж в воздухе) перед отправкой.
-- Канал unreliable. Порядок контролируется 16-битным `UDPStamp` на (сущность, отправитель) с учётом переполнения:
-  устаревшие пакеты отбрасываются.
-- Состав определяется битовой маской `EntityFeatures` (ushort). Квантование:
+- Rate: **30 Hz** (`NETWORK_UPDATE_PERIOD = 1/30`) per connection. Prediction = half the RTT of that connection:
+  the host **extrapolates the position forward** by `RTT/2` (with gravity if the character is airborne) before sending.
+- Unreliable channel. Ordering is controlled by a 16-bit `UDPStamp` per (entity, sender) with wraparound handling:
+  stale packets are dropped.
+- The content is defined by the `EntityFeatures` bit mask (ushort). Quantization:
 
-| Поле | Кодирование |
+| Field | Encoding |
 |---|---|
 | Handle, UDPStamp, Features | uint16 ×3 |
 | Position | 3×float32 |
-| Direction (yaw) | uint16 (угол в [−π, π] → 0..65535) |
+| Direction (yaw) | uint16 (angle in [−π, π] → 0..65535) |
 | Velocity | 3×half |
-| Orientation | кватернион 4×half |
+| Orientation | quaternion 4×half |
 | HitPoints | float32 |
-| StatusEffects | int16-маска, затем по каждому активному статусу (их 9): magnitude half + DPS half |
+| StatusEffects | int16 mask, then for each active status (there are 9): magnitude half + DPS half |
 | GenericBool / Int / UShort / Float | bool / int32 / uint16 / half |
-| WanderAngle | byte (угол → 0..255) |
-| SelfShield | byte тип + half HP |
+| WanderAngle | byte (angle → 0..255) |
+| SelfShield | byte type + half HP |
 | Etherealized | bool |
 
-- Персонаж в покое (`RestingMovement` / `RestingHealth`) не шлёт неизменившиеся части.
-- На приёме — `Extrapolator` (сглаживание позиций по времени пакетов с оценкой задержки и интервала скользящим средним 1/8)
-  для удалённых аватаров.
+- A character at rest (`RestingMovement` / `RestingHealth`) does not send unchanged parts.
+- On receive: `Extrapolator` (position smoothing by packet times, with latency and interval estimated by a 1/8 moving average)
+  for remote avatars.
 
-### 12.4 Типы сообщений (`PacketType`)
+### 12.4 Message types (`PacketType`)
 
-| Группа | Сообщения |
+| Group | Messages |
 |---|---|
-| Соединение | Ping(0), Connect(1), Authenticate(2), ClientConnected(4), ConnectionClosed(5), GameFull(20), AvailabilityStateChanged(7) |
-| Лобби и меню | LobbyInfo(3), GameInfo(21), VersusOptions(22), PackOptions(23), ChatMessage(24), GamerJoin(25), GamerChanged(26), GamerLeave(27), GamerReady(28), LevelList(29), MenuSelection(31), GameChanged(32), PlayingStateChanged(6), JoinSessionRequest(8) |
-| Загрузка и синхронизация | CheckpointRequest(9), Checkpoint(65), SaveData(30), GameBeginSceneChange(33), GameEndLoad(34), GameEnd(35), GameRestart(36), EnterSync(63), LeaveSync(64), WorldSync(14), LevelFlagsSync(17), StatsManagerSync(15), PauseGame(16), ForceSyncPlayersMessage(66), RequestForcedPlayerStatusSync(67) |
-| Игроки | AvatarRequest(10), AvatarHandleInfo(11), CreatePlayer(12), PlayerGameState(13), SpawnPlayer(50), PlayerUpdate(45), AvatarCheat(19) |
-| Мир | EntityUpdate(44), GameUpdate(43), AnimatedLevelPartUpdate(47), EntityRemove(59), TriggerAction(37), DialogAdvance(42), RulesetUpdate(41), Threat(62) |
-| Бой | CharacterAction(46), Damage(58), CharacterDie(60), NetworkSpellCast(18), SpawnMissile(51), MissileEntity(61), SpawnShield(52), SpawnBarrier(53), SpawnWave(54), SpawnMine(55), SpawnVortex(56), SpawnPortal(57) |
-| Боссы | BossUpdate(48), BossInitialize(49) |
-| Статистика | ScoreAdded(38), StatisticsUpdate(39), LeaderboardEntry(40) |
+| Connection | Ping(0), Connect(1), Authenticate(2), ClientConnected(4), ConnectionClosed(5), GameFull(20), AvailabilityStateChanged(7) |
+| Lobby and menu | LobbyInfo(3), GameInfo(21), VersusOptions(22), PackOptions(23), ChatMessage(24), GamerJoin(25), GamerChanged(26), GamerLeave(27), GamerReady(28), LevelList(29), MenuSelection(31), GameChanged(32), PlayingStateChanged(6), JoinSessionRequest(8) |
+| Loading and synchronization | CheckpointRequest(9), Checkpoint(65), SaveData(30), GameBeginSceneChange(33), GameEndLoad(34), GameEnd(35), GameRestart(36), EnterSync(63), LeaveSync(64), WorldSync(14), LevelFlagsSync(17), StatsManagerSync(15), PauseGame(16), ForceSyncPlayersMessage(66), RequestForcedPlayerStatusSync(67) |
+| Players | AvatarRequest(10), AvatarHandleInfo(11), CreatePlayer(12), PlayerGameState(13), SpawnPlayer(50), PlayerUpdate(45), AvatarCheat(19) |
+| World | EntityUpdate(44), GameUpdate(43), AnimatedLevelPartUpdate(47), EntityRemove(59), TriggerAction(37), DialogAdvance(42), RulesetUpdate(41), Threat(62) |
+| Combat | CharacterAction(46), Damage(58), CharacterDie(60), NetworkSpellCast(18), SpawnMissile(51), MissileEntity(61), SpawnShield(52), SpawnBarrier(53), SpawnWave(54), SpawnMine(55), SpawnVortex(56), SpawnPortal(57) |
+| Bosses | BossUpdate(48), BossInitialize(49) |
+| Statistics | ScoreAdded(38), StatisticsUpdate(39), LeaderboardEntry(40) |
 
 `CharacterAction` = (ActionType, Handle, TargetHandle, Param0I / Param1F / Param2I…, TimeStamp). `ActionType`: ConjureElement, CastSpell
-(Param0 = CastType, 0 — отпустил), Attack, Block, PickUp, PickUpRequest, Interact, Boost, BreakFree, Grip, GripAttack, Entangle, Release,
+(Param0 = CastType, 0 = released), Attack, Block, PickUp, PickUpRequest, Interact, Boost, BreakFree, Grip, GripAttack, Entangle, Release,
 Dash, Jump, ItemSpecial, Magick, SelfShield, EventAnimation, EventComplete.
 
-`TriggerActionMessage` — универсальный «скрипт сделал X»: тип действия, хэндл, шаблон, сцена, аргумент, ID, позиция, направление,
-ориентация, время, цвет, spell, splash. Через него проходят спавны NPC из триггеров, смена сцен и т.п.
+`TriggerActionMessage` is a universal "the script did X": action type, handle, template, scene, argument, ID, position, direction,
+orientation, time, color, spell, splash. NPC spawns from triggers, scene changes, etc. go through it.
 
-### 12.5 Рекомендации для протокола OpenMagicka
+### 12.5 Recommendations for the OpenMagicka protocol
 
-- Сохранить модель «хост-авторитет + владение своим аватаром» (она проверена геймплеем и терпима к лагу при касте), но:
-  - явные NetId вместо порядковых хэндлов;
-  - попадания аватара проверять на хосте хотя бы грубо (дистанция и тип атаки);
-  - звезда для всего (без mesh): проще NAT и безопасность, +1 хоп для движения других игроков;
-  - 30 Гц снапшотов с дельта-маской по образцу `EntityFeatures` и квантованием (half, yaw16) — хорошая отправная точка;
-  - события ввода (`CharacterAction`) — reliable ordered канал, снапшоты — unreliable sequenced;
-  - детерминизм не требуется (оригинал не lockstep).
-
----
-
-## 13. Игроки и локальный кооп (`Gamers`, `Player`, `Controls`)
-
-- `Gamer` — «профиль»: тег, цвет (byte), аватар (`PlayableAvatar`: тип мага, миниатюра, портрет) и счётчики (kills, deaths, overkills,
-  healing done / received, damage done / received, suicides, team kills, versus wins / defeats / streak). Сериализуется в сети.
-  `NetworkGamer` — удалённый (SteamID клиента). `Gamer.INVALID_GAMER` — пустой.
-- `Player` — **слот** (всего 4, `Game.Instance.Players[0..3]`): ID, Gamer, Controller, слабая ссылка на Avatar, входная очередь
-  направлений (для комбо), колесо заклинаний (только для геймпада), разблокированные магики (битовая маска ulong), команда (versus),
-  состояние: None → InLobby → Loading → Sync → Playing.
-  Фракция аватара — `PLAYERn` (для friendly fire и versus).
-- **Назначение ввода:**
-  - Контроллеры: один `KeyboardMouseController` (он же контроллер меню), XInput-геймпады (до 4), DirectInput-геймпады и джойстики
-    (не-XInput, подхватываются в рантайме `FindNewGamePads`).
-  - Игрок «вступает», когда на устройстве нажата кнопка подтверждения в меню (`SetPlayerActive(sender)` из главного меню, выбора
-    сохранения, DLC или хоста): устройство занимает **первый свободный слот** (или свой прежний), берётся профиль последнего игрока
-    (если он свободен) или пустой Gamer. Связь двусторонняя: `Controller.Player` ↔ `Player.Controller`; при перепривязке старая
-    связь рвётся. На клиенте вступление — запрос хосту (`GamerJoinRequest`), слот выдаёт хост.
-  - `ControllerFunction`: Move_*, Menu_Select / Back, Spell_* (4 направления), Magick_Next / Prev, Attack, Special, Block, Interact,
-    Boost, Cast_Force, Cast_Area, Cast_Self, Cast_Magick, Pause, Inventory, Spell_Wheel. Есть блокировка ввода на игрока
-    (`LockPlayerInput`) и глобальная (`LimitInput`, например во время диалога).
-  - Геймпад: элемент задаётся **жестом из двух направлений** правым стиком (от первого направления ко второму), с подсказкой
-    колесом (`SpellWheel`).
-- Выход игрока (`Leave`): аватар убивается, связи с контроллером рвутся, в сети — `GamerLeave`.
+- Keep the "host authority + ownership of one's own avatar" model (it is proven by gameplay and tolerant to lag when casting), but:
+  - explicit NetIds instead of sequential handles;
+  - validate avatar hits on the host, at least roughly (distance and attack type);
+  - a star for everything (no mesh): simpler NAT and security, +1 hop for other players' movement;
+  - 30 Hz snapshots with a delta mask modeled on `EntityFeatures` and quantization (half, yaw16) are a good starting point;
+  - input events (`CharacterAction`) on a reliable ordered channel, snapshots on unreliable sequenced;
+  - determinism is not required (the original is not lockstep).
 
 ---
 
-## 14. Что из этого понадобится OpenMagicka (кратко)
+## 13. Players and local co-op (`Gamers`, `Player`, `Controls`)
 
-1. Reader'ы: `CharacterTemplate`, `Item`, `PhysicsEntityTemplate`, `Ability` (15 типов), `AnimationAction` (28 типов),
-   `ConditionCollection`, `BuffStorage` / `AuraStorage`, `SpecialAbility` (заголовок), навмеш в `LevelModel` / `AnimatedLevelPart`.
-2. Парсер и интерпретатор fuzzy-выражений (§7.5) плюс тест: прогнать все выражения из `Data/Characters` и убедиться, что они разбираются.
-3. FSM персонажа (27 состояний) с тем же приоритетом проверок — от него зависит «ощущение» игры.
-4. AI-стек (6 состояний), выбор цели и способности, избегание, стая, квант 20 агентов на кадр.
-5. Навмеш: октодерево, A* с теми же стоимостями и эвристикой, funnel, динамические стыковки.
-6. Свой сетевой протокол по мотивам §12.
+- `Gamer` is a "profile": tag, color (byte), avatar (`PlayableAvatar`: wizard type, thumbnail, portrait) and counters (kills, deaths, overkills,
+  healing done / received, damage done / received, suicides, team kills, versus wins / defeats / streak). Serialized over the network.
+  `NetworkGamer` is a remote one (the client's SteamID). `Gamer.INVALID_GAMER` is the empty one.
+- `Player` is a **slot** (4 in total, `Game.Instance.Players[0..3]`): ID, Gamer, Controller, a weak reference to Avatar, an input queue
+  of directions (for combos), the spell wheel (gamepad only), unlocked magicks (ulong bit mask), team (versus),
+  state: None → InLobby → Loading → Sync → Playing.
+  The avatar faction is `PLAYERn` (for friendly fire and versus).
+- **Input assignment:**
+  - Controllers: one `KeyboardMouseController` (which is also the menu controller), XInput gamepads (up to 4), DirectInput gamepads and joysticks
+    (non-XInput, picked up at runtime by `FindNewGamePads`).
+  - A player "joins" when the confirm button is pressed on a device in a menu (`SetPlayerActive(sender)` from the main menu, save
+    selection, DLC or host): the device takes the **first free slot** (or its previous one), and takes the last player's profile
+    (if it is free) or an empty Gamer. The link is two-way: `Controller.Player` ↔ `Player.Controller`; on rebinding, the old
+    link is broken. On the client, joining is a request to the host (`GamerJoinRequest`), and the host assigns the slot.
+  - `ControllerFunction`: Move_*, Menu_Select / Back, Spell_* (4 directions), Magick_Next / Prev, Attack, Special, Block, Interact,
+    Boost, Cast_Force, Cast_Area, Cast_Self, Cast_Magick, Pause, Inventory, Spell_Wheel. There is a per-player input lock
+    (`LockPlayerInput`) and a global one (`LimitInput`, for example during a dialog).
+  - Gamepad: an element is given by a **two-direction gesture** with the right stick (from the first direction to the second), with a hint
+    wheel (`SpellWheel`).
+- Player leaving (`Leave`): the avatar is killed, links with the controller are broken, on the network `GamerLeave`.
 
 ---
 
-## 15. Открытые вопросы
+## 14. What OpenMagicka will need from this (summary)
 
-1. **Ассоциативность fuzzy-выражений.** В оригинале при равных приоритетах результат зависит от нестабильной сортировки .NET 3.5.
-   Нужно эмпирически воспроизвести поведение `List<T>.Sort` (introsort CLR 2.0) на реальных строках или убедиться, что в данных нет
-   цепочек `a - b - c` и `a / b / c`, где это важно (в данных такие есть: `x*0.75 - y*0.5 - Danger(...)`).
-2. Точные формулы `Damage.ApplyResistances` и `StatusEffect` (DPS, длительности, взаимодействия Wet / Cold / Frozen / Burning / Steamed) —
-   задача документа по заклинаниям. Здесь описан только порядок вызовов в персонаже.
-3. Полный двоичный макет `Attachment`, `AnimationClipAction` вложенных типов (`Grip` с костями, `PlayEffect`), `EventCollection` и
-   каждого `EventType` — сделать вместе с reader'ами и проверить на всех 338 и 454 файлах.
-4. Как `SpellManager.HandleCombo` толкует входную очередь направлений (пары, отмена) и как работает колесо на геймпаде — проверить
-   в UI и Controls.
-5. Где именно рассчитываются `IsHit` → анимация `hit` для аватара и есть ли i-frames (у `Character` есть `SetImmortalTime`;
-   неясно, кто его вызывает).
-6. Источник `CannotDieWithoutExplicitKill` и `Undying`-логики в скриптах (флаги спавна?).
-7. Поведение `Flee` (`Order.Flee`): отдельного AI-состояния нет — вероятно, не используется или сводится к избеганию. Проверить данные уровней.
-8. Боссы: код на ~30 тыс. строк. Нужно решить, реимплементировать ли каждого вручную (вероятно, да), и собрать видео-референсы поведения.
-9. Сеть: удалённые клиенты получают позицию **чужого** удалённого аватара (хост её вырезает), судя по всему, только из прямых
-   P2P-снапшотов владельца (mesh). Косвенно это подтверждают две вещи: клиент принимает `EntityUpdate` от любого отправителя, а
-   `UDPStamp` хранится отдельно для каждого отправителя. Осталось проверить поведение, когда прямое соединение клиент–клиент не
-   установилось (NAT): есть ли откат на ретрансляцию через хост.
-10. Hot-join: полный состав `WorldSync` (какие сущности сериализуются, восстанавливаются ли AI-состояния и таблицы обид).
-11. Точная семантика `HitTolerance` (int) против дробного урона и `GripDamageAccumulation`; `ZapModifier`, `MaxPanic` — где применяются.
-12. Совпадают ли индексы `Animations` (231) между версиями игры и DLC — от этого зависит чтение шаблонов DLC.
+1. Readers: `CharacterTemplate`, `Item`, `PhysicsEntityTemplate`, `Ability` (15 types), `AnimationAction` (28 types),
+   `ConditionCollection`, `BuffStorage` / `AuraStorage`, `SpecialAbility` (header), navmesh in `LevelModel` / `AnimatedLevelPart`.
+2. A parser and interpreter of fuzzy expressions (§7.5) plus a test: run all expressions from `Data/Characters` and make sure they parse.
+3. The character FSM (27 states) with the same check priority; the "feel" of the game depends on it.
+4. The AI stack (6 states), target and ability selection, avoidance, flocking, a slice of 20 agents per frame.
+5. Navmesh: octree, A* with the same costs and heuristic, funnel, dynamic connections.
+6. Our own network protocol inspired by §12.
+
+---
+
+## 15. Open questions
+
+1. **Associativity of fuzzy expressions.** In the original, with equal priorities the result depends on the unstable sort of .NET 3.5.
+   Either reproduce the behavior of `List<T>.Sort` (CLR 2.0 introsort) empirically on real strings, or make sure the data has no
+   `a - b - c` and `a / b / c` chains where it matters (the data does have them: `x*0.75 - y*0.5 - Danger(...)`).
+2. Exact formulas of `Damage.ApplyResistances` and `StatusEffect` (DPS, durations, Wet / Cold / Frozen / Burning / Steamed interactions):
+   a task for the spells document. Only the call order inside the character is described here.
+3. Full binary layout of `Attachment`, the nested types of `AnimationClipAction` (`Grip` with bones, `PlayEffect`), `EventCollection` and
+   each `EventType`: do it together with the readers and verify on all 338 and 454 files.
+4. How `SpellManager.HandleCombo` interprets the direction input queue (pairs, cancellation) and how the gamepad wheel works: check
+   in UI and Controls.
+5. Where exactly `IsHit` → the `hit` animation is computed for the avatar, and whether there are i-frames (`Character` has `SetImmortalTime`;
+   it is unclear who calls it).
+6. The source of `CannotDieWithoutExplicitKill` and the `Undying` logic in scripts (spawn flags?).
+7. Behavior of `Flee` (`Order.Flee`): there is no separate AI state; probably unused or reduced to avoidance. Check the level data.
+8. Bosses: ~30k lines of code. Decide whether to reimplement each one by hand (probably yes), and collect video references of their behavior.
+9. Network: remote clients apparently get the position of **another** remote avatar (the host strips it) only from the owner's direct
+   P2P snapshots (mesh). Two things indirectly confirm this: the client accepts `EntityUpdate` from any sender, and
+   `UDPStamp` is stored separately per sender. Still to check: the behavior when a direct client–client connection was not
+   established (NAT): is there a fallback to relaying via the host.
+10. Hot-join: the full content of `WorldSync` (which entities are serialized, whether AI states and grudge tables are restored).
+11. Exact semantics of `HitTolerance` (int) versus fractional damage and `GripDamageAccumulation`; `ZapModifier`, `MaxPanic`: where they are applied.
+12. Whether the `Animations` indices (231) match between game versions and DLC; reading DLC templates depends on it.

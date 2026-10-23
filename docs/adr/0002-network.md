@@ -1,65 +1,65 @@
-# ADR-0002. Сетевая игра: свой протокол, хост-авторитет, абстракция транспорта
+# ADR-0002. Network play: our own protocol, host authority, transport abstraction
 
-- **Статус:** принято
-- **Дата:** 2026-10-23
-- **Задачи:** OM-58, OM-59, OM-30
+- **Status:** accepted
+- **Date:** 2026-10-23
+- **Tasks:** OM-58, OM-59, OM-30
 
-## Контекст
+## Context
 
-Сетевой кооператив (до 4 игроков) и versus нужно сохранить. Как устроен оригинал
-([Сущности, AI и сеть](../engine/ENTITIES_AI.md) §12):
+Network co-op (up to 4 players) and versus must be kept. How the original works
+([Entities, AI and network](../engine/ENTITIES_AI.md) §12):
 
-- транспорт Steam P2P (старый API), до 4 игроков;
-- надёжные сообщения идут звездой через хост, снапшоты своего аватара клиенты шлют напрямую
-  друг другу (mesh), 30 Гц, экстраполяция на RTT/2;
-- хост считает AI, спавн, триггеры, урон по NPC; движение своего аватара и его попадания решает
-  клиент (`DamageRequest`);
-- 68 типов пакетов, 20 `ActionType`;
-- сетевой `Handle` сущности — порядковый номер в глобальном списке. Он совпадает на машинах
-  только потому, что пулы создаются в одинаковом порядке;
-- переменный шаг логики, номеров тиков нет.
+- Steam P2P transport (old API), up to 4 players;
+- reliable messages go through the host as a star; clients send snapshots of their own avatar
+  directly to each other (mesh), 30 Hz, extrapolated by RTT/2;
+- the host runs AI, spawning, triggers and damage to NPCs; the client decides its own avatar's
+  movement and hits (`DamageRequest`);
+- 68 packet types, 20 `ActionType`s;
+- the network `Handle` of an entity is its index in a global list. It matches across machines
+  only because the pools are created in the same order;
+- variable logic time step, no tick numbers.
 
-## Решение
+## Decision
 
-### Совместимость
+### Compatibility
 
-**Совместимости с оригинальным клиентом нет.** Играют только клиенты OpenMagicka между собой.
-Совместимость потребовала бы повторить порядковые ID, старый Steam P2P и баги синхронизации.
+**No compatibility with the original client.** Only OpenMagicka clients play with each other.
+Compatibility would mean repeating the index-based IDs, the old Steam P2P and the sync bugs.
 
-### Модель
+### Model
 
-1. **Хост-авторитет для общего мира:** AI, спавн, триггеры и скрипты уровней, урон по NPC,
-   физобъекты, состояние уровня.
-2. **Клиент решает за своего мага:** движение без задержки и очередь элементов. Попадания
-   отправляются хосту запросом, хост применяет урон и рассылает результат.
-3. **Фиксированный такт** 60 Гц ([ADR-0001](0001-stack.md)), номер тика во всех пакетах.
-4. **Снапшоты** 30 Гц с интерполяцией (буфер ~100 мс), квантование полей по образцу
-   `EntityFeatures` оригинала. Чужих магов показываем с интерполяцией, не экстраполяцией.
-5. **Два канала:** ненадёжный (снапшоты) и надёжный упорядоченный (события, спавн, триггеры,
-   диалоги, смена сцен).
-6. **Явные сетевые ID** (`NetId`) выдаёт хост, вместо порядковых номеров в пулах.
-7. **Подключение посреди игры:** хост отправляет полный снимок мира (сущности, счётчики и
-   таймеры триггеров, состояние сцены), затем обычные снапшоты.
-8. **Топология — звезда через хост** для всего трафика, включая снапшоты аватаров: проще с NAT
-   и античитом, задержка +1 хоп приемлема для кооператива.
-9. **Версия протокола и хэш контента** в рукопожатии: подключаться можно только с той же
-   версией OpenMagicka и теми же ассетами.
+1. **Host authority over the shared world:** AI, spawning, triggers and level scripts, damage
+   to NPCs, physics objects, level state.
+2. **The client decides for its own wizard:** movement without delay and the element queue.
+   Hits are sent to the host as requests; the host applies the damage and broadcasts the result.
+3. **Fixed tick** of 60 Hz ([ADR-0001](0001-stack.md)), tick number in every packet.
+4. **Snapshots** at 30 Hz with interpolation (~100 ms buffer), fields quantized after the
+   original's `EntityFeatures`. Other wizards are shown interpolated, not extrapolated.
+5. **Two channels:** unreliable (snapshots) and reliable ordered (events, spawns, triggers,
+   dialogs, scene changes).
+6. **Explicit network IDs** (`NetId`) assigned by the host instead of pool indices.
+7. **Joining a game in progress:** the host sends a full world snapshot (entities, trigger
+   counters and timers, scene state), then regular snapshots.
+8. **Star topology through the host** for all traffic, including avatar snapshots: simpler with
+   NAT and against cheating; the extra hop is acceptable for co-op.
+9. **Protocol version and content hash** in the handshake: only the same OpenMagicka version
+   with the same assets can connect.
 
-### Транспорт
+### Transport
 
-Интерфейс `INetTransport` (подключение, два канала, RTT, отключение) с реализациями:
+An `INetTransport` interface (connect, two channels, RTT, disconnect) with implementations:
 
-| Реализация | Назначение |
+| Implementation | Purpose |
 |---|---|
-| **UDP: LiteNetLib или GameNetworkingSockets** (выбрать в OM-58) | основной: LAN, подключение по IP, P2P с пробивкой NAT |
-| **Свой сервер лобби и ретрансляции** (открытый, может поднять любой) | поиск игр, NAT punch, relay, если P2P не установился |
-| **Steamworks** (опционально, позже) | лобби и приглашения друзей. Работа под AppID 42910 оригинала — юридически серая зона; решить отдельно |
-| **Loopback** | локальная игра и тесты: одиночная игра идёт через тот же код, что и сетевая |
+| **UDP: LiteNetLib or GameNetworkingSockets** (to be chosen in OM-58) | main: LAN, connect by IP, P2P with NAT punch-through |
+| **Our own lobby and relay server** (open source, anyone can host it) | finding games, NAT punch, relay when P2P fails |
+| **Steamworks** (optional, later) | lobbies and friend invites. Running under the original's AppID 42910 is a legal grey area; to be decided separately |
+| **Loopback** | local play and tests: single player goes through the same code as network play |
 
-## Последствия
+## Consequences
 
-- Сетевой код пишется с нуля по нашей модели; документ оригинала — справочник, не спецификация.
-- `EntityManager` с первого дня работает с `NetId` и фиксированным тактом (OM-30, OM-19).
-- Одиночная игра — это хост с loopback-транспортом, так сетевой код постоянно тестируется.
-- Нужен небольшой серверный проект (лобби + relay) в составе репозитория.
-- Вопрос Steamworks остаётся открытым и не блокирует M6.
+- The network code is written from scratch for our model; the original is a reference, not a spec.
+- `EntityManager` works with `NetId` and the fixed tick from day one (OM-30, OM-19).
+- Single player is a host with a loopback transport, so the network code is exercised all the time.
+- A small server project (lobby + relay) is part of the repository.
+- Steamworks remains an open question and does not block M6.

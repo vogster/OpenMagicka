@@ -1,63 +1,64 @@
-# ADR-0001. Технологический стек: C# / .NET 10 LTS + FNA
+# ADR-0001. Technology stack: C# / .NET 10 LTS + FNA
 
-- **Статус:** принято
-- **Дата:** 2026-10-23
-- **Задачи:** OM-2, OM-19, OM-20
+- **Status:** accepted
+- **Date:** 2026-10-23
+- **Tasks:** OM-2, OM-19, OM-20
 
-## Контекст
+## Context
 
-Оригинальная Magicka (2011) написана на C# / XNA 3.1 под .NET Framework 3.5 и плохо работает на
-современных ПК. Причины, найденные при анализе ([Архитектура движка](../engine/ARCHITECTURE.md)):
+The original Magicka (2011) is written in C# / XNA 3.1 on .NET Framework 3.5 and runs poorly on
+modern PCs. Causes found during the analysis ([Engine architecture](../engine/ARCHITECTURE.md)):
 
-- только 32 бита, DirectX 9, XNA 3.1;
-- потоки логики и загрузки обращаются к GPU под `lock(GraphicsDevice)`: фризы и падения;
-- переменный шаг логики с ограничением dt ≤ 0.05 с: поведение зависит от FPS;
-- геймпады через XInput и DirectInput;
-- только Windows, пути к файлам в коде и на диске расходятся в регистре;
-- онлайн завязан на мёртвые сервисы (Paradox, GameSparks) и старый Steam P2P.
+- 32-bit only, DirectX 9, XNA 3.1;
+- the logic and loader threads touch the GPU under `lock(GraphicsDevice)`: stutters and crashes;
+- variable logic time step clamped to dt ≤ 0.05 s: behaviour depends on the frame rate;
+- gamepads through XInput and DirectInput;
+- Windows only; file paths in code and on disk disagree on letter case;
+- online play depends on dead services (Paradox, GameSparks) and the old Steam P2P.
 
-OpenMagicka должна загружать ассеты из купленной копии без конвертации и работать на Windows,
-Linux, macOS и Steam Deck.
+OpenMagicka must load the assets of a purchased copy without conversion and run on Windows,
+Linux, macOS and Steam Deck.
 
-## Решение
+## Decision
 
-**C# на .NET 10 LTS + FNA** (FNA3D, FAudio, SDL3).
+**C# on .NET 10 LTS + FNA** (FNA3D, FAudio, SDL3).
 
-| Слой | Выбор |
+| Layer | Choice |
 |---|---|
-| Язык и рантайм | C#, .NET 10 LTS, 64 бита |
-| Фреймворк | FNA (открытая реимплементация XNA 4.0), сабмодулем |
-| Графика | FNA3D: бэкенд SDL GPU (Vulkan / D3D12 / Metal), запасной OpenGL |
-| Шейдеры | оригинальные fx_2_0 из `Content/Shaders` через MojoShader; свои HLSL — запасной план |
-| Звук | FAudio / FACT, за абстракцией `IAudioBackend` (риск XACT v45 и xWMA, OM-18) |
-| Окно, ввод | SDL3: любые геймпады, hotplug, HiDPI, любые разрешения |
-| Физика | порт JigLibX при подтверждённой лицензии (OM-7), иначе BepuPhysics v2 |
-| Анимация | порт upstream XNAnimation (Ms-PL) |
+| Language and runtime | C#, .NET 10 LTS, 64-bit |
+| Framework | FNA (open-source reimplementation of XNA 4.0), as a submodule |
+| Graphics | FNA3D: SDL GPU backend (Vulkan / D3D12 / Metal), OpenGL as fallback |
+| Shaders | original fx_2_0 from `Content/Shaders` through MojoShader; our own HLSL as fallback |
+| Audio | FAudio / FACT behind an `IAudioBackend` abstraction (XACT v45 and xWMA risk, OM-18) |
+| Window, input | SDL3: any gamepad, hotplug, HiDPI, any resolution |
+| Physics | port of JigLibX once its license is confirmed (OM-7), otherwise BepuPhysics v2 |
+| Animation | port of upstream XNAnimation (Ms-PL) |
 
-Архитектурные правила, которые исправляют проблемы оригинала:
+Architecture rules that fix the problems of the original:
 
-1. **Фиксированный такт симуляции** (60 Гц), отрисовка с интерполяцией между тиками.
-   Поведение не зависит от частоты кадров (60, 144, 240 Гц), и тот же такт используется в сети
-   ([ADR-0002](0002-network.md)).
-2. **GPU трогает только поток рендера.** Логика собирает CPU-снапшот кадра в тройной буфер;
-   загрузчик декодирует данные, а GPU-ресурсы создаёт очередью в потоке рендера.
-3. **Файловая система без учёта регистра** поверх `Content` пользователя.
-4. **Без сервисов оригинала:** DRM, телеметрия, Paradox, GameSparks не реализуются.
+1. **Fixed simulation tick** (60 Hz), rendering interpolated between ticks.
+   Behaviour does not depend on the frame rate (60, 144, 240 Hz), and the same tick is used by
+   the network ([ADR-0002](0002-network.md)).
+2. **Only the render thread touches the GPU.** Logic builds a CPU snapshot of the frame in a
+   triple buffer; the loader decodes data and queues GPU resource creation on the render thread.
+3. **Case-insensitive file system** on top of the user's `Content`.
+4. **No services of the original:** DRM, telemetry, Paradox and GameSparks are not implemented.
 
-## Рассмотренные варианты
+## Options considered
 
-| Вариант | Почему нет |
+| Option | Why not |
 |---|---|
-| MonoGame | не исполняет DX9 effect-байткод: оригинальные шейдеры пришлось бы переписывать с нуля |
-| Godot / Unity | перенос всей архитектуры на чужой движок, свои форматы и шейдеры; поведение XNA теряется |
-| C++ с нуля | максимум работы ради производительности, которая игре 2011 года не нужна |
-| .NET 8 | поддержка заканчивается в ноябре 2026 |
+| MonoGame | does not run DX9 effect bytecode: the original shaders would have to be rewritten from scratch |
+| Godot / Unity | moving the whole architecture onto a foreign engine with its own formats and shaders; XNA behaviour is lost |
+| C++ from scratch | the most work, for performance a 2011 game does not need |
+| .NET 8 | support ends in November 2026 |
 
-## Последствия
+## Consequences
 
-- Код оригинала и наш близки по модели (XNA), поведение переносится почти один к одному.
-- Ассеты используются как есть, без конвертации.
-- FNA — это XNA 4.0, а ассеты XNA 3.1 (XNB v4): все reader'ы пишем сами (M1).
-- В FNA нет `EffectPool`: общие параметры (View, Projection, Time…) выставляем в каждый эффект.
-- `string.GetHashCode` в .NET рандомизирован: legacy-хэш строк реализуем сами (OM-6).
-- Нужна проверка двух рисков до основной работы: XACT на FAudio (OM-18) и fx_2_0 на FNA (OM-20).
+- The original's model and ours are close (XNA), so behaviour carries over almost one to one.
+- Assets are used as they are, without conversion.
+- FNA is XNA 4.0 while the assets are XNA 3.1 (XNB v4): we write all readers ourselves (M1).
+- FNA has no `EffectPool`: shared parameters (View, Projection, Time…) are set on every effect.
+- `string.GetHashCode` is randomized in .NET: we implement the legacy string hash ourselves (OM-6).
+- Two risks need checking before the main work: XACT on FAudio (OM-18) and fx_2_0 on FNA (OM-20).
+  Results: [Risk checks](../engine/RISK_CHECKS.md).

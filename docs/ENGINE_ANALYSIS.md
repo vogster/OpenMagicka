@@ -1,76 +1,76 @@
-# OpenMagicka — анализ оригинального движка Magicka
+# OpenMagicka — analysis of the original Magicka engine
 
-Источник: Steam-установка `D:\SteamLibrary\steamapps\common\Magicka` (AppID 42910),
-`Magicka.exe` версии **1.10.4.2** (SHA-256 `a896e05a…12ee7`, MVID `11bf844c-2882-4ec8-aed8-39169d72b637`).
+Source: the Steam installation of Magicka (AppID 42910),
+`Magicka.exe` version **1.10.4.2** (SHA-256 `a896e05a…12ee7`, MVID `11bf844c-2882-4ec8-aed8-39169d72b637`).
 
-> Правило проекта: **clean-room**. Код оригинала изучается только чтобы понять форматы
-> и поведение; декомпилированный код в репозиторий не копируется. Ассеты игры в репозиторий
-> не кладутся: пользователь указывает путь к своей купленной копии.
+> Project rule: **clean-room**. The original code is studied only to understand formats
+> and behaviour; decompiled code is never copied into the repository. Game assets are never
+> put into the repository: the user points OpenMagicka at their own purchased copy.
 
-## 1. Стек оригинала
+## 1. The original stack
 
-| Слой | Технология |
+| Layer | Technology |
 |---|---|
-| Рантайм | .NET Framework 3.5 (CLR 2.0), x86-only (`32-bit-required`) |
-| Фреймворк | **XNA Framework 3.1** (`Microsoft.Xna.Framework`, `.Game`) |
-| Рендер-движок | `PolygonHead.dll` — собственный движок Arrowhead: deferred shading, свет, частицы, пост-эффекты, BiTree-модели уровней, bitmap-шрифты |
-| Анимация | `XNAnimation.dll` 0.7 (open-source, скиннинг + AnimationClip) |
-| Физика | `JigLibX.dll` 0.0.2 (open-source порт JigLib), плюс свои детекторы коллизий в `Magicka.Physics` |
-| Звук | XACT (`.xgs` / `.xsb` / `.xwb`) |
-| Ввод | XNA GamePad + DirectInput (`Microsoft.DirectX.DirectInput`) + `XInputHelper.dll` |
-| Онлайн/сервисы | Steam (`SteamWrapper.dll`, `steam_api.dll`), Paradox (`PdxConnect`, `pops_api`), GameSparks — **для open-реализации не нужны** |
+| Runtime | .NET Framework 3.5 (CLR 2.0), x86 only (`32-bit-required`) |
+| Framework | **XNA Framework 3.1** (`Microsoft.Xna.Framework`, `.Game`) |
+| Render engine | `PolygonHead.dll` — Arrowhead's own engine: deferred shading, lights, particles, post effects, BiTree level models, bitmap fonts |
+| Animation | `XNAnimation.dll` 0.7 (open source, skinning + AnimationClip) |
+| Physics | `JigLibX.dll` 0.0.2 (open-source port of JigLib), plus custom collision detectors in `Magicka.Physics` |
+| Audio | XACT (`.xgs` / `.xsb` / `.xwb`) |
+| Input | XNA GamePad + DirectInput (`Microsoft.DirectX.DirectInput`) + `XInputHelper.dll` |
+| Online/services | Steam (`SteamWrapper.dll`, `steam_api.dll`), Paradox (`PdxConnect`, `pops_api`), GameSparks — **not needed for the open implementation** |
 
-P/Invoke минимален: `QueryPerformanceCounter/Frequency`, `GetCurrentThreadId`, `LoadCursorFromFile`, `TranslateMessage`, `MapVirtualKey`.
+P/Invoke use is minimal: `QueryPerformanceCounter/Frequency`, `GetCurrentThreadId`, `LoadCursorFromFile`, `TranslateMessage`, `MapVirtualKey`.
 
-## 2. Структура кода `Magicka.exe` (≈2054 типа, без обфускации)
+## 2. Code structure of `Magicka.exe` (≈2054 types, not obfuscated)
 
-Ключевые пространства имён:
+Key namespaces:
 
-- `Magicka` — `Game : Microsoft.Xna.Framework.Game`, `Program`, глобальные enum'ы (`Elements`, `StatusEffects`, `Factions`, `Animations`, `CollisionMaterials`…), `SharedContentManager`.
+- `Magicka` — `Game : Microsoft.Xna.Framework.Game`, `Program`, global enums (`Elements`, `StatusEffects`, `Factions`, `Animations`, `CollisionMaterials`…), `SharedContentManager`.
 - `Magicka.GameLogic.GameStates` — `GameStateManager`, `CompanyState` → `MenuState` → `PlayState`, `LoadingScreen`.
-- `Magicka.GameLogic.Spells` — ядро геймплея: `Spell`, `SpellManager`, `SpellTree`/`SpellNode`, `MagickTree`, `CastType`, `SpellType`, `StatusEffect`; эффекты: `ProjectileSpell`, `SpraySpell`, `LightningSpell`, `ShieldSpell`, `PushSpell`, `RailGunSpell`.
-- `Magicka.GameLogic.Entities` (+ `Abilities`, `SpecialAbilities` ×114, `Bosses` ×35, `Buffs`, `CharacterStates` ×27, `Items`, `AnimationActions` ×29) — персонажи, предметы, боссы, магики.
-- `Magicka.Levels` — `Level`, `GameScene`, `LevelModel`, `Liquid`/`Water`/`Lava`, `ForceField`, волны, рулсеты (`SurvivalRuleset`, `TimedObjectiveRuleset`).
-- `Magicka.Levels.Triggers` — `Actions` (113 типов) и `Conditions` (24 типа): скриптовая система уровней.
-- `Magicka.AI` — `Agent`, `AIManager`, `AgentStates`, `Arithmetics` (fuzzy-логика), `Messaging`.
+- `Magicka.GameLogic.Spells` — the gameplay core: `Spell`, `SpellManager`, `SpellTree`/`SpellNode`, `MagickTree`, `CastType`, `SpellType`, `StatusEffect`; effects: `ProjectileSpell`, `SpraySpell`, `LightningSpell`, `ShieldSpell`, `PushSpell`, `RailGunSpell`.
+- `Magicka.GameLogic.Entities` (+ `Abilities`, `SpecialAbilities` ×114, `Bosses` ×35, `Buffs`, `CharacterStates` ×27, `Items`, `AnimationActions` ×29) — characters, items, bosses, magicks.
+- `Magicka.Levels` — `Level`, `GameScene`, `LevelModel`, `Liquid`/`Water`/`Lava`, `ForceField`, waves, rulesets (`SurvivalRuleset`, `TimedObjectiveRuleset`).
+- `Magicka.Levels.Triggers` — `Actions` (113 types) and `Conditions` (24 types): the level scripting system.
+- `Magicka.AI` — `Agent`, `AIManager`, `AgentStates`, `Arithmetics` (fuzzy logic), `Messaging`.
 - `Magicka.PathFinding` — `NavMesh`, `AnimatedNavMesh`, `NavMeshOctree`.
-- `Magicka.Physics` — `PhysicsManager`, `CharacterBody`, кастомные детекторы (capsule/hollow sphere/static mesh), `IceMesh`, `WaterMesh`.
-- `Magicka.Graphics` — `MagickCamera`, `EffectManager`, `DecalManager`, `Octree`, `TracerMan`, шрифты.
-- `Magicka.Audio` — `AudioManager`, банки, reverb `RoomType`.
-- `Magicka.Network` (84 типа) — сетевой кооп/versus поверх Steam.
-- `Magicka.GameLogic.UI*` — меню, HUD (Gold/Iron/Moba стили), виджеты, UI-анимации.
-- `Magicka.Localization`, `Magicka.Storage` (сейвы + `Encryption`), `Magicka.Achievements`.
-- Не нужно для open-реализации: `Magicka.WebTools.*` (GameSparks, Paradox-телеметрия, монетизация, GDPR), `Magicka.DRM`.
+- `Magicka.Physics` — `PhysicsManager`, `CharacterBody`, custom detectors (capsule/hollow sphere/static mesh), `IceMesh`, `WaterMesh`.
+- `Magicka.Graphics` — `MagickCamera`, `EffectManager`, `DecalManager`, `Octree`, `TracerMan`, fonts.
+- `Magicka.Audio` — `AudioManager`, banks, `RoomType` reverb.
+- `Magicka.Network` (84 types) — network co-op/versus on top of Steam.
+- `Magicka.GameLogic.UI*` — menus, HUD (Gold/Iron/Moba styles), widgets, UI animations.
+- `Magicka.Localization`, `Magicka.Storage` (saves + `Encryption`), `Magicka.Achievements`.
+- Not needed for the open implementation: `Magicka.WebTools.*` (GameSparks, Paradox telemetry, monetization, GDPR), `Magicka.DRM`.
 
-`PolygonHead.dll`: `RenderManager`, `Scene`, `Camera`, `Effects` (deferred, liquid, lava, additive, skinned, свет point/spot/directional, bloom, fog, skymap, переходы), `Lights`, `ParticleEffects` (Continuous/Pulse эмиттеры, Half-векторы), `Models.BiTreeModel`, `PackedContent` (не используется в Steam-сборке — файлы лежат россыпью).
+`PolygonHead.dll`: `RenderManager`, `Scene`, `Camera`, `Effects` (deferred, liquid, lava, additive, skinned, point/spot/directional lights, bloom, fog, skymap, transitions), `Lights`, `ParticleEffects` (Continuous/Pulse emitters, half vectors), `Models.BiTreeModel`, `PackedContent` (unused in the Steam build — files are stored loose).
 
-Шейдеры встроены как скомпилированный байткод DX9 Effect (`*EffectCode` классы + FieldRVA), плюс 51 `.xnb` в `Content/Shaders`.
+Shaders are embedded as compiled DX9 Effect bytecode (`*EffectCode` classes + FieldRVA), plus 51 `.xnb` files in `Content/Shaders`.
 
-## 3. Контент (`Content/`, ~1.7 ГБ)
+## 3. Content (`Content/`, ~1.7 GB)
 
-| Папка | Размер | Что внутри |
+| Folder | Size | Contents |
 |---|---|---|
-| `Audio` | 652 МБ | XACT: `magicka.xgs`, 11 × `.xsb`, 13 × `.xwb`, `SoundList.xnb` |
-| `UI` | 317 МБ | текстуры, json-анимации/спрайтшиты |
-| `Levels` | 263 МБ | `.lvl` (XML кампании/уровня) → сцены `*.xml` (скрипт) + `*.xnb` (геометрия `LevelModel`) |
-| `Models` | 85 МБ | `Model` / `SkinnedModel` + текстуры |
-| `Languages` | 75 МБ | 8 языков, `*.loctable.xml` (Excel SpreadsheetML) + `BitmapFont` |
-| `Effects` | 7 МБ | ~900 XML-описаний частиц |
-| `Data` | 2.8 МБ | шаблоны персонажей/предметов/физобъектов (`.xnb`), JSON магазина/событий |
-| `Shaders`, `EffectTextures`, `FBX` | — | эффекты, текстуры эффектов |
+| `Audio` | 652 MB | XACT: `magicka.xgs`, 11 × `.xsb`, 13 × `.xwb`, `SoundList.xnb` |
+| `UI` | 317 MB | textures, JSON animations/sprite sheets |
+| `Levels` | 263 MB | `.lvl` (campaign/level XML) → scenes `*.xml` (script) + `*.xnb` (`LevelModel` geometry) |
+| `Models` | 85 MB | `Model` / `SkinnedModel` + textures |
+| `Languages` | 75 MB | 8 languages, `*.loctable.xml` (Excel SpreadsheetML) + `BitmapFont` |
+| `Effects` | 7 MB | ~900 XML particle effect descriptions |
+| `Data` | 2.8 MB | character/item/physics object templates (`.xnb`), store/event JSON |
+| `Shaders`, `EffectTextures`, `FBX` | — | effects, effect textures |
 
-### 3.1 Формат XNB
+### 3.1 XNB format
 
-- Все 4308 файлов: заголовок `XNB` + платформа `w` + **версия 4** (XNA 3.1). 4299 сжаты (флаг `0x80`), 9 без сжатия.
-- Сжатие: **LZX** (окно 64 КБ, 2^16), фреймы по 32 КБ; заголовок блока: 2 байта размера, либо `0xFF` + 2 байта размера фрейма + 2 байта размера блока.
-- Исследовательский декодер: [`tools/research/xnb.py`](../tools/research/xnb.py). Проверен: все 4308 файлов распознаны без ошибок, полная распаковка совпадает с заявленным размером (в т.ч. файл уровня 6 МБ).
-- После распаковки: 7-битный счётчик type reader'ов → список (имя + версия int32) → shared resources → объект.
+- All 4308 files: `XNB` header + platform `w` + **version 4** (XNA 3.1). 4299 are compressed (flag `0x80`), 9 are not.
+- Compression: **LZX** (64 KB window, 2^16), 32 KB frames; block header: 2 size bytes, or `0xFF` + 2 bytes of frame size + 2 bytes of block size.
+- Research decoder: [`tools/research/xnb.py`](../tools/research/xnb.py). Verified: all 4308 files are recognised without errors, and full decompression matches the declared size (including a 6 MB level file).
+- After decompression: 7-bit type reader count → list (name + int32 version) → shared resources → object.
 
-### 3.2 Используемые ContentTypeReader'ы (число файлов)
+### 3.2 ContentTypeReaders in use (file counts)
 
-Основной тип файла:
+Primary type of the file:
 
-| Reader | Файлов | Источник |
+| Reader | Files | Origin |
 |---|---|---|
 | `Texture2DReader` | 2296 | XNA |
 | `ModelReader` | 553 | XNA |
@@ -83,55 +83,55 @@ P/Invoke минимален: `QueryPerformanceCounter/Frequency`, `GetCurrentThr
 | `EffectReader` | 52 | XNA |
 | `TextureCubeReader` / `Texture3DReader` | 13 / 7 | XNA |
 
-Вложенные: `RenderDeferredEffectReader` (710), `SkinnedModelBone/BasicEffect/AnimationClipReader` (XNAnimation), `BiTreeModelReader` (132), `RenderDeferredLiquidEffectReader` (53), `AdditiveEffectReader` (33), `LavaEffectReader`, `SkinnedModelDeferredNormalMappedEffectReader`, `CollisionSkinReader`, стандартные XNA (`VertexBuffer`, `IndexBuffer`, `VertexDeclaration`, `ExternalReference`, `List`, `Dictionary`, примитивы).
+Nested: `RenderDeferredEffectReader` (710), `SkinnedModelBone/BasicEffect/AnimationClipReader` (XNAnimation), `BiTreeModelReader` (132), `RenderDeferredLiquidEffectReader` (53), `AdditiveEffectReader` (33), `LavaEffectReader`, `SkinnedModelDeferredNormalMappedEffectReader`, `CollisionSkinReader`, standard XNA ones (`VertexBuffer`, `IndexBuffer`, `VertexDeclaration`, `ExternalReference`, `List`, `Dictionary`, primitives).
 
-Итого для open-реализации нужно написать **~12 нестандартных reader'ов** + стандартные XNA 3.1 (формат v4 отличается от XNA 4.0/MonoGame v5).
+In total the open implementation needs **~12 non-standard readers** + the standard XNA 3.1 ones (format v4 differs from XNA 4.0/MonoGame v5).
 
-### 3.3 Данные в открытом виде (XML/JSON)
+### 3.3 Data in plain text (XML/JSON)
 
-Большая часть геймдизайна — текстовая, что сильно упрощает задачу:
+Most of the game design is text, which makes the job much easier:
 
-- `Levels/*.lvl` — кампания: стартовая сцена, диалоги, список сцен.
-- Сцены `Levels/<Chapter>/*.xml` — модель, освещение/bloom/fog/reverb и **триггеры**: `<trigger><if>…</if><then>…</then></trigger>`. Самые частые действия: `spawn`, `counter`, `waveActions`, `Move`, `executeTrigger`, `giveOrder`, `playAnimation`, `playSound`, `startDialog`, `spawnPhys`, `cameraMove`, `cutscene`… Теги **регистронезависимы** (встречаются `playmusic`/`playMusic`).
-- `Levels/Dialog_*.xml` — диалоги (`Dialog` → `interact` → `message` → `text sound= anim= TTL=`).
-- `Effects/**/*.xml` — эффекты частиц (`ContinuousEmitter`, параметры спреда/жизни/размера, ключевые кадры).
-- `Languages/<lang>/*.loctable.xml` — строки (`#Key` → текст), формат Excel 2003 XML.
-- `SaveData/*.sav` — **не зашифрованы**: `Settings/campaign/Profile/ch_*.sav` — `BinaryWriter` с префиксом-строкой версии, `DLCData.sav` — XML. `Encryption` применяется только к `pops.sav` (аккаунт Paradox, нам не нужен). Подробно: [engine/ARCHITECTURE.md](engine/ARCHITECTURE.md).
-- `col.dat` — текст, первая строка = число открытых цветов игрока.
+- `Levels/*.lvl` — campaign: start scene, dialogs, list of scenes.
+- Scenes `Levels/<Chapter>/*.xml` — model, lighting/bloom/fog/reverb and **triggers**: `<trigger><if>…</if><then>…</then></trigger>`. The most common actions: `spawn`, `counter`, `waveActions`, `Move`, `executeTrigger`, `giveOrder`, `playAnimation`, `playSound`, `startDialog`, `spawnPhys`, `cameraMove`, `cutscene`… Tags are **case-insensitive** (both `playmusic` and `playMusic` occur).
+- `Levels/Dialog_*.xml` — dialogs (`Dialog` → `interact` → `message` → `text sound= anim= TTL=`).
+- `Effects/**/*.xml` — particle effects (`ContinuousEmitter`, spread/lifetime/size parameters, key frames).
+- `Languages/<lang>/*.loctable.xml` — strings (`#Key` → text), Excel 2003 XML format.
+- `SaveData/*.sav` — **not encrypted**: `Settings/campaign/Profile/ch_*.sav` are `BinaryWriter` files with a version string prefix, `DLCData.sav` is XML. `Encryption` is only used for `pops.sav` (the Paradox account, which we do not need). Details: [engine/ARCHITECTURE.md](engine/ARCHITECTURE.md).
+- `col.dat` — text; the first line is the number of unlocked player colours.
 
-## 4. Рекомендуемая архитектура OpenMagicka
+## 4. Recommended OpenMagicka architecture
 
-**C# / .NET 10 LTS + FNA** (open-source реимплементация XNA 4.0). Решение и обоснование: [ADR-0001](adr/0001-stack.md), сеть: [ADR-0002](adr/0002-network.md).
+**C# / .NET 10 LTS + FNA** (open-source reimplementation of XNA 4.0). Decision and rationale: [ADR-0001](adr/0001-stack.md), network: [ADR-0002](adr/0002-network.md).
 
-- API близок к XNA 3.1 — понятная модель для переноса поведения.
-- FNA через MojoShader исполняет **DX9 effect bytecode** — есть шанс использовать оригинальные шейдеры из ассетов пользователя без переписывания.
-- FAudio/FACT поддерживает **XACT**-банки (нужно проверить совместимость версии банков XNA 3.1).
-- Кроссплатформенность (Windows/Linux/macOS, Vulkan/D3D11/Metal через SDL_GPU/FNA3D).
-- XNB v4 читаем своими reader'ами (LZX — портировать из исследовательского декодера).
-- JigLibX и XNAnimation — open-source, можно портировать на FNA, а не писать с нуля (проверить лицензии).
+- The API is close to XNA 3.1 — a familiar model for carrying the behaviour over.
+- Through MojoShader FNA runs **DX9 effect bytecode** — there is a chance to use the original shaders from the user's assets without rewriting them.
+- FAudio/FACT supports **XACT** banks (compatibility with the XNA 3.1 bank version had to be checked).
+- Cross-platform (Windows/Linux/macOS, Vulkan/D3D11/Metal through SDL_GPU/FNA3D).
+- XNB v4 is read by our own readers (LZX is ported from the research decoder).
+- JigLibX and XNAnimation are open source and can be ported to FNA instead of written from scratch (licenses to be checked).
 
-Слои: `OpenMagicka.Content` (XNB v4 + reader'ы + XML-парсеры) → `OpenMagicka.Engine` (рендер deferred, свет, частицы, камера, аудио, ввод) → `OpenMagicka.Game` (заклинания, сущности, AI, триггеры, уровни, UI) → `OpenMagicka.Launcher` (поиск установки Steam, проверка ассетов). Сеть: `OpenMagicka.Net` (протокол и транспорты) и `OpenMagicka.Server` (лобби и relay).
+Layers: `OpenMagicka.Content` (XNB v4 + readers + XML parsers) → `OpenMagicka.Engine` (deferred rendering, lights, particles, camera, audio, input) → `OpenMagicka.Game` (spells, entities, AI, triggers, levels, UI) → `OpenMagicka.Launcher` (finds the Steam installation, checks assets). Network: `OpenMagicka.Net` (protocol and transports) and `OpenMagicka.Server` (lobby and relay).
 
-## 5. Детальные спецификации
+## 5. Detailed specifications
 
-| Документ | Тема |
+| Document | Topic |
 |---|---|
-| [formats/XNB_READERS.md](formats/XNB_READERS.md) | бинарные макеты всех нестандартных reader'ов |
-| [formats/LEVELS_TRIGGERS.md](formats/LEVELS_TRIGGERS.md) | .lvl, сцены, 24 условия и 113 действий, диалоги, катсцены |
-| [gameplay/SPELLS.md](gameplay/SPELLS.md) | элементы, очередь, типы заклинаний, урон, статусы, 34 магики |
-| [engine/ARCHITECTURE.md](engine/ARCHITECTURE.md) | потоки, рендер-пайплайн, шейдеры, физика, звук, ввод, сейвы |
-| [engine/ENTITIES_AI.md](engine/ENTITIES_AI.md) | сущности, состояния персонажа, AI, навмеш, сеть |
-| [engine/RISK_CHECKS.md](engine/RISK_CHECKS.md) | проверка рисков: шейдеры в FNA, XACT на FAudio, Linux |
-| [adr/0001-stack.md](adr/0001-stack.md) | решение: стек .NET 10 + FNA |
-| [adr/0002-network.md](adr/0002-network.md) | решение: сетевая модель и транспорт |
+| [formats/XNB_READERS.md](formats/XNB_READERS.md) | binary layouts of all non-standard readers |
+| [formats/LEVELS_TRIGGERS.md](formats/LEVELS_TRIGGERS.md) | .lvl, scenes, 24 conditions and 113 actions, dialogs, cutscenes |
+| [gameplay/SPELLS.md](gameplay/SPELLS.md) | elements, queue, spell types, damage, statuses, 34 magicks |
+| [engine/ARCHITECTURE.md](engine/ARCHITECTURE.md) | threads, render pipeline, shaders, physics, audio, input, saves |
+| [engine/ENTITIES_AI.md](engine/ENTITIES_AI.md) | entities, character states, AI, nav mesh, network |
+| [engine/RISK_CHECKS.md](engine/RISK_CHECKS.md) | risk checks: shaders on FNA, XACT on FAudio, Linux |
+| [adr/0001-stack.md](adr/0001-stack.md) | decision: .NET 10 + FNA stack |
+| [adr/0002-network.md](adr/0002-network.md) | decision: network model and transport |
 
-## 6. Ключевые риски
+## 6. Key risks
 
-- XACT v45 на FAudio работает, кроме xWMA: его нужно перекодировать при установке ([RISK_CHECKS](engine/RISK_CHECKS.md) §2).
-- Оригинальные шейдеры: 46/51 работают после патча байткода; 5, включая основной материал уровней `RenderDeferredEffect`, падают в MojoShader ([RISK_CHECKS](engine/RISK_CHECKS.md) §1).
-- FNA не поддерживает `EffectPool`: общие параметры (View/Projection/Time) выставлять в каждый эффект.
-- Лицензия JigLibX не подтверждена (XNAnimation — Ms-PL).
-- Ключи локализации/звуков/эффектов — хэш `String.GetHashCode` .NET 2.0–3.5 x86; нужна своя реализация.
-- Linux/macOS: поиск файлов без учёта регистра (код и файлы расходятся в регистре).
+- XACT v45 works on FAudio except xWMA, which has to be transcoded on install ([RISK_CHECKS](engine/RISK_CHECKS.md) §2).
+- Original shaders: 46/51 work after patching the bytecode; 5, including the main level material `RenderDeferredEffect`, crash inside MojoShader ([RISK_CHECKS](engine/RISK_CHECKS.md) §1).
+- FNA does not support `EffectPool`: shared parameters (View/Projection/Time) must be set on every effect.
+- The JigLibX license is not confirmed (XNAnimation is Ms-PL).
+- Localization/sound/effect keys are the .NET 2.0–3.5 x86 `String.GetHashCode` hash; we need our own implementation.
+- Linux/macOS: file lookup must ignore case (code and files disagree on letter case).
 
-Открытые вопросы по каждой подсистеме — в конце соответствующего документа.
+Open questions for each subsystem are listed at the end of its document.

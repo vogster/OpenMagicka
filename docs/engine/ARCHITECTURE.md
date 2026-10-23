@@ -1,88 +1,88 @@
-# OpenMagicka — архитектура ядра оригинального движка Magicka
+# OpenMagicka — core architecture of the original Magicka engine
 
-> Область документа: ядро движка — запуск, главный цикл и потоки, стейт-машина,
-> рендер-пайплайн PolygonHead, шейдеры, частицы, камера, физика, звук, ввод,
-> локализация, сохранения. Геймплей (заклинания, сущности, AI, триггеры) и форматы
-> кастомных XNB-reader'ов описываются в других документах.
+> Document scope: the engine core — startup, main loop and threads, state machine,
+> PolygonHead render pipeline, shaders, particles, camera, physics, audio, input,
+> localization, saves. Gameplay (spells, entities, AI, triggers) and the formats of
+> custom XNB readers are described in other documents.
 >
-> Источник: `Magicka.exe` 1.10.4.2 + `PolygonHead.dll` + `JigLibX.dll` 0.0.2 +
-> `XNAnimation.dll` 0.7, изученные через ILSpy, и ассеты Steam-установки.
+> Source: `Magicka.exe` 1.10.4.2 + `PolygonHead.dll` + `JigLibX.dll` 0.0.2 +
+> `XNAnimation.dll` 0.7, studied with ILSpy, and the assets of the Steam install.
 >
-> **Clean-room.** Здесь только описание архитектуры и поведения: таблицы, схемы,
-> перечни параметров и форматов. Декомпилированный код в этот документ и в
-> репозиторий не копируется. Если для совместимости важна точная формула
-> (хеши, шифрование), она описана словами.
+> **Clean-room.** This document contains only descriptions of architecture and behavior:
+> tables, diagrams, lists of parameters and formats. Decompiled code is not copied into
+> this document or into the repository. Where an exact formula matters for compatibility
+> (hashes, encryption), it is described in words.
 
-Предыдущий обзор: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md).
+Previous overview: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md).
 
 ---
 
-## 0. Краткие выводы
+## 0. Key findings
 
-1. **Потоки.** Используются три потока: render (главный поток XNA), logic (свой
-   поток, переменный шаг) и loader (очередь задач загрузки). Данные кадра передаются
-   через **тройную буферизацию** `DataChannel` A/B/C. Каждый слой отрисовки в `Scene`,
-   состояние камеры и GPU-буферы частиц и света существуют в трёх экземплярах.
-2. **Рендер — классический deferred DX9.** Порядок проходов: depth-препасс в R32F →
-   G-buffer из 2 MRT (`Color` + normal `Color`) → декали → тени → накопление света
-   (additive) → композиция с туманом → небо → additive-объекты → частицы (soft) →
-   пост-эффекты → цветокоррекция → GUI в 4×MSAA-буфер → переход (fade) → bloom (1/16) → backbuffer.
-3. **Шейдеры.** Байткод эффектов, встроенный в `PolygonHead.dll` (классы `*EffectCode`),
-   **побайтно совпадает** с `Content/Shaders/*.xnb` для 25 из 27 эффектов (проверено
-   скриптом). Его не нужно извлекать из DLL: всё лежит в ассетах пользователя в
-   формате `fx_2_0` (magic `0xFEFF0901`), SM 3.0, с preshader'ами. FNA/MojoShader
-   умеет загружать такой байткод напрямую. Главное препятствие: в XNA 4.0/FNA нет **`EffectPool`**
-   (общих параметров).
-4. **Сейвы не зашифрованы.** `Settings.sav`, `campaign.sav`, `Profile.sav` и
-   `ch_*.sav` — это `BinaryWriter`-бинарники с префиксом версии. `DLCData.sav` — это XML.
-   «Шифрование» (`Encryption`) применяется только к `pops.sav` (токен Paradox) и для
-   OpenMagicka не нужно. Ниже описан алгоритм и вывод ключа.
-5. **`col.dat`** — текстовый файл, в первой строке которого записано число
-   разблокированных цветов игрока (в Steam-копии там `10`).
-6. **Звук.** XACT content version **45** (XACT3 эпохи XNA 3.1). Wave bank'и содержат PCM,
-   MS-ADPCM и **xWMA** (`Wave Bank.xwb`, `Loc.xwb`). Совместимость FAudio/FACT с v45 и
-   xWMA нужно проверить в первую очередь.
-7. **Лицензии.** XNAnimation распространяется по Ms-PL (по форкам на GitHub), поэтому
-   можно портировать upstream-исходники. Лицензия JigLibX не подтверждена: upstream JigLib
-   распространяется под zlib, а у JigLibX предположительно MIT или Ms-PL. Решение
-   «port vs rewrite» описано в §13.
+1. **Threads.** Three threads are used: render (the XNA main thread), logic (its own
+   thread, variable step) and loader (a queue of load tasks). Frame data is passed
+   through **triple buffering** `DataChannel` A/B/C. Each draw layer in `Scene`,
+   the camera state and the GPU buffers for particles and lights exist in three instances.
+2. **Rendering is classic deferred DX9.** Pass order: depth prepass into R32F →
+   G-buffer of 2 MRTs (`Color` + normal `Color`) → decals → shadows → light accumulation
+   (additive) → composition with fog → sky → additive objects → particles (soft) →
+   post effects → color grading → GUI into a 4×MSAA buffer → transition (fade) → bloom (1/16) → backbuffer.
+3. **Shaders.** The effect bytecode embedded in `PolygonHead.dll` (classes `*EffectCode`)
+   **matches byte for byte** `Content/Shaders/*.xnb` for 25 of 27 effects (verified by
+   script). It does not need to be extracted from the DLL: everything is in the user's assets in
+   `fx_2_0` format (magic `0xFEFF0901`), SM 3.0, with preshaders. FNA/MojoShader
+   can load this bytecode directly. The main obstacle: XNA 4.0/FNA has no **`EffectPool`**
+   (shared parameters).
+4. **Saves are not encrypted.** `Settings.sav`, `campaign.sav`, `Profile.sav` and
+   `ch_*.sav` are `BinaryWriter` binaries with a version prefix. `DLCData.sav` is XML.
+   "Encryption" (`Encryption`) is applied only to `pops.sav` (Paradox token) and is
+   not needed for OpenMagicka. The algorithm and key derivation are described below.
+5. **`col.dat`** is a text file whose first line holds the number of
+   unlocked player colors (`10` in the Steam copy).
+6. **Audio.** XACT content version **45** (XACT3 of the XNA 3.1 era). Wave banks contain PCM,
+   MS-ADPCM and **xWMA** (`Wave Bank.xwb`, `Loc.xwb`). FAudio/FACT compatibility with v45 and
+   xWMA must be checked first.
+7. **Licenses.** XNAnimation is distributed under Ms-PL (according to GitHub forks), so
+   the upstream sources can be ported. The JigLibX license is not confirmed: upstream JigLib
+   is distributed under zlib, and JigLibX is presumably MIT or Ms-PL. The
+   "port vs rewrite" decision is described in §13.
 
 ---
 
-## 1. Запуск
+## 1. Startup
 
 ### 1.1 `Program.Main`
 
-Последовательность при старте:
+Startup sequence:
 
-1. Помечает текущий поток как главный (обёртка `TrackedThread` нужна для
-   crash-репорта со стеками всех потоков) и подписывается на `UnhandledException`.
-2. Делает рабочим каталогом каталог exe. **Все пути в игре относительные:**
+1. Marks the current thread as the main thread (the `TrackedThread` wrapper is needed for
+   a crash report with the stacks of all threads) and subscribes to `UnhandledException`.
+2. Sets the working directory to the exe directory. **All paths in the game are relative:**
    `content/…`, `./SaveData/…`, `./Cursors/…`.
-3. Сверяет SHA-256 файла `steam_api.dll` с зашитым значением, затем выполняет
-   `SteamAPI.RestartAppIfNecessary(42910)` и `SteamAPI.Init`. **В OpenMagicka не нужно.**
-4. Разбирает аргументы командной строки (без учёта регистра): `-window` (оконный режим),
-   `+connect_lobby <id>`, `+password <pw>`, `+connect` (игнорируется).
-5. Создаёт singleton `Game` и вызывает `Run()`.
+3. Checks the SHA-256 of `steam_api.dll` against a hardcoded value, then runs
+   `SteamAPI.RestartAppIfNecessary(42910)` and `SteamAPI.Init`. **Not needed in OpenMagicka.**
+4. Parses command-line arguments (case-insensitive): `-window` (windowed mode),
+   `+connect_lobby <id>`, `+password <pw>`, `+connect` (ignored).
+5. Creates the `Game` singleton and calls `Run()`.
 
-Crash-репорт пишется в файл `errorReport_yyyy.MM.dd-hh.mm.ss_(N).txt` в каталоге
-игры: версия, имя потока, исключение, стеки всех `TrackedThread`.
+The crash report is written to `errorReport_yyyy.MM.dd-hh.mm.ss_(N).txt` in the game
+directory: version, thread name, exception, stacks of all `TrackedThread`s.
 
-### 1.2 Конструктор `Game` (наследник `Microsoft.Xna.Framework.Game`)
+### 1.2 `Game` constructor (subclass of `Microsoft.Xna.Framework.Game`)
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
-| `TargetElapsedTime` | 1/60 с |
-| Минимальные профили шейдеров | VS 3.0 / PS 3.0 |
-| VSync | вкл. (потом берётся из настроек) |
-| MSAA backbuffer | выкл. (MSAA есть только у GUI-буфера) |
-| Стартовый backbuffer | 800×600, затем применяется разрешение из `Settings.sav` |
+| `TargetElapsedTime` | 1/60 s |
+| Minimum shader profiles | VS 3.0 / PS 3.0 |
+| VSync | on (later taken from settings) |
+| MSAA backbuffer | off (only the GUI buffer has MSAA) |
+| Initial backbuffer | 800×600, then the resolution from `Settings.sav` is applied |
 | Depth/stencil | `Depth24Stencil8` |
 | `BackBufferCount` | 1 |
-| Поток рендера | имя «RenderThread», приоритет AboveNormal |
+| Render thread | name "RenderThread", priority AboveNormal |
 
-На `DeviceResetting` logic-поток ставится на паузу и рендер ждёт, пока он
-остановится. На `DeviceReset` пауза снимается.
+On `DeviceResetting` the logic thread is paused and render waits until it
+stops. On `DeviceReset` the pause is released.
 
 ### 1.3 `Initialize` → `LoadContent` → `BeginRun`
 
@@ -91,641 +91,641 @@ sequenceDiagram
     participant R as Render (main)
     participant L as Loader thread
     participant G as Logic thread
-    R->>R: Initialize: проверка хешей уровней (фон. поток "Level Hasher")
+    R->>R: Initialize: level hash check (background thread "Level Hasher")
     R->>R: SaveManager.LoadSettings() (Settings.sav)
-    R->>R: язык (Steam → GlobalSettings) → LanguageManager.SetLanguage
-    R->>R: применить разрешение/fullscreen
+    R->>R: language (Steam → GlobalSettings) → LanguageManager.SetLanguage
+    R->>R: apply resolution/fullscreen
     R->>L: AddLoadTask(Profile.Read)
     R->>R: 4 × Player
     R->>R: LoadContent: ContentManager(root="content")
-    R->>R: курсоры ./Cursors/*.ani (Win32 LoadCursorFromFile)
-    R->>R: AudioManager.StartInit(Audio/SoundList.xnb) (банки грузятся в потоке "Init Audio")
-    R->>L: AddLoadTask(EffectManager.Initialize) — парсинг всех Effects/**/*.xml
+    R->>R: cursors ./Cursors/*.ani (Win32 LoadCursorFromFile)
+    R->>R: AudioManager.StartInit(Audio/SoundList.xnb) (banks load in thread "Init Audio")
+    R->>L: AddLoadTask(EffectManager.Initialize) — parse all Effects/**/*.xml
     R->>R: RenderManager.Initialize(device)
     R->>R: SpritesheetManager.Load()
     R->>L: start loader thread
-    R->>R: DummyEffect из Shaders/DummyEffect.xnb + регистрация эффектов
+    R->>R: DummyEffect from Shaders/DummyEffect.xnb + effect registration
     R->>R: Texture3D EffectTextures/ParticlesA..D → ParticleSystem.Initialize
     R->>R: GameStateManager.PushState(CompanyState)
     R->>G: BeginRun: start logic thread
 ```
 
-### 1.4 Настройки и конфигурация
+### 1.4 Settings and configuration
 
-Конфигурационных файлов (ini/xml) нет: всё хранится в `GlobalSettings`
-(синглтон) и сериализуется в `SaveData/Settings.sav` (формат в §11.2). Значения по умолчанию:
+There are no configuration files (ini/xml): everything is stored in `GlobalSettings`
+(a singleton) and serialized to `SaveData/Settings.sav` (format in §11.2). Defaults:
 
-| Настройка | По умолчанию | Тип |
+| Setting | Default | Type |
 |---|---|---|
-| Resolution | текущий display mode | W/H/Refresh (int16 на диске) |
-| Fullscreen | false (Program ставит true без `-window`) | bool |
+| Resolution | current display mode | W/H/Refresh (int16 on disk) |
+| Fullscreen | false (Program sets true without `-window`) | bool |
 | Bloom / Shadow / AO / Decal quality | Medium | `SettingOptions` {Off, On, Players_Only, Low, Medium, High} |
-| Particles | (не задано → Off=0) | `SettingOptions` |
+| Particles | (not set → Off=0) | `SettingOptions` |
 | ParticleLights | false | bool |
 | VolumeMusic / VolumeSound | 7 / 7 (0…10) | byte |
 | BloodAndGore, DamageNumbers, HealthBars, SpellWheel | On | `SettingOptions` |
 | GameName | "Magicka Game" | string |
 | VSync | false | bool |
 
-`ShadowQuality` масштабирует размер shadow map: Low даёт ½ от базового, High — ×2.
+`ShadowQuality` scales the shadow map size: Low gives ½ of the base, High gives ×2.
 
-### 1.5 Корень контента и `SharedContentManager`
+### 1.5 Content root and `SharedContentManager`
 
-- Корень: `content` (относительно exe). В Steam-копии каталог называется `Content`.
-  На Windows регистр не важен, **на Linux/macOS нужен case-insensitive резолвер путей**.
-  Расхождения встречаются и в коде: `Additionalmusic.xsb` против `AdditionalMusic`,
-  `loc.xwb` против `Loc.xwb`, `Languages/{lang}/Font` против `font`.
-- `SharedContentManager` — менеджер со **счётчиком ссылок** поверх одного общего
+- Root: `content` (relative to the exe). In the Steam copy the directory is named `Content`.
+  On Windows case does not matter, **on Linux/macOS a case-insensitive path resolver is required**.
+  Mismatches also occur in code: `Additionalmusic.xsb` vs `AdditionalMusic`,
+  `loc.xwb` vs `Loc.xwb`, `Languages/{lang}/Font` vs `font`.
+- `SharedContentManager` is a **reference-counted** manager on top of a single shared
   `ContentManager`:
-  - имя ассета нормализуется: абсолютный путь обрезается до части после `content`,
-    затем `GetFullPath` и **lowercase**;
-  - первая загрузка читает ассет. Если ассет загружается во время загрузки другого
-    (вложенные `ExternalReference`), он регистрируется как «ребёнок» родителя;
-  - каждый экземпляр `SharedContentManager` (например, один на `PlayState`) хранит
-    свои счётчики. При `Unload` счётчики уменьшаются, а ассет, дошедший до нуля, освобождается вместе
-    с детьми;
-  - общий менеджер уничтожается, когда закрыт последний `SharedContentManager`.
-- `PackedContent` (PolygonHead) — альтернативный контейнер. В Steam-сборке он не используется.
+  - the asset name is normalized: an absolute path is trimmed to the part after `content`,
+    then `GetFullPath` and **lowercase**;
+  - the first load reads the asset. If an asset is loaded while another one is loading
+    (nested `ExternalReference`), it is registered as a "child" of the parent;
+  - each `SharedContentManager` instance (for example, one per `PlayState`) keeps
+    its own counters. On `Unload` the counters are decremented, and an asset that reaches zero is released together
+    with its children;
+  - the shared manager is destroyed when the last `SharedContentManager` is closed.
+- `PackedContent` (PolygonHead) is an alternative container. It is not used in the Steam build.
 
 ---
 
-## 2. Главный цикл и модель потоков
+## 2. Main loop and threading model
 
-### 2.1 Потоки
+### 2.1 Threads
 
-| Поток | Что делает | Частота |
+| Thread | What it does | Rate |
 |---|---|---|
-| **RenderThread** (главный, XNA `Game.Run`) | `Update(GameTime)`: смена разрешения/vsync/fullscreen, clip курсора, focus. `Draw`: опрос Keyboard/Mouse, захват готового `DataChannel`, `RenderManager.RenderScene` | Fixed timestep 60 Гц, когда в очереди загрузки есть задачи; иначе variable (переключает loader-поток!) |
-| **LogicThread** | Бесконечный цикл: `AudioManager.Update` → `Game.Update(dt)` (Steam callbacks, `GameStateManager.Update`, Network, Achievements) → `Sleep(1)` | Переменный шаг, `dt` ограничен **0.05 с** |
-| **LoaderThread** | Выполняет `Action` из FIFO-очереди `AddLoadTask` (загрузка уровней, профиля, эффектов) | `Sleep(1)` между задачами |
-| «Init Audio», «Level Hasher» | Одноразовые фоновые задачи | — |
+| **RenderThread** (main, XNA `Game.Run`) | `Update(GameTime)`: resolution/vsync/fullscreen changes, cursor clip, focus. `Draw`: polls Keyboard/Mouse, grabs the ready `DataChannel`, `RenderManager.RenderScene` | Fixed timestep 60 Hz when the load queue has tasks; otherwise variable (the loader thread switches it!) |
+| **LogicThread** | Infinite loop: `AudioManager.Update` → `Game.Update(dt)` (Steam callbacks, `GameStateManager.Update`, Network, Achievements) → `Sleep(1)` | Variable step, `dt` clamped to **0.05 s** |
+| **LoaderThread** | Runs `Action`s from the FIFO queue `AddLoadTask` (loading levels, profile, effects) | `Sleep(1)` between tasks |
+| "Init Audio", "Level Hasher" | One-shot background tasks | — |
 
-GPU-ресурсы создаются из **любого** потока под `lock(GraphicsDevice)`: loader
-создаёт текстуры и буферы, logic вызывает `SetData` на dynamic VB частиц и света. Рендер
-держит тот же lock во время `RenderScene`.
+GPU resources are created from **any** thread under `lock(GraphicsDevice)`: loader
+creates textures and buffers, logic calls `SetData` on the dynamic VBs of particles and lights. Render
+holds the same lock during `RenderScene`.
 
-### 2.2 Тройная буферизация `DataChannel`
+### 2.2 `DataChannel` triple buffering
 
-`DataChannel` = {None=-1, A, B, C}. Протокол такой:
+`DataChannel` = {None=-1, A, B, C}. The protocol is:
 
 ```mermaid
 stateDiagram-v2
     [*] --> LogicPick
-    LogicPick: Logic выбирает канал ≠ UsedByRender и ≠ NextToRender
+    LogicPick: Logic picks a channel ≠ UsedByRender and ≠ NextToRender
     LogicPick --> LogicFill: GameStateManager.Update(channel, dt)
-    LogicFill: Scene.ClearObjects(channel) и заполнение списков, Camera.mStateBuffer[channel], SetData буферов частиц/света
+    LogicFill: Scene.ClearObjects(channel) and filling lists, Camera.mStateBuffer[channel], SetData of particle/light buffers
     LogicFill --> Publish: NextToRender = channel
     Publish --> LogicPick
     state Render {
-      Take: UsedByRender = NextToRender; NextToRender = None (ждать, пока None)
+      Take: UsedByRender = NextToRender; NextToRender = None (wait while None)
       Draw: RenderScene(scene, channel)
       Release: UsedByRender = None
       Take --> Draw --> Release
     }
 ```
 
-- Все операции над парой (`UsedByRender`, `NextToRender`) выполняются под одним lock.
-- Logic **ограничивается** только тогда, когда опубликованный кадр не забран больше
-  0.2 с (рендер завис или свёрнут). В остальное время logic обгоняет рендер, и
-  неотрисованные кадры просто перезаписываются.
-- Render, не найдя готового кадра, крутится в `Sleep(1)`, обновляя состояние клавиатуры и мыши.
-- Что имеет копию на канал: 6 списков объектов в `Scene`; `Camera.CameraState`
-  (View, Projection, ViewProjection, Position, EyeOfTheBeholder, Direction, Up) и
-  frustum; dynamic VB частиц (3 × 32768 × 56 байт); VB батча точечных и частичных
-  источников света; `RenderData[3]` у объектов (у каждого объекта три экземпляра данных отрисовки).
-- Пауза рендера (`DisableRendering`) блокирует logic в `PlayState.Update`
-  (кадр считается busy), пока рендер не подтвердит остановку.
+- All operations on the pair (`UsedByRender`, `NextToRender`) run under one lock.
+- Logic is **throttled** only when a published frame has not been taken for more than
+  0.2 s (render hung or minimized). The rest of the time logic runs ahead of render, and
+  unrendered frames are simply overwritten.
+- Render, when no frame is ready, spins in `Sleep(1)` and updates the keyboard and mouse state.
+- What has a copy per channel: 6 object lists in `Scene`; `Camera.CameraState`
+  (View, Projection, ViewProjection, Position, EyeOfTheBeholder, Direction, Up) and
+  the frustum; the particle dynamic VB (3 × 32768 × 56 bytes); the VB of the point and particle
+  light batch; `RenderData[3]` on objects (each object has three instances of its draw data).
+- Render pause (`DisableRendering`) blocks logic in `PlayState.Update`
+  (the frame counts as busy) until render confirms it has stopped.
 
-**Для OpenMagicka:** модель стоит сохранить в упрощённом виде. Logic пишет
-CPU-снапшот кадра, render только читает его и **сам** загружает данные в GPU. FNA3D
-не гарантирует потокобезопасность GL-контекста, а `SetData` из logic-потока надо убрать.
+**For OpenMagicka:** this model is worth keeping in a simplified form. Logic writes a
+CPU snapshot of the frame, render only reads it and uploads the data to the GPU **itself**. FNA3D
+does not guarantee thread safety of the GL context, and `SetData` from the logic thread must be removed.
 
-### 2.3 `GameStateManager` и состояния
+### 2.3 `GameStateManager` and states
 
-- Стек `GameState`. `PushState`/`PopState` откладываются до начала следующего
-  `Update` (через очередь и флаг). `ChangeState` выполняется сразу под lock.
-  Опустевший стек приводит к `Game.Exit()`.
-- Каждый `Update(channel, dt)` вызывает `CurrentState.Update` и
-  **`PersistentGameState.Update`** (оверлей поверх всех состояний: popup-виджеты, HUD,
-  магазин). Рендер вызывает `DrawGui` текущей сцены, затем сцены persistent-состояния
-  (кроме `CompanyState`).
-- База `GameState` владеет `Scene` (вместимость 512 на слой) и камерой. Базовый
-  `Update` очищает списки канала и обрабатывает ввод (`ControlManager.HandleInput`).
+- A stack of `GameState`. `PushState`/`PopState` are deferred until the start of the next
+  `Update` (via a queue and a flag). `ChangeState` runs immediately under a lock.
+  An empty stack leads to `Game.Exit()`.
+- Each `Update(channel, dt)` calls `CurrentState.Update` and
+  **`PersistentGameState.Update`** (an overlay on top of all states: popup widgets, HUD,
+  shop). Render calls `DrawGui` of the current scene, then of the persistent state's scene
+  (except `CompanyState`).
+- The `GameState` base owns a `Scene` (capacity 512 per layer) and a camera. The base
+  `Update` clears the channel's lists and handles input (`ControlManager.HandleInput`).
 
-| Состояние | Камера | Назначение |
+| State | Camera | Purpose |
 |---|---|---|
-| `CompanyState` | default | Сплэши Paradox → Arrowhead → «Pieces» → Magicka (цепочка делегатов), затем `ChangeState(MenuState)` |
-| `MenuState` | — | Меню-«Том» (`Tome`), баннеры, диалоги, тултипы |
-| `PlayState` | `MagickCamera` | Игровой уровень. Параметры: custom, файл уровня, `GameType`, spawn point, слот сейва, настройки versus |
-| `PersistentGameState` | Camera(near 1, far 500) | Оверлей GUI |
-| `LoadingScreen` | — | Экран загрузки (свой RT размера экрана) |
+| `CompanyState` | default | Splashes Paradox → Arrowhead → "Pieces" → Magicka (delegate chain), then `ChangeState(MenuState)` |
+| `MenuState` | — | The menu "Tome" (`Tome`), banners, dialogs, tooltips |
+| `PlayState` | `MagickCamera` | Game level. Parameters: custom, level file, `GameType`, spawn point, save slot, versus settings |
+| `PersistentGameState` | Camera(near 1, far 500) | GUI overlay |
+| `LoadingScreen` | — | Loading screen (its own screen-sized RT) |
 
-`GameType`: Campaign, Mythos, Challenge, Versus и др. (см. `GameType.cs`).
+`GameType`: Campaign, Mythos, Challenge, Versus, etc. (see `GameType.cs`).
 
-Порядок `PlayState.Update` (полезен для детерминизма):
+`PlayState.Update` order (useful for determinism):
 
-1. Если уровень не готов или рендер на паузе — кадр busy, выход.
-2. Пауза или in-game меню в оффлайне: `dt = 0`.
-3. `dt *= TimeModifier × TimeMultiplier` (TimeWarp и т.п.).
-4. Physics (`JigLibX Integrate(dt)`) → AI → quad-grid сущностей → анимированные части
-   уровня → сущности → босс → healthbar → удаление мёртвых → misc (декали,
-   blob-тени, титры, туториал, инвентарь, игроки, конец игры) → сетевые апдейты
-   с периодом 1/30 с → HUD → ввод.
+1. If the level is not ready or render is paused, the frame is busy; exit.
+2. Pause or in-game menu while offline: `dt = 0`.
+3. `dt *= TimeModifier × TimeMultiplier` (TimeWarp, etc.).
+4. Physics (`JigLibX Integrate(dt)`) → AI → entity quad grid → animated level
+   parts → entities → boss → healthbar → removal of dead → misc (decals,
+   blob shadows, credits, tutorial, inventory, players, game end) → network updates
+   with a period of 1/30 s → HUD → input.
 
 ---
 
-## 3. Рендер-пайплайн PolygonHead
+## 3. PolygonHead render pipeline
 
-### 3.1 Модель объектов сцены
+### 3.1 Scene object model
 
-`Scene` хранит на каждый `DataChannel` списки:
+`Scene` keeps these lists per `DataChannel`:
 
-| Слой | Интерфейс | Сортировка | Методы |
+| Layer | Interface | Sorting | Methods |
 |---|---|---|---|
-| Pre-render | `IPreRenderRenderer` | — | `PreRenderUpdate(...)` вызывается на рендер-потоке перед кадром (например, sway-текстура травы) |
-| Opaque | `IRenderableObject` | (Effect, Technique, VerticesHash), бинарная вставка | `Cull`, `Draw`, `DrawShadow`; техники Depth/Technique/Shadow (−1 = нет) |
-| Additive | `IRenderableAdditiveObject` | то же | `Cull`, `Draw` |
-| Projection (декали) | `IProjectionObject` | то же | `Draw(effect, depthMap)` |
+| Pre-render | `IPreRenderRenderer` | — | `PreRenderUpdate(...)` is called on the render thread before the frame (for example, the grass sway texture) |
+| Opaque | `IRenderableObject` | (Effect, Technique, VerticesHash), binary insertion | `Cull`, `Draw`, `DrawShadow`; techniques Depth/Technique/Shadow (−1 = none) |
+| Additive | `IRenderableAdditiveObject` | same | `Cull`, `Draw` |
+| Projection (decals) | `IProjectionObject` | same | `Draw(effect, depthMap)` |
 | Post | `IPostEffect` | ZIndex | `Draw(dt, pixelSize, view, proj, color, depth, normal)` |
 | GUI | `IRenderableGUIObject` | ZIndex | `Draw(dt)` |
-| Lights | `Light` (вне каналов) | группировка по (Effect, Technique) | add/remove через очереди, применяются в `UpdateLights` |
+| Lights | `Light` (outside channels) | grouped by (Effect, Technique) | add/remove via queues, applied in `UpdateLights` |
 
-Эффект объекта задаётся **int-ID** = `Type.GetHashCode()` класса эффекта и
-регистрируется в `RenderManager` (словарь ID → Effect). Внутри одной группы
-(Effect+Technique) один раз выполняется `Begin`/`Pass.Begin`, а VB/IB/Decl
-переключаются только при изменении. **Для OpenMagicka:** вместо хеша типа нужен стабильный enum или ID.
+An object's effect is specified by an **int ID** = `Type.GetHashCode()` of the effect class and
+is registered in `RenderManager` (an ID → Effect dictionary). Within one group
+(Effect+Technique), `Begin`/`Pass.Begin` runs once, and VB/IB/Decl
+are switched only when they change. **For OpenMagicka:** a stable enum or ID is needed instead of the type hash.
 
 ### 3.2 Render targets
 
-Все RT пересоздаются при смене размера backbuffer (событие `ResulutionChanged`).
+All RTs are recreated when the backbuffer size changes (the `ResulutionChanged` event).
 
-| RT | Размер | Формат | Назначение |
+| RT | Size | Format | Purpose |
 |---|---|---|---|
-| `DepthBuffer` | экран | **R32F** (`Single`) | Линейная/проективная глубина из depth-препасса. Читается светом, декалями, частицами (soft), пост-эффектами |
-| `MainBuffer` (MRT0) | экран | `Color` RGBA8 | Альбедо и параметры материала, затем результат композиции |
-| `NormalBuffer` (MRT1) | экран | `Color` RGBA8 | Нормаль и параметры (очищается в (0.5, 0.75, 0.5, 0.5)) |
-| `SecondaryBuffer` | экран | `Color` | Аккумулятор света, затем копия сцены для пост-эффектов |
-| `GUIBuffer` | экран | `Color`, **4× MSAA** при поддержке | Итог сцены после фильтра + GUI + переход |
-| GUI depth-stencil | экран | D24S8, MSAA как у GUI | — |
-| `SixteenthA/B` | экран/16 | `Color` | Bloom |
-| Half/Quarter/Eighth | — | объявлены, но не создаются | (мёртвый код) |
-| `ScreenShot` | экран | `ResolveTexture2D` | Скриншот (сейвы, Tome) |
+| `DepthBuffer` | screen | **R32F** (`Single`) | Linear/projective depth from the depth prepass. Read by lights, decals, particles (soft), post effects |
+| `MainBuffer` (MRT0) | screen | `Color` RGBA8 | Albedo and material parameters, then the composition result |
+| `NormalBuffer` (MRT1) | screen | `Color` RGBA8 | Normal and parameters (cleared to (0.5, 0.75, 0.5, 0.5)) |
+| `SecondaryBuffer` | screen | `Color` | Light accumulator, then a copy of the scene for post effects |
+| `GUIBuffer` | screen | `Color`, **4× MSAA** when supported | Scene result after the filter + GUI + transition |
+| GUI depth-stencil | screen | D24S8, MSAA same as GUI | — |
+| `SixteenthA/B` | screen/16 | `Color` | Bloom |
+| Half/Quarter/Eighth | — | declared but not created | (dead code) |
+| `ScreenShot` | screen | `ResolveTexture2D` | Screenshot (saves, Tome) |
 | Shadow map directional/spot | `ModShadowResolution(base)` | **R32F** + D24 | — |
-| Shadow map point | cube, тот же размер | **R32F cube** + D24 | 6 граней |
-| Sway target (`GameScene`) | 512² | HalfVector4 (fallback Vector4) | Отклонение растительности от сущностей |
-| Loading screen | экран | `Color` | — |
+| Shadow map point | cube, same size | **R32F cube** + D24 | 6 faces |
+| Sway target (`GameScene`) | 512² | HalfVector4 (fallback Vector4) | Vegetation displacement from entities |
+| Loading screen | screen | `Color` | — |
 
-Точную раскладку каналов G-buffer (что лежит в A у Main/Normal, как кодируется
-нормаль и spec/emissive) можно восстановить только дизассемблированием шейдеров
-(§4.4). По именам параметров материала в нём есть diffuse, spec amount и power,
-emissive amount, normal power и reflectiveness.
+The exact G-buffer channel layout (what is in A of Main/Normal, how the
+normal and spec/emissive are encoded) can only be recovered by disassembling the shaders
+(§4.4). Judging by the material parameter names, it holds diffuse, spec amount and power,
+emissive amount, normal power and reflectiveness.
 
-### 3.3 Порядок проходов `RenderManager.RenderScene`
+### 3.3 `RenderManager.RenderScene` pass order
 
 ```mermaid
 flowchart TD
-    A[PreRender update объектов] --> B[RT0=Depth R32F: Clear-эффект fullscreen]
-    B --> C[Scene.DrawDepth: техника Depth всех opaque, cull CCW]
-    C --> D["MRT: Main+Normal. RestoreDepth fullscreen:<br/>Main=(BG,0), Normal=(0.5,0.75,0.5,0.5), восстанавливает z из Depth"]
+    A[PreRender update of objects] --> B[RT0=Depth R32F: Clear effect fullscreen]
+    B --> C[Scene.DrawDepth: Depth technique of all opaque, cull CCW]
+    C --> D["MRT: Main+Normal. RestoreDepth fullscreen:<br/>Main=(BG,0), Normal=(0.5,0.75,0.5,0.5), restores z from Depth"]
     D --> E[Scene.Draw: G-buffer, stencil Always/Replace ref 0*]
-    E --> F[Scene.DrawProjection: декали, alpha-blend, без записи альфы, stencil Keep]
-    F --> G[UpdateLights: применение очередей, Light.Update]
-    G --> H[DrawLightShadows: shadow maps источников с CastShadows]
+    E --> F[Scene.DrawProjection: decals, alpha blend, no alpha write, stencil Keep]
+    F --> G[UpdateLights: apply queues, Light.Update]
+    G --> H[DrawLightShadows: shadow maps of lights with CastShadows]
     H --> I["RT=Secondary clear 0. Blend One/InvSrcColor (screen-like add)<br/>Scene.DrawLights(normal, depth)"]
-    I --> J["RT=Main: DeferredShading fullscreen<br/>(Main, Normal, Depth, Secondary=свет) + линейный туман"]
-    J --> K[SkyMap fullscreen, если задан 2D-skymap]
-    K --> L[DrawAdditive: Blend InvDestColor/One, depth test без записи]
-    L --> M[ParticleSystem.Draw: instancing, soft по Depth]
-    M --> N[RT=Secondary: копия Main]
-    N --> O[Scene.DrawPost: IPostEffect по ZIndex, источник Main/Depth/Normal]
-    O --> P["RT=GUI(MSAA): Filter (brightness/contrast/saturation) из Secondary"]
-    P --> Q[DrawGui текущей сцены + persistent]
-    Q --> R[Transition: fade/crossfade поверх GUI-буфера]
-    R --> S["Bloom: Downsample+threshold → 1/16, H-blur, V-blur → Combine в backbuffer"]
-    S --> T[опц. ResolveBackBuffer → скриншот]
+    I --> J["RT=Main: DeferredShading fullscreen<br/>(Main, Normal, Depth, Secondary=light) + linear fog"]
+    J --> K[SkyMap fullscreen, if a 2D skymap is set]
+    K --> L[DrawAdditive: Blend InvDestColor/One, depth test without write]
+    L --> M[ParticleSystem.Draw: instancing, soft by Depth]
+    M --> N[RT=Secondary: copy of Main]
+    N --> O[Scene.DrawPost: IPostEffect by ZIndex, source Main/Depth/Normal]
+    O --> P["RT=GUI(MSAA): Filter (brightness/contrast/saturation) from Secondary"]
+    P --> Q[DrawGui of current scene + persistent]
+    Q --> R[Transition: fade/crossfade over the GUI buffer]
+    R --> S["Bloom: Downsample+threshold → 1/16, H-blur, V-blur → Combine into backbuffer"]
+    S --> T[opt. ResolveBackBuffer → screenshot]
 ```
 
-\* Значения stencil задают сами объекты: уровень 0, аватары 1, анимированные физобъекты 2
-(используется для силуэтов за стенами). Часть состояний, видимо, сидит в state-блоках
-FX-пассов.
+\* Stencil values are set by the objects themselves: level 0, avatars 1, animated physics objects 2
+(used for silhouettes behind walls). Some of the states apparently live in the state blocks
+of FX passes.
 
-Важные детали:
+Important details:
 
-- **Bloom применяется после GUI**, поэтому яркий GUI тоже светится. Параметры по
-  умолчанию: threshold 0.8, multiplier 1.0, sigma 2.5. Сцена может их переопределить.
-- **Глобальные параметры** (View, Projection, ViewProjection, InverseViewProjection,
-  CameraPosition, EyeOfTheBeholder, Time ∈ [0,1) по модулю 1) передаются через
-  `DummyEffect` и **общий `EffectPool`**. Все эффекты, созданные с этим пулом, видят их
-  как `shared`. В проходе теней `ViewProjection` в пуле временно подменяется матрицей
-  источника.
-- `TextureLODBias` = −0.5 на сэмплерах 0…7.
-- Свет накапливается в `Color` RGBA8, то есть HDR нет. Есть параметр GUI `ScaleToHDR`.
-- `GUIScale` = высота экрана / 720.
-- Переходы (`Transitions`): None, Fade, CrossFade. Цвет и время задаются,
-  `TransitionEnd` вызывается по завершении направления In.
-- Матрица «пиксели → clip» для GUI учитывает DX9 half-pixel offset (−1−1/W, +1+1/H).
+- **Bloom is applied after the GUI**, so a bright GUI glows too. Default
+  parameters: threshold 0.8, multiplier 1.0, sigma 2.5. A scene can override them.
+- **Global parameters** (View, Projection, ViewProjection, InverseViewProjection,
+  CameraPosition, EyeOfTheBeholder, Time ∈ [0,1) modulo 1) are passed through
+  `DummyEffect` and a **shared `EffectPool`**. All effects created with this pool see them
+  as `shared`. In the shadow pass, `ViewProjection` in the pool is temporarily replaced with the light's
+  matrix.
+- `TextureLODBias` = −0.5 on samplers 0…7.
+- Light is accumulated in `Color` RGBA8, so there is no HDR. There is a GUI parameter `ScaleToHDR`.
+- `GUIScale` = screen height / 720.
+- Transitions (`Transitions`): None, Fade, CrossFade. Color and time are configurable,
+  `TransitionEnd` is called when the In direction completes.
+- The "pixels → clip" matrix for the GUI accounts for the DX9 half-pixel offset (−1−1/W, +1+1/H).
 
-### 3.4 Источники света
+### 3.4 Light sources
 
-| Тип | Геометрия | Техники | Тени |
+| Type | Geometry | Techniques | Shadows |
 |---|---|---|---|
-| `DirectionalLight` | fullscreen quad | WithShadows / WithoutShadows | 2D R32F, ортопроекция привязана к «snapped ground position». Может проецировать текстуру (облака): ProjectedTexture, Offset, Scale, Intensity |
-| `PointLight` | икосфера 42 вершины / 80 треугольников, масштаб = радиус; cull CW изнутри | WithShadows / WithoutShadows | Cube R32F, 6 проходов |
-| `SpotLight` | конус | 4 техники (± тени, ± затухание) | 2D R32F |
-| `PointLightBatcher` | instancing сферы, до **128** источников, per-instance 48 байт | одна | нет |
-| `ParticleLightBatcher` | то же, до **256** источников, свет от частиц со своим TTL, гравитацией, drag | одна | нет |
-| `CapsuleLight`, `DynamicLight` (Magicka) | капсула | свои эффекты | — |
+| `DirectionalLight` | fullscreen quad | WithShadows / WithoutShadows | 2D R32F, orthographic projection anchored to the "snapped ground position". Can project a texture (clouds): ProjectedTexture, Offset, Scale, Intensity |
+| `PointLight` | icosphere 42 vertices / 80 triangles, scale = radius; cull CW from inside | WithShadows / WithoutShadows | Cube R32F, 6 passes |
+| `SpotLight` | cone | 4 techniques (± shadows, ± attenuation) | 2D R32F |
+| `PointLightBatcher` | sphere instancing, up to **128** lights, 48 bytes per instance | one | no |
+| `ParticleLightBatcher` | same, up to **256** lights, light from particles with its own TTL, gravity, drag | one | no |
+| `CapsuleLight`, `DynamicLight` (Magicka) | capsule | own effects | — |
 
-Общие свойства `Light`: DiffuseColor, AmbientColor, SpecularAmount, Intensity,
-`LightVariationType` (мерцание: Speed, Amount), `LightTransitionType` (появление и исчезание
-за заданное время), Enabled, CastShadows.
+Common `Light` properties: DiffuseColor, AmbientColor, SpecularAmount, Intensity,
+`LightVariationType` (flicker: Speed, Amount), `LightTransitionType` (fade in and fade out
+over a given time), Enabled, CastShadows.
 
-### 3.5 Материалы и эффекты PolygonHead
+### 3.5 PolygonHead materials and effects
 
-| Эффект | Техники | Ключевые параметры / заметки |
+| Effect | Techniques | Key parameters / notes |
 |---|---|---|
-| `RenderDeferredEffect` (статическая геометрия, 710 материалов в XNB) | SingleLayer, DualLayer, SingleLayerReflection, DualLayerReflection, Depth, Shadow, AdditiveFresnel | 2 слоя: DiffuseColor, Spec Amount/Power, Emissive, NormalPower, Reflectiveness, Diffuse/Material/Normal-текстуры, AlphaMask, ReflectionMap (cube), FresnelPower, VertexColor, Sway и EntityInfluence (трава), Bloat. Вариант **WVT** (vertex texture fetch sway-текстуры) или **WOVT**: выбор зависит от поддержки VTF формата Vector4 |
-| `RenderDeferredLiquidEffect` (вода/лёд) | Default, Reflection, Depth, Shadow | WaveHeight, WaveSpeed0/1, BottomColor, DeepBottomColor, Water Spec/Emissive, WaterNormalMap, ReflectionMap; лёд: IceColor, IceDiffuse/Normal/EdgeMap. Второй vertex-поток — **float «заморозки» на вершину** (динамический VB), лёд при ≥ 0.5 |
-| `LavaEffect` | Default, Depth, Shadow | MaskDistortion, Speed0/1, Hot/Cold emissive, TempFrequency, ToneMap, TempMap, MaskMap, Rock* (камень, который появляется при охлаждении) |
-| `SkinnedModelDeferredEffect` | Default, AlphaBlended, Additive, Depth, Shadow, NonDeffered, AdditiveFresnel | Персонажи. RimLight, Bloat, Colorize |
-| `SkinnedModelDeferredNormalMapped` | — | Скиннинг + normal map |
-| `AdditiveEffect` | Technique1 | Additive-объекты |
-| `HardwareInstancedProjectionEffect` | — | Декали: до 30 инстансов на draw через **массивы констант** (World, InvWorld, Args, Colors), куб 8 вершин / 12 треугольников |
-| `ProjectionEffect` | — | Одиночная проекция (круги под аватарами) |
-| `DeferredShadingEffect` | — | Композиция: Main × свет + туман (FogEnable, Start, End, Color) |
-| `FogEffect` | Exponential, ExponentialSquare, Linear | Отдельный пост-эффект тумана |
-| `SkyMapEffect` | — | Fullscreen 2D-skymap × Color |
+| `RenderDeferredEffect` (static geometry, 710 materials in XNB) | SingleLayer, DualLayer, SingleLayerReflection, DualLayerReflection, Depth, Shadow, AdditiveFresnel | 2 layers: DiffuseColor, Spec Amount/Power, Emissive, NormalPower, Reflectiveness, Diffuse/Material/Normal textures, AlphaMask, ReflectionMap (cube), FresnelPower, VertexColor, Sway and EntityInfluence (grass), Bloat. Variant **WVT** (vertex texture fetch of the sway texture) or **WOVT**: the choice depends on support for VTF of the Vector4 format |
+| `RenderDeferredLiquidEffect` (water/ice) | Default, Reflection, Depth, Shadow | WaveHeight, WaveSpeed0/1, BottomColor, DeepBottomColor, Water Spec/Emissive, WaterNormalMap, ReflectionMap; ice: IceColor, IceDiffuse/Normal/EdgeMap. The second vertex stream is a **per-vertex "freeze" float** (dynamic VB), ice at ≥ 0.5 |
+| `LavaEffect` | Default, Depth, Shadow | MaskDistortion, Speed0/1, Hot/Cold emissive, TempFrequency, ToneMap, TempMap, MaskMap, Rock* (rock that appears when it cools) |
+| `SkinnedModelDeferredEffect` | Default, AlphaBlended, Additive, Depth, Shadow, NonDeffered, AdditiveFresnel | Characters. RimLight, Bloat, Colorize |
+| `SkinnedModelDeferredNormalMapped` | — | Skinning + normal map |
+| `AdditiveEffect` | Technique1 | Additive objects |
+| `HardwareInstancedProjectionEffect` | — | Decals: up to 30 instances per draw via **constant arrays** (World, InvWorld, Args, Colors), cube of 8 vertices / 12 triangles |
+| `ProjectionEffect` | — | Single projection (circles under avatars) |
+| `DeferredShadingEffect` | — | Composition: Main × light + fog (FogEnable, Start, End, Color) |
+| `FogEffect` | Exponential, ExponentialSquare, Linear | Separate fog post effect |
+| `SkyMapEffect` | — | Fullscreen 2D skymap × Color |
 | `BloomEffect` | DownSample, HorizontalBlur, VerticalBlur, Combine | Threshold, Multiplier, Sigma |
 | `FilterEffect` | — | Brightness, Contrast, Saturation |
-| `RestoreDepthEffect`, `ClearEffect`, `BasicPostProcessingEffect` | — | Служебные fullscreen |
-| `Fade/CrossFadeTransitionEffect` | — | Переходы |
-| `GUIBasicEffect` | Texture2D, Texture3D | Transform, Color, Texture, OverlayTexture и Tint, TextureOffset и Scale, ScaleToHDR, Saturation |
+| `RestoreDepthEffect`, `ClearEffect`, `BasicPostProcessingEffect` | — | Utility fullscreen |
+| `Fade/CrossFadeTransitionEffect` | — | Transitions |
+| `GUIBasicEffect` | Texture2D, Texture3D | Transform, Color, Texture, OverlayTexture and Tint, TextureOffset and Scale, ScaleToHDR, Saturation |
 | `ParticleEffect` | Default | §5 |
-| Magicka-эффекты (`Content/Shaders`) | — | Arcane, Buff, Chasm, Entangle, ForceField, Shield, Invisibility, Mist, NormalDistortion, RadialBlur, RainSplash, Saturation, Sway, Vortex, SpellWheel, TextBox, NotifierButton, Pie, Flash, CapsuleLight, DecalHardwareInstancing, GUIHardwareInstancing, SkinnedModelSkeleton, SkinnedShield |
+| Magicka effects (`Content/Shaders`) | — | Arcane, Buff, Chasm, Entangle, ForceField, Shield, Invisibility, Mist, NormalDistortion, RadialBlur, RainSplash, Saturation, Sway, Vortex, SpellWheel, TextBox, NotifierButton, Pie, Flash, CapsuleLight, DecalHardwareInstancing, GUIHardwareInstancing, SkinnedModelSkeleton, SkinnedShield |
 
-Материалы (`IMaterial<T>`: Fetch, AssignToEffect, AssignOpacity) — это лёгкие
-структуры параметров. Один экземпляр эффекта общий, материал заливается перед
-`Draw` каждого объекта и подтверждается через `CommitChanges`.
+Materials (`IMaterial<T>`: Fetch, AssignToEffect, AssignOpacity) are lightweight
+parameter structures. One effect instance is shared; the material is uploaded before
+each object's `Draw` and committed via `CommitChanges`.
 
-### 3.6 Небо, туман, цветокоррекция по сцене
+### 3.6 Sky, fog, per-scene color grading
 
-`GameScene` (XML сцены) задаёт `Fog` (Enabled, Start, End, Color RGBA), SkyMap (2D-текстуру),
-Brightness, Contrast, Saturation, параметры bloom и `RoomType` (§8). При выходе
-из `PlayState` всё сбрасывается к дефолтам: туман выкл., 1/1/1, без skymap, sigma 2.5.
+`GameScene` (scene XML) sets `Fog` (Enabled, Start, End, Color RGBA), SkyMap (a 2D texture),
+Brightness, Contrast, Saturation, bloom parameters and `RoomType` (§8). On leaving
+`PlayState` everything is reset to defaults: fog off, 1/1/1, no skymap, sigma 2.5.
 
-### 3.7 Декали
+### 3.7 Decals
 
-- `DecalManager`: атлас `EffectTextures/decals` из **8×8 ячеек** (enum `Decal`:
-  кровь пяти видов × 4 варианта, Scorched, Crater, Cold, Water, LifeGround, ArcaneGround,
-  Buff/Aura × 3, Grease, MagickCircle, MagickBurn, Cracks, резерв, TestPattern).
-- Декали — это проецируемые боксы (deferred decals). Пиксель берётся из depth-буфера и
-  переводится в локальное пространство бокса через InvWorld. Рисуются батчами по 30,
-  stencil Equal ref 1, без записи глубины. Есть TTL и fade, можно привязать к анимированной
-  части уровня. Лимит задаёт `DecalLimit`.
+- `DecalManager`: atlas `EffectTextures/decals` of **8×8 cells** (enum `Decal`:
+  five kinds of blood × 4 variants, Scorched, Crater, Cold, Water, LifeGround, ArcaneGround,
+  Buff/Aura × 3, Grease, MagickCircle, MagickBurn, Cracks, reserved, TestPattern).
+- Decals are projected boxes (deferred decals). A pixel is taken from the depth buffer and
+  transformed into the box's local space via InvWorld. They are drawn in batches of 30,
+  stencil Equal ref 1, no depth write. They have TTL and fade and can be attached to an animated
+  level part. The limit is set by `DecalLimit`.
 
-### 3.8 GUI и текст
+### 3.8 GUI and text
 
-- `BitmapFont` (XNB `BitmapFontReader`): lineHeight, baseLine, defaultChar, текстура,
-  глифы (char, origin XY, size XY, advance, LSB, ForceWhite), кернинг (пары char → int).
-- `Text`: VB по 128 байт на символ (4 вершины × 32 байта: pos2, uv2, color4), статический
-  или динамический, выравнивание. **Встроенная разметка:** `[c=r,g,b(,a)]…[/c]` задаёт цвет.
-  Локализация вставляет её при раскрытии ссылок `#key;`.
-- Шрифты: `Languages/<lang>/Font/{Maiandra14/16/18, Stonecross28/36/50, Versustext,
-  MenuDefault, MenuOption, MenuTitle, PDXUI*…}`. Набор свой для каждого языка, при
-  отсутствии берётся английский.
-- GUI рисуется в `GUIBuffer` с alpha-blend (SrcAlpha/InvSrcAlpha) после
-  цветокоррекции сцены.
+- `BitmapFont` (XNB `BitmapFontReader`): lineHeight, baseLine, defaultChar, texture,
+  glyphs (char, origin XY, size XY, advance, LSB, ForceWhite), kerning (char pairs → int).
+- `Text`: VB of 128 bytes per character (4 vertices × 32 bytes: pos2, uv2, color4), static
+  or dynamic, alignment. **Inline markup:** `[c=r,g,b(,a)]…[/c]` sets the color.
+  Localization inserts it when expanding `#key;` references.
+- Fonts: `Languages/<lang>/Font/{Maiandra14/16/18, Stonecross28/36/50, Versustext,
+  MenuDefault, MenuOption, MenuTitle, PDXUI*…}`. Each language has its own set; if
+  missing, the English one is used.
+- The GUI is drawn into `GUIBuffer` with alpha blend (SrcAlpha/InvSrcAlpha) after
+  scene color grading.
 
 ---
 
-## 4. Шейдеры: хранение и загрузка
+## 4. Shaders: storage and loading
 
-### 4.1 Встроенный байткод
+### 4.1 Embedded bytecode
 
-Каждый класс `XxxEffectCode` содержит статический `byte[] CODE` (в IL это FieldRVA) —
-скомпилированный **D3D9 Effect** (`fx_2_0`: первые байты `01 09 FF FE`). Конструктор
-эффекта передаёт байткод в `Effect(GraphicsDevice, byte[], CompilerOptions, EffectPool)`.
-PolygonHead содержит 27 таких блобов.
+Each `XxxEffectCode` class contains a static `byte[] CODE` (a FieldRVA in IL) —
+a compiled **D3D9 Effect** (`fx_2_0`: first bytes `01 09 FF FE`). The effect
+constructor passes the bytecode to `Effect(GraphicsDevice, byte[], CompilerOptions, EffectPool)`.
+PolygonHead contains 27 such blobs.
 
-### 4.2 Совпадение с `Content/Shaders/*.xnb`
+### 4.2 Match with `Content/Shaders/*.xnb`
 
-Скриптом (`xnb.py` + сравнение) проверено:
+Verified by a script (`xnb.py` + comparison):
 
-- **25 эффектов побайтно совпадают** с соответствующим `.xnb`: Additive,
+- **25 effects match byte for byte** the corresponding `.xnb`: Additive,
   BasicPostProcessing, BatchedPointLight, Bloom, Clear, CrossFade, DeferredShading,
   DirectionalLight, FadeTransition, Filter, Fog, GUIBasic, HardwareInstancedProjection,
   Lava, Particle, PointLight, Projection, RenderDeferredWOVT/WVT, RenderDeferredLiquid,
   RestoreDepth, SkinnedModelDeferredNormalMapped, SkyMap, SpotLight.
-- **Отличаются:** `DummyEffect` (встроенный 1236 байт, в xnb 1156; игра всё равно
-  грузит xnb-версию как «local dummy») и `SkinnedModelDeferredEffect` (размер
-  одинаковый, 77720 байт, содержимое разное, видимо, другая сборка). Какой вариант
-  правильный, нужно проверить.
-- Ещё 25 эффектов Magicka существуют **только** как `.xnb`.
+- **Differ:** `DummyEffect` (embedded 1236 bytes, xnb 1156; the game loads
+  the xnb version anyway as the "local dummy") and `SkinnedModelDeferredEffect` (same
+  size, 77720 bytes, different content, apparently a different build). Which variant
+  is correct must be checked.
+- Another 25 Magicka effects exist **only** as `.xnb`.
 
-XNB-обёртка эффекта (XNA 3.1): reader `Microsoft.Xna.Framework.Content.EffectReader`,
-за ним int32 длина и байткод (смещение 56 после LZX-распаковки). Профили: почти всё
-**vs_3_0 / ps_3_0**. Arcane, Flash, NormalDistortion, Pie и Saturation собраны под SM 2.0.
-Многие эффекты содержат **preshader'ы** (`FXLC`) и state-блоки в пассах.
+XNB effect wrapper (XNA 3.1): reader `Microsoft.Xna.Framework.Content.EffectReader`,
+followed by an int32 length and the bytecode (offset 56 after LZX decompression). Profiles: almost everything is
+**vs_3_0 / ps_3_0**. Arcane, Flash, NormalDistortion, Pie and Saturation are built for SM 2.0.
+Many effects contain **preshaders** (`FXLC`) and state blocks in passes.
 
-### 4.3 Пригодность для FNA / MojoShader
+### 4.3 Suitability for FNA / MojoShader
 
-- FNA создаёт `Effect` из «сырого» D3D9 effect-байткода и транслирует его через
-  MojoShader (GLSL, SPIR-V, Metal, DXBC через SDL_GPU). Поддерживаются fx_2_0, SM1–3,
-  preshader'ы и state-блоки пассов. **Поэтому оригинальные шейдеры можно брать прямо
-  из `Content/Shaders` пользователя** без извлечения из DLL и без копирования их в репозиторий.
-- Препятствия и как их обойти:
-  1. **`EffectPool` и `shared`-параметры в XNA 4.0/FNA отсутствуют.** Глобальные
-     параметры (`View`, `Projection`, `ViewProjection`, `InverseViewProjection`,
-     `CameraPosition`, `EyeOfTheBeholder`, `Time`) нужно явно выставлять на каждом
-     эффекте перед `Apply`. Надо проверить, как MojoShader обрабатывает параметры с
-     флагом shared: скорее всего, как обычные.
-  2. В XNA 3.1 API были `Begin`/`Pass.Begin`/`CommitChanges`, в FNA вместо них `Pass.Apply()`.
-     Изменение параметров после `Apply` требует повторного `Apply`.
-  3. Render state в FX-пассах (blend, stencil, cull) FNA применяет. Надо проверить, что
-     state'ы, выставленные кодом, не перетирают нужные значения: в XNA 3.1 код ставил
-     state до `Begin`.
-  4. Инстансинг через stream frequency (`SetFrequencyOfIndexData`) заменяется на
+- FNA creates an `Effect` from "raw" D3D9 effect bytecode and translates it through
+  MojoShader (GLSL, SPIR-V, Metal, DXBC via SDL_GPU). fx_2_0, SM1–3,
+  preshaders and pass state blocks are supported. **So the original shaders can be taken directly
+  from the user's `Content/Shaders`**, without extracting them from the DLL and without copying them into the repository.
+- Obstacles and how to work around them:
+  1. **`EffectPool` and `shared` parameters do not exist in XNA 4.0/FNA.** Global
+     parameters (`View`, `Projection`, `ViewProjection`, `InverseViewProjection`,
+     `CameraPosition`, `EyeOfTheBeholder`, `Time`) must be set explicitly on each
+     effect before `Apply`. It needs checking how MojoShader handles parameters with
+     the shared flag: most likely as ordinary ones.
+  2. The XNA 3.1 API had `Begin`/`Pass.Begin`/`CommitChanges`; FNA has `Pass.Apply()` instead.
+     Changing parameters after `Apply` requires another `Apply`.
+  3. FNA applies render state in FX passes (blend, stencil, cull). It needs checking that
+     states set by code do not overwrite the required values: in XNA 3.1 code set
+     state before `Begin`.
+  4. Instancing via stream frequency (`SetFrequencyOfIndexData`) is replaced with
      `VertexBufferBinding(…, instanceFrequency:1)` + `DrawInstancedPrimitives`.
-     Семантики и раскладка вершин те же.
-  5. Вариант WVT требует vertex texture fetch формата Vector4. Безопаснее начать с WOVT.
-  6. DX9 half-pixel: FNA эмулирует DX9-правила растеризации, а шейдеры получают
-     `HalfPixel` явно. Ожидается корректная работа, но это надо проверить на точечных источниках света.
+     Semantics and vertex layout stay the same.
+  5. The WVT variant requires vertex texture fetch of the Vector4 format. It is safer to start with WOVT.
+  6. DX9 half-pixel: FNA emulates DX9 rasterization rules, and shaders receive
+     `HalfPixel` explicitly. Correct behavior is expected, but it must be checked on point lights.
 
-### 4.4 Дизассемблирование
+### 4.4 Disassembly
 
-Чтобы точно понять G-buffer, нужен дамп шейдеров: `fxc /dumpbin` (Windows SDK) или
-`MOJOSHADER_parseEffect` → GLSL. Делать дамп стоит **только у себя локально из ассетов
-пользователя**, в репозиторий его не класть. Цель — документировать раскладку
-каналов, а не переносить код. В долгосрочной перспективе свои HLSL-шейдеры с той же
-раскладкой снимают зависимость от оригинальных блобов (и позволяют моды).
+To understand the G-buffer exactly, a shader dump is needed: `fxc /dumpbin` (Windows SDK) or
+`MOJOSHADER_parseEffect` → GLSL. The dump should be made **only locally from the user's
+assets** and not committed to the repository. The goal is to document the channel
+layout, not to port code. In the long run, our own HLSL shaders with the same
+layout remove the dependency on the original blobs (and enable mods).
 
 ---
 
-## 5. Частицы
+## 5. Particles
 
-### 5.1 `ParticleSystem` (GPU-часть)
+### 5.1 `ParticleSystem` (GPU part)
 
-- Глобальный пул **32768** частиц, свободные индексы хранятся в min-heap. Обновление на
-  CPU в logic-потоке:
+- A global pool of **32768** particles; free indices are kept in a min-heap. Update runs on the
+  CPU in the logic thread:
   - `TTL -= dt`;
-  - нормализованное время жизни = 1 − TTL/maxTTL;
+  - normalized lifetime = 1 − TTL/maxTTL;
   - `vel.y += gravity·dt`;
-  - `vel *= drag^dt` (drag — доля скорости, сохраняемая за секунду);
+  - `vel *= drag^dt` (drag is the fraction of velocity kept per second);
   - `pos += vel·dt`, `rot += rotSpeed·dt`;
-  - размер линейно интерполируется между start и end по времени жизни.
-- Per-instance данные 56 байт: Position(3f), Rotation, Radius, NormalizedLifetime,
-  Color(4f), Sprite(byte), AlphaBlended(byte), HSV/Colorize(byte: HSV даёт +50, Colorize
-  +5), RotationAligned(byte), Velocity(3f). Квад из 4 вершин (corner id + uv), 6 индексов,
+  - size is linearly interpolated between start and end over the lifetime.
+- Per-instance data is 56 bytes: Position(3f), Rotation, Radius, NormalizedLifetime,
+  Color(4f), Sprite(byte), AlphaBlended(byte), HSV/Colorize(byte: HSV adds +50, Colorize
+  +5), RotationAligned(byte), Velocity(3f). A quad of 4 vertices (corner id + uv), 6 indices,
   hardware instancing.
-- Спрайты лежат в четырёх **Texture3D** (`EffectTextures/ParticlesA…D`), байт `Sprite`
-  выбирает срез. Шейдер получает Depth для soft-частиц.
-- Блендинг **Src=One, Dst=SrcAlpha**, depth test выкл. Один state даёт и additive
-  (шейдер выдаёт α=1), и alpha-blend (premultiplied цвет, α = 1−a), в зависимости от
-  флага частицы.
-- `RotationAligned` ориентирует частицу по скорости.
+- Sprites are stored in four **Texture3D**s (`EffectTextures/ParticlesA…D`); the `Sprite` byte
+  selects the slice. The shader receives Depth for soft particles.
+- Blending **Src=One, Dst=SrcAlpha**, depth test off. One state gives both additive
+  (the shader outputs α=1) and alpha blend (premultiplied color, α = 1−a), depending on the
+  particle flag.
+- `RotationAligned` orients the particle along its velocity.
 
-### 5.2 `VisualEffect` и формат `Effects/**/*.xml` (~904 файла)
+### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (~904 files)
 
 ```text
-<Effect type="Single|Looping|Infinite" duration="сек" keyFramesPerSecond="N" [version="2"]>
-  <ContinuousEmitter name="…"> …параметры… </ContinuousEmitter>
+<Effect type="Single|Looping|Infinite" duration="seconds" keyFramesPerSecond="N" [version="2"]>
+  <ContinuousEmitter name="…"> …parameters… </ContinuousEmitter>
   <PulseEmitter name="…"> … <NrOfParticles …/> </PulseEmitter>
   <Light> <PositionX Value=…/> … DiffuseR/G/B, AmbientR/G/B, Specular, Radius,
           VariationType/Speed/Amount, Spawn/DespawnTransitionType/Time </Light>
 </Effect>
 ```
 
-- Имя дочернего узла задаёт тип эмиттера: в коде ищется класс с этим именем,
-  реализующий `IParticleEmitter`. Сейчас их два: `ContinuousEmitter` и `PulseEmitter`.
-- Регистр имён тегов и атрибутов не учитывается. Числа записаны в InvariantCulture.
-- Флаговые параметры имеют атрибут `Value`: `BlendMode` (Alpha/Additive),
+- The child node name sets the emitter type: the code looks up a class with that name
+  implementing `IParticleEmitter`. There are currently two: `ContinuousEmitter` and `PulseEmitter`.
+- Tag and attribute names are case-insensitive. Numbers are written in InvariantCulture.
+- Flag parameters have a `Value` attribute: `BlendMode` (Alpha/Additive),
   `SpreadType` (Arc/Cone), `RotationAligned`, `ColorControlAlpha`, `HSV`, `Colorize`,
-  `RelativeVelocity` (добавить скорость эмиттера), `Particle` (индекс спрайта),
+  `RelativeVelocity` (add the emitter's velocity), `Particle` (sprite index),
   `SpawnLights`, `LightSizeRelative`.
-- Анимируемые параметры записываются либо как `<Name value="x"/>` (константа), либо
-  как `<Name><key time="кадр" value="x"/>…</Name>`. Время задаётся в кадрах и делится на
-  `keyFramesPerSecond`. Между ключами значения интерпролируются линейно, за краями
-  берётся крайнее значение. Отсутствующий параметр равен 1.
-  Полный список: ParticlesPerSecond, PositionX/Y/Z, Position{X,Y,Z}Offset, RotationY,
+- Animatable parameters are written either as `<Name value="x"/>` (a constant) or
+  as `<Name><key time="frame" value="x"/>…</Name>`. Time is given in frames and divided by
+  `keyFramesPerSecond`. Between keys values are interpolated linearly; outside the range
+  the edge value is used. A missing parameter equals 1.
+  Full list: ParticlesPerSecond, PositionX/Y/Z, Position{X,Y,Z}Offset, RotationY,
   Gravity, Drag, ColorR/G/B, ColorAMin/Max/Distribution, Hue/Sat/Value/Alpha
   Min/Max/Distribution, LifeTimeMin/Max/Distribution, SizeStart/SizeEnd Min/Max/
   Distribution, VelocityMin/Max/Distribution, RotationMin/Max, RotationSpeedMin/Max,
-  RotationPCCW (процент частиц, вращающихся против часовой), SpreadConeAngle/
+  RotationPCCW (percentage of particles rotating counterclockwise), SpreadConeAngle/
   Distribution, SpreadArcHorizontalAngle/Distribution, SpreadArcVerticalMin/Max/
   Distribution, LightRadius, LightDiffuseR/G/B, LightAmbientR/G/B, LightSpecular.
-- Углы (Hue, Rotation, RotationSpeed, Spread*) в файле задаются **в градусах** и
-  переводятся в радианы.
-- **Version 1** (атрибут отсутствует): цвет берётся из `Alpha*` как ColorA,
-  ColorR/G/B/Value равны 1, источников света нет. **Version 2** добавляет
-  SpawnLights и LightSizeRelative.
-- Параметр `*Distribution` — это показатель степени: случайное u∈[0,1) возводится в
-  степень d, затем отображается на [min,max]. d>1 смещает значения к min.
-- Случайные числа берутся из **предвычисленной таблицы** на 65536 float и 65536 байт
-  (0…99), построенной стандартным `System.Random(seed=0)` .NET Framework. Каждый
-  эмиттер хранит 16-битный курсор с начальным значением из `DateTime.Now.Ticks`.
-  `new Random(0)` в современном .NET (с явным seed) воспроизводит тот же legacy-алгоритм, так что таблицу можно
-  получить идентичной.
-- Emission в `ContinuousEmitter`: темп — среднее значений PPS в начале и конце кадра,
-  умноженное на глобальный `SpawnModifier` (настройка Particles). Число частиц равно разности
-  floor(totalTime·rate) между кадрами. Позиции и трансформы интерполируются между прошлым
-  и текущим кадром, чтобы быстрые эмиттеры оставляли непрерывный след. Направление: Cone
-  (вокруг оси Z локальной матрицы) или Arc (горизонтальный угол ± и вертикальный диапазон,
-  ось −Z).
-- `VisualEffect.Update`: Single останавливается по истечении duration, Looping
-  оборачивает время по модулю, Infinite держит последний кадр. Источник `<Light>`
-  через `PointLightBatcher` следует за трансформом эффекта.
-- `EffectManager` (Magicka) при старте рекурсивно читает `content/Effects`. Ключ —
-  **хеш имени файла без расширения в lowercase** (§12.1). Одновременно активно до
-  **256** экземпляров. Ссылка на экземпляр (`VisualEffectReference`) = индекс + уникальный ID.
+- Angles (Hue, Rotation, RotationSpeed, Spread*) are given in the file **in degrees** and
+  converted to radians.
+- **Version 1** (attribute absent): color is taken from `Alpha*` as ColorA,
+  ColorR/G/B/Value equal 1, there are no lights. **Version 2** adds
+  SpawnLights and LightSizeRelative.
+- The `*Distribution` parameter is an exponent: a random u∈[0,1) is raised to the
+  power d, then mapped onto [min,max]. d>1 biases values toward min.
+- Random numbers come from a **precomputed table** of 65536 floats and 65536 bytes
+  (0…99), built by the standard .NET Framework `System.Random(seed=0)`. Each
+  emitter keeps a 16-bit cursor initialized from `DateTime.Now.Ticks`.
+  `new Random(0)` in modern .NET (with an explicit seed) reproduces the same legacy algorithm, so the table can be
+  produced identically.
+- Emission in `ContinuousEmitter`: the rate is the mean of the PPS values at the start and end of the frame,
+  multiplied by the global `SpawnModifier` (the Particles setting). The particle count equals the difference
+  of floor(totalTime·rate) between frames. Positions and transforms are interpolated between the previous
+  and current frame so that fast emitters leave a continuous trail. Direction: Cone
+  (around the Z axis of the local matrix) or Arc (horizontal angle ± and vertical range,
+  axis −Z).
+- `VisualEffect.Update`: Single stops when duration expires, Looping
+  wraps time modulo duration, Infinite holds the last frame. A `<Light>` source
+  follows the effect transform via `PointLightBatcher`.
+- `EffectManager` (Magicka) reads `content/Effects` recursively at startup. The key is the
+  **hash of the lowercase file name without extension** (§12.1). Up to
+  **256** instances are active at once. An instance reference (`VisualEffectReference`) = index + unique ID.
 
 ---
 
-## 6. Камера (`MagickCamera`)
+## 6. Camera (`MagickCamera`)
 
-- Перспектива с **очень узким FOV 5°** (почти ортографический вид).
-- Смещение камеры от цели: (0, 144, 171), это ≈224 ед. под углом ≈40° к горизонту.
-  Near 105, Far 500. Аспект в PlayState 16:9 (константа, отдельно есть 4:3).
-- Поведение (`CameraBehaviour`): FollowPlayers, FollowEntity, Locked, MoveToTarget.
-  Интерполяция: Linear (100 ед/с, делённые на время) или Interpolated (пружина со
-  скоростью).
+- Perspective with a **very narrow FOV of 5°** (an almost orthographic view).
+- Camera offset from the target: (0, 144, 171), which is ≈224 units at an angle of ≈40° to the horizon.
+  Near 105, Far 500. Aspect in PlayState is 16:9 (a constant; 4:3 exists separately).
+- Behavior (`CameraBehaviour`): FollowPlayers, FollowEntity, Locked, MoveToTarget.
+  Interpolation: Linear (100 units/s divided by time) or Interpolated (a spring with
+  velocity).
 - FollowPlayers:
-  - цель = среднее позиций живых локальных игроков (если их нет — сетевых);
-  - Y = средний уровень «пола» стоящих игроков;
-  - к цели добавляется «вектор влияния» от враждебных персонажей и bias (`SetBias`,
-    экспоненциальное сглаживание с основанием 0.02).
-- Ограничения:
-  - цель привязывается к **camera mesh** (треугольники из `LevelModel`) или к camera box:
-    берётся ближайшая точка;
-  - 4 плоскости frustum с отступом 0.5 блокируют движение в сторону, где игроки выйдут
-    из кадра (`mCanMoveUp/Right/Down/Left`, `mCanZoomIn`). Их сбрасывают и выставляют
-    сущности.
-- Magnification (зум) = FOV_default / FOV, сглаживание экспоненциальное. Dynamic
-  magnification подбирает зум так, чтобы самый дальний игрок помещался в половину FOV
-  (min/max задаёт скрипт). Есть временное player magnification с TTL.
-- Camera shake: синус от TTL×60, амплитуда затухает линейно.
-- Аудио-listener ставится на 20 ед. выше точки земли под камерой. Forward = Down,
-  Up = Forward (вид сверху).
-- Визуальные эффекты, привязанные к камере, следуют за её позицией.
-- Базовый `PolygonHead.Camera` пишет `CameraState` в буфер канала и строит frustum.
+  - target = mean of the positions of living local players (if there are none, network players);
+  - Y = mean "floor" level of standing players;
+  - an "influence vector" from hostile characters and a bias are added to the target (`SetBias`,
+    exponential smoothing with base 0.02).
+- Constraints:
+  - the target is snapped to the **camera mesh** (triangles from `LevelModel`) or to the camera box:
+    the closest point is taken;
+  - 4 frustum planes with a margin of 0.5 block movement in a direction where players would leave
+    the frame (`mCanMoveUp/Right/Down/Left`, `mCanZoomIn`). Entities reset and set
+    them.
+- Magnification (zoom) = FOV_default / FOV, with exponential smoothing. Dynamic
+  magnification picks the zoom so that the farthest player fits within half the FOV
+  (min/max set by script). There is a temporary player magnification with a TTL.
+- Camera shake: a sine of TTL×60, the amplitude decays linearly.
+- The audio listener is placed 20 units above the ground point under the camera. Forward = Down,
+  Up = Forward (top-down view).
+- Visual effects attached to the camera follow its position.
+- The base `PolygonHead.Camera` writes `CameraState` into the channel buffer and builds the frustum.
 
 ---
 
-## 7. Физика (JigLibX)
+## 7. Physics (JigLibX)
 
-### 7.1 Настройка мира (`PhysicsManager`)
+### 7.1 World setup (`PhysicsManager`)
 
-| Параметр | Значение |
+| Parameter | Value |
 |---|---|
-| Гравитация | (0, −19.64, 0), то есть 2 × 9.82 |
+| Gravity | (0, −19.64, 0), i.e. 2 × 9.82 |
 | Broadphase | `CollisionSystemSAP` (sweep and prune) |
 | Solver | Normal |
-| Freezing (сон тел) | вкл. |
+| Freezing (body sleep) | on |
 | AllowedPenetration | 0.001 |
-| Sweep tests | вкл. |
-| Shock step | выкл. |
-| Шаг | `Integrate(dt)` один раз за logic-тик, `dt` ≤ 0.05 |
-| Freeze/UnFreeze | глобальная пауза физики |
+| Sweep tests | on |
+| Shock step | off |
+| Step | `Integrate(dt)` once per logic tick, `dt` ≤ 0.05 |
+| Freeze/UnFreeze | global physics pause |
 
-### 7.2 Кастомные примитивы и детекторы
+### 7.2 Custom primitives and detectors
 
-- `HollowSphere` — свой тип примитива с ID = `PrimitiveType.NumTypes` (8), то есть
-  первый свободный. Толщина стенки 0.5, ограничение по углу (`MaxAngle`, π по умолчанию)
-  даёт дугу или купол. Используется для щитов (сфера, внутрь которой можно войти).
-- Регистрируются детекторы, которые заменяют или дополняют стандартные пары JigLibX
-  (ключ = type0<<16 | type1): HollowSphere × {Capsule, Sphere, Box, TriangleMesh};
-  **CustomCapsule** × {StaticMesh, Plane, Capsule} (капсула персонажа).
-- `CharacterBody` — тело персонажа на капсуле. Определяет контакт с землёй (нормаль с
-  y < −0.7 в DirToBody0), **материал земли** (индекс примитива в collision skin),
-  отрыв от земли, урон от падения, касание `Water`.
-- `IceMesh` и `WaterMesh` — наследники `TriangleMesh` с per-vertex коэффициентом
-  заморозки. Они фильтруют треугольники в запросах AABB (вода проходима, лёд твёрдый)
-  и переключаются друг в друга. `Lava` устроена так же (застывшая лава).
-- `PhysicsObjectBody` — тело с флагом `ReactToCharacters`. `PointJoint` — шарнир.
+- `HollowSphere` is a custom primitive type with ID = `PrimitiveType.NumTypes` (8), i.e. the
+  first free one. Wall thickness 0.5; an angle limit (`MaxAngle`, π by default)
+  gives an arc or a dome. Used for shields (a sphere you can walk into).
+- Detectors are registered that replace or extend the standard JigLibX pairs
+  (key = type0<<16 | type1): HollowSphere × {Capsule, Sphere, Box, TriangleMesh};
+  **CustomCapsule** × {StaticMesh, Plane, Capsule} (the character capsule).
+- `CharacterBody` is a capsule-based character body. It detects ground contact (a normal with
+  y < −0.7 in DirToBody0), the **ground material** (primitive index in the collision skin),
+  leaving the ground, fall damage, touching `Water`.
+- `IceMesh` and `WaterMesh` are subclasses of `TriangleMesh` with a per-vertex freeze
+  coefficient. They filter triangles in AABB queries (water is passable, ice is solid)
+  and switch into each other. `Lava` works the same way (solidified lava).
+- `PhysicsObjectBody` is a body with a `ReactToCharacters` flag. `PointJoint` is a hinge joint.
 
-### 7.3 Материалы коллизий
+### 7.3 Collision materials
 
 `CollisionMaterials` (byte): Generic, Gravel, Grass, Wood, Snow, Stone, Mud,
-Reflect, Water, Lava (всего 10). `LevelModel` содержит **10 TriangleMesh-примитивов
-по одному на материал**: индекс примитива в skin = материал. Материал выбирает звук
-шагов, эффекты, отражение railgun от `Reflect` и т.п. Параметры трения
-(`MaterialProperties`): уровень (1, 1, 1), вода и лава (0, 10, 10), анимированные части
-(0.1, 1, 1). `CollisionSkinReader` (XNB): вершины Vector3, индексы int32 тройками в
-порядке I2, I1, I0 (порядок обхода инвертирован).
+Reflect, Water, Lava (10 in total). `LevelModel` contains **10 TriangleMesh primitives,
+one per material**: the primitive index in the skin = the material. The material selects the footstep
+sound, effects, railgun reflection off `Reflect`, etc. Friction parameters
+(`MaterialProperties`): level (1, 1, 1), water and lava (0, 10, 10), animated parts
+(0.1, 1, 1). `CollisionSkinReader` (XNB): Vector3 vertices, int32 indices in triples in
+the order I2, I1, I0 (winding order inverted).
 
 ---
 
-## 8. Звук (XACT)
+## 8. Audio (XACT)
 
-- `AudioEngine("content/Audio/magicka.xgs")`. Если не удалось, показывается диалог
-  Abort/Retry/Ignore.
-- Банки загружаются в фоновом потоке. Индекс банка = номер бита в enum `Banks`:
+- `AudioEngine("content/Audio/magicka.xgs")`. On failure, an
+  Abort/Retry/Ignore dialog is shown.
+- Banks are loaded in a background thread. The bank index = the bit number in the `Banks` enum:
 
-| Бит | Bank | .xsb/.xwb | Режим | Форматы |
+| Bit | Bank | .xsb/.xwb | Mode | Formats |
 |---|---|---|---|---|
-| 0 | WaveBank | `Sound Bank.xsb` / `Wave Bank.xwb` | in-memory | **xWMA** 44.1/22 кГц |
+| 0 | WaveBank | `Sound Bank.xsb` / `Wave Bank.xwb` | in-memory | **xWMA** 44.1/22 kHz |
 | 1 | Music | `Music` | **streaming** (packet 64) | MS-ADPCM stereo |
 | 2 | Ambience | `Ambience` | streaming | MS-ADPCM |
-| 3–9 | UI, Spells, Characters, Footsteps, Weapons, Misc, Additional | одноимённые | in-memory | PCM 16/44.1 (Additional — ADPCM) |
-| 10 | AdditionalMusic | файл `Additionalmusic.*` (регистр!) | streaming | ADPCM |
-| 11 | (локализованная речь) | `Languages/<lang>/Loc.xwb`, fallback `eng` | in-memory | **xWMA** |
+| 3–9 | UI, Spells, Characters, Footsteps, Weapons, Misc, Additional | same names | in-memory | PCM 16/44.1 (Additional — ADPCM) |
+| 10 | AdditionalMusic | file `Additionalmusic.*` (case!) | streaming | ADPCM |
+| 11 | (localized speech) | `Languages/<lang>/Loc.xwb`, fallback `eng` | in-memory | **xWMA** |
 
-- Версии файлов: XGS `XGSF` tool 45 / format 42, XSB `SDBK` 45/43, XWB `WBND` 45/43,
-  то есть **XACT content version 45**.
-- Имена cue: `Audio/SoundList.xnb` (`List<string>`) превращается в словарь
-  «хеш lowercase-имени → имя». Код и XML ссылаются на звуки по хешу (§12.1).
-- Категории громкости: Music, а также Sfx, Ambient, Default, UI, VO, VOloc под общей
-  громкостью звука (0…10 → ×0.1).
-- Глобальные переменные XACT:
-  - `RoomType` — reverb-пресет сцены: None 0, Generic 10, SmallRoom 20, StoneRoom 30,
-    Cave 40, Forest 50. Реверберация сделана RPC/DSP-пресетами в `.xgs`,
-    сцена задаёт атрибут `RoomType`;
-  - `ReverbMix` — плавно, до 50 единиц в секунду;
-  - `MusicFocus` = расстояние ближайшего игрока до точки фокуса / радиус, ограничено
-    [0,1], либо значение по умолчанию;
-  - `MusicThreat` — растёт на 5/с до 10 в бою, падает на 2/с.
-- Музыка: одна текущая cue. При смене старая останавливается `AsAuthored`
-  (кроссфейд авторский). Повторный запуск той же cue игнорируется.
-- 3D: `Cue.Apply3D(listener, emitter)`, listener обновляет камера (§6). Активные cue
-  хранятся в списке, остановленные удаляются в `Update`. Есть групповая пауза и
-  возобновление.
-- `AudioManager.Update` вызывается из logic-потока, `engine.Update()` — каждый тик.
+- File versions: XGS `XGSF` tool 45 / format 42, XSB `SDBK` 45/43, XWB `WBND` 45/43,
+  i.e. **XACT content version 45**.
+- Cue names: `Audio/SoundList.xnb` (`List<string>`) is turned into a dictionary
+  "hash of lowercase name → name". Code and XML refer to sounds by hash (§12.1).
+- Volume categories: Music, plus Sfx, Ambient, Default, UI, VO, VOloc under the common
+  sound volume (0…10 → ×0.1).
+- XACT global variables:
+  - `RoomType` — the scene's reverb preset: None 0, Generic 10, SmallRoom 20, StoneRoom 30,
+    Cave 40, Forest 50. Reverb is implemented with RPC/DSP presets in `.xgs`;
+    the scene sets the `RoomType` attribute;
+  - `ReverbMix` — smoothly, up to 50 units per second;
+  - `MusicFocus` = distance of the nearest player to the focus point / radius, clamped to
+    [0,1], or the default value;
+  - `MusicThreat` — rises by 5/s up to 10 in combat, falls by 2/s.
+- Music: one current cue. On change, the old one is stopped with `AsAuthored`
+  (authored crossfade). Restarting the same cue is ignored.
+- 3D: `Cue.Apply3D(listener, emitter)`; the camera updates the listener (§6). Active cues
+  are kept in a list; stopped ones are removed in `Update`. There is group pause and
+  resume.
+- `AudioManager.Update` is called from the logic thread, `engine.Update()` every tick.
 
 ---
 
-## 9. Ввод
+## 9. Input
 
-- **Клавиатура и мышь** (`KeyboardMouseController`): 17 привязок `KeyboardBindings`.
-  Каждая хранится как {IsMouse, Button(byte)}, Button = код XNA `Keys` или `MouseButton`
-  {Invalid, Left, Middle, Right, X1, X2, ScrollUp, ScrollDown}. По умолчанию:
+- **Keyboard and mouse** (`KeyboardMouseController`): 17 `KeyboardBindings` bindings.
+  Each is stored as {IsMouse, Button(byte)}, Button = an XNA `Keys` code or `MouseButton`
+  {Invalid, Left, Middle, Right, X1, X2, ScrollUp, ScrollDown}. Defaults:
 
-| Действие | Клавиша | Действие | Клавиша |
+| Action | Key | Action | Key |
 |---|---|---|---|
-| Water | Q | Cast (луч/снаряд) | ПКМ |
-| Life | W | CastSelf | СКМ |
+| Water | Q | Cast (beam/projectile) | RMB |
+| Life | W | CastSelf | MMB |
 | Shield | E | Boost | Space |
-| Cold | R | Move | ЛКМ |
-| Lightning | A | Block (Cast Area-модификатор) | LCtrl |
+| Cold | R | Move | LMB |
+| Lightning | A | Block (Cast Area modifier) | LCtrl |
 | Arcane | S | Shift | LShift |
 | Earth | D | Inventory | Tab |
-| Fire | F | Prev / Next Magick | колесо вверх / вниз |
+| Fire | F | Prev / Next Magick | wheel up / down |
 
-  Нельзя назначить Escape, Win и Apps. Текстовый ввод (чат, имена) идёт через
-  WinForms `IMessageFilter` (WM_CHAR, KEYDOWN, SYSKEY…), `TranslateMessage` и `MapVirtualKey`.
-- **XInput** (`XInputController`, 4 пада): XNA `GamePad.GetState`. 24 привязки
-  `ControllerFunction` (Move ×4, Menu Select/Back, Spell ×4, Magick Next/Prev, Attack,
+  Escape, Win and Apps cannot be bound. Text input (chat, names) goes through
+  WinForms `IMessageFilter` (WM_CHAR, KEYDOWN, SYSKEY…), `TranslateMessage` and `MapVirtualKey`.
+- **XInput** (`XInputController`, 4 pads): XNA `GamePad.GetState`. 24
+  `ControllerFunction` bindings (Move ×4, Menu Select/Back, Spell ×4, Magick Next/Prev, Attack,
   Special, Block, Interact, Boost, Cast Force/Area/Self/Magick, Pause, Inventory,
-  Spell_Wheel). Типы: Button (флаг XNA `Buttons`), Trigger, Positive/NegativeStick
-  (индекс оси 0…3). По умолчанию левый стик двигает, правый выбирает элементы
-  (spell wheel), A выбирает, B — назад…
-- **DirectInput** (`DirectInputController`, Managed DirectX): не-XInput геймпады и
-  джойстики (фильтр через `XInputHelper.IsXInputDevice`). Привязки Button, POV, ±Axis хранятся
-  по **InstanceGuid устройства**. Пад считается «настроенным», только если у него есть
-  сохранённые привязки.
-- `ControlManager`: меню-контроллер (клавиатура), список XInput- и DInput-падов,
-  `FindNewGamePads`, `LimitInput` (временная блокировка с cooldown), блокировка ввода
-  по игроку. `PersistentGameState` первым получает события, если открыт popup.
-- Курсоры: `./Cursors/*.ani` (Default, Talk, Examine, PickUp, Attack, Interact + Gray-
-  варианты, Invisible). Загружаются через Win32 `LoadCursorFromFile`, переключаются через
-  `Form.Cursor`. В PlayState курсор ограничен окном (`Cursor.Clip`).
+  Spell_Wheel). Types: Button (an XNA `Buttons` flag), Trigger, Positive/NegativeStick
+  (axis index 0…3). By default the left stick moves, the right one selects items
+  (spell wheel), A selects, B goes back…
+- **DirectInput** (`DirectInputController`, Managed DirectX): non-XInput gamepads and
+  joysticks (filtered via `XInputHelper.IsXInputDevice`). Button, POV, ±Axis bindings are stored
+  by the **device InstanceGuid**. A pad counts as "configured" only if it has
+  saved bindings.
+- `ControlManager`: the menu controller (keyboard), the list of XInput and DInput pads,
+  `FindNewGamePads`, `LimitInput` (temporary lock with a cooldown), per-player input
+  lock. `PersistentGameState` receives events first if a popup is open.
+- Cursors: `./Cursors/*.ani` (Default, Talk, Examine, PickUp, Attack, Interact + Gray
+  variants, Invisible). Loaded via Win32 `LoadCursorFromFile`, switched via
+  `Form.Cursor`. In PlayState the cursor is confined to the window (`Cursor.Clip`).
 
 ---
 
-## 10. Локализация
+## 10. Localization
 
-- Языки = подкаталоги `content/Languages/` с именами ISO 639-2, которые распознаются
-  через enum `Language` (значения — LCID: eng=9, deu=7, fra=12, rus=25, …). В
-  Steam-копии есть deu, eng, fra, hun, ita, pol, rus, spa.
-- Выбор языка: Steam language → enum. Если язык недоступен, используется `eng`.
-  Сохраняется в `Settings.sav`.
-- Загрузка: все `*.loctable.xml` каталога языка (Excel 2003 SpreadsheetML:
-  `Workbook/Worksheet/Table/Row`). Колонка 1 — ключ, начинающийся с `#`; колонка 2 —
-  текст. Ключ = **хеш lowercase-строки ключа** (§12.1). Пустые тексты пропускаются,
-  более поздние файлы перекрывают ранние (порядок перечисления каталога, не определён!).
-- При выдаче строки `\n` заменяется на перевод строки. Ссылки `#ключ;` внутри строк
-  раскрываются рекурсивно, опционально с цветом `[c=…]…[/c]`. `#players` возвращает
-  список имён игроков («A, B & C»).
-- Не найденная строка возвращается как `NOT FOUND: <hash>`.
-- Смена языка перезагружает шрифты (`FontManager.LoadFonts`) и `Loc.xwb`.
+- Languages = subdirectories of `content/Languages/` with ISO 639-2 names, recognized
+  via the `Language` enum (values are LCIDs: eng=9, deu=7, fra=12, rus=25, …). The
+  Steam copy has deu, eng, fra, hun, ita, pol, rus, spa.
+- Language selection: Steam language → enum. If the language is unavailable, `eng` is used.
+  It is saved in `Settings.sav`.
+- Loading: all `*.loctable.xml` files in the language directory (Excel 2003 SpreadsheetML:
+  `Workbook/Worksheet/Table/Row`). Column 1 is the key, starting with `#`; column 2 is the
+  text. Key = **hash of the lowercase key string** (§12.1). Empty texts are skipped;
+  later files override earlier ones (directory enumeration order, undefined!).
+- When a string is returned, `\n` is replaced with a line break. `#key;` references inside strings
+  are expanded recursively, optionally with color `[c=…]…[/c]`. `#players` returns
+  the list of player names ("A, B & C").
+- A string that is not found is returned as `NOT FOUND: <hash>`.
+- Changing the language reloads fonts (`FontManager.LoadFonts`) and `Loc.xwb`.
 
 ---
 
-## 11. Сохранения (`SaveData/`)
+## 11. Saves (`SaveData/`)
 
-Все файлы лежат в `./SaveData/` рядом с exe. Строки записаны в формате .NET
-`BinaryWriter`: 7-bit varint длины + UTF-8. Числа little-endian. bool занимает 1 байт.
+All files are in `./SaveData/` next to the exe. Strings are written in .NET
+`BinaryWriter` format: 7-bit varint length + UTF-8. Numbers are little-endian. A bool takes 1 byte.
 
-### 11.1 Версия
+### 11.1 Version
 
-Версия хранится строкой `"a.b.c.d"` (например, `"1.10.4.2"`) и сравнивается как
-uint64 = a<<48 | b<<32 | c<<16 | d. Читатели выбирают раскладку по порогу версии.
+The version is stored as a string `"a.b.c.d"` (for example, `"1.10.4.2"`) and compared as
+uint64 = a<<48 | b<<32 | c<<16 | d. Readers pick the layout by version threshold.
 
 ### 11.2 `Settings.sav`
 
-Порядок полей (вариант ≥ 1.4.3.0):
+Field order (variant ≥ 1.4.3.0):
 
 1. string version;
 2. byte BloodAndGore, DamageNumbers, HealthBars, SpellWheel;
-3. VersusSettings: byte Mode + 5 × {byte ruleset, byte N, N байт значений}
+3. VersusSettings: byte Mode + 5 × {byte ruleset, byte N, N bytes of values}
    (DeathMatch, Brawl, Kreitor, KingOfTheHill, PyriteSnitch);
 4. int16 Width, Height, Refresh; bool Fullscreen;
 5. byte Bloom, Shadow, DecalLimit, Particles; bool ParticleLights;
@@ -733,198 +733,198 @@ uint64 = a<<48 | b<<32 | c<<16 | d. Читатели выбирают раскл
 7. FilterData: byte FreeSlots, Scope, GameType; int16 MaxLatency; bool VACOnly,
    FilterPlaying, FilterPassword;
 8. 17 × {bool IsMouse, byte Button};
-9. 4 пада × 24 × {byte Type, int32 Index} — XInput;
-10. int32 N + N × {16 байт GUID, 24 × {byte, int32}} — DirectInput;
+9. 4 pads × 24 × {byte Type, int32 Index} — XInput;
+10. int32 N + N × {16 bytes GUID, 24 × {byte, int32}} — DirectInput;
 11. string SteamLanguage; int32 Language; bool VSync; byte LobbyVisibility;
     string LastUsedHUD.
 
-Старые версии (1.2.9…1.4.1) отличаются наличием и форматом отдельных полей. При
-ошибке чтения выставляется язык `eng`, остальные настройки остаются по умолчанию.
+Older versions (1.2.9…1.4.1) differ in the presence and format of individual fields. On
+a read error, the language is set to `eng` and the other settings stay at defaults.
 
 ### 11.3 `campaign.sav` / `starscampaign.sav` (Mythos)
 
-- Опциональный маркер: байт 0xFF + string version. Без маркера это файл версии 1.0
-  (версия = 0).
-- 3 слота × {bool present; если true — SaveData}.
+- Optional marker: byte 0xFF + string version. Without the marker it is a version 1.0 file
+  (version = 0).
+- 3 slots × {bool present; if true — SaveData}.
 - SaveData (≥ 1.4.1.0):
   - byte Level, byte MaxAllowedLevel, bool Looped;
   - int32 TotalPlayTime, CurrentPlayTime;
-  - int32 N игроков × {string ключ(gamertag), string Staff, string Weapon};
-  - uint64 UnlockedMagicks (битовая маска);
-  - int32 N подсказок × {string tipName, int32 count};
-  - int32 размер checkpoint + байты checkpoint.
+  - int32 N players × {string key(gamertag), string Staff, string Weapon};
+  - uint64 UnlockedMagicks (bit mask);
+  - int32 N tips × {string tipName, int32 count};
+  - int32 checkpoint size + checkpoint bytes.
 
-  В версии 1.0 нет MaxAllowedLevel и checkpoint.
-- **Checkpoint-блоб**: 32 байта SHA-256 файла сцены/уровня + 32 байта SHA-256 файла
-  диалогов + состояние checkpoint (точки спавна, отключённые триггеры, состояние
-  сущностей; формат за пределами этого документа). При несовпадении хешей
-  checkpoint игнорируется. **Значит, совместимость checkpoint'ов требует тех же файлов уровней.**
-- Запись атомарная: сначала `.tmp`, затем delete и move.
+  Version 1.0 has no MaxAllowedLevel and no checkpoint.
+- **Checkpoint blob**: 32 bytes SHA-256 of the scene/level file + 32 bytes SHA-256 of the
+  dialog file + checkpoint state (spawn points, disabled triggers, entity
+  state; the format is outside this document). If the hashes do not match,
+  the checkpoint is ignored. **So checkpoint compatibility requires the same level files.**
+- Writing is atomic: first `.tmp`, then delete and move.
 
-### 11.4 Прочие
+### 11.4 Other files
 
-| Файл | Формат |
+| File | Format |
 |---|---|
-| `Profile.sav` | string version; int32 N × Gamer {string tag (≤15), byte color, string avatarName, uint32 Kills, Deaths, OverKilled, OverKills, uint64 HealingDone, HealingReceived, DamageDone, DamageReceived, uint32 Suicides, TeamKills, TeamKilled, VersusWins, WinStreak, Defeats}; словари FoundMoose (string→bool), PlayerUsedElements (string→int32 Elements), FoundSecretAreas (string→bool); float TotalHealed; int32 OverKills, FrozenOverKills, LedFarmerKills; string lastGamer; int32 CruiseCount; int64 LastCruiseDate (`DateTime.ToBinary`); int32 BanisherOfHorrors; (≥1.4.7.1) KilledPony (string→bool) |
-| `ch_<challenge>.sav` | int32 N + N записей leaderboard (локальные рекорды испытаний) |
-| `DLCData.sav` | XML UTF-8 с BOM: `<root><LatestSave>…</LatestSave><DLC_ContentNewStatuses>…` — статусы «новое» для DLC |
-| `pops.sav` | Аккаунт Paradox, см. ниже. **Не нужен** |
+| `Profile.sav` | string version; int32 N × Gamer {string tag (≤15), byte color, string avatarName, uint32 Kills, Deaths, OverKilled, OverKills, uint64 HealingDone, HealingReceived, DamageDone, DamageReceived, uint32 Suicides, TeamKills, TeamKilled, VersusWins, WinStreak, Defeats}; dictionaries FoundMoose (string→bool), PlayerUsedElements (string→int32 Elements), FoundSecretAreas (string→bool); float TotalHealed; int32 OverKills, FrozenOverKills, LedFarmerKills; string lastGamer; int32 CruiseCount; int64 LastCruiseDate (`DateTime.ToBinary`); int32 BanisherOfHorrors; (≥1.4.7.1) KilledPony (string→bool) |
+| `ch_<challenge>.sav` | int32 N + N leaderboard entries (local challenge records) |
+| `DLCData.sav` | XML UTF-8 with BOM: `<root><LatestSave>…</LatestSave><DLC_ContentNewStatuses>…` — "new" statuses for DLC |
+| `pops.sav` | Paradox account, see below. **Not needed** |
 
 ### 11.5 `Magicka.Storage.Encryption`
 
-В этой сборке применяется только к `pops.sav`. Описание приводится для полноты.
+In this build it is applied only to `pops.sav`. The description is given for completeness.
 
-- **Salt** = Base64(UTF-8(десятичный SteamID64 + десятичный AppID «42910»)).
-- **Vigenère** работает по UTF-16 code unit'ам: к каждому символу прибавляется
-  (при декодировании вычитается) код символа ключа с циклическим индексом, с
-  переполнением 16 бит.
-- `pops.sav` содержит две BinaryWriter-строки:
-  1. Base64(UTF-8(MD5-hex в верхнем регистре от `text + salt`)) — проверочный хеш
+- **Salt** = Base64(UTF-8(decimal SteamID64 + decimal AppID "42910")).
+- **Vigenère** operates on UTF-16 code units: the code of the key character at a cyclic index
+  is added to each character (subtracted when decoding), with
+  16-bit overflow.
+- `pops.sav` contains two BinaryWriter strings:
+  1. Base64(UTF-8(uppercase MD5 hex of `text + salt`)) — a check hash
      (`FormsAuthentication.HashPasswordForStoringInConfigFile`, MD5);
-  2. Base64(UTF-8(Vigenère(`text`, salt))), где `text` = `shadowUniqueId|authToken`.
-- **AES-вариант** (`CITRUS_V1`; функции есть, вызовов в этой сборке не найдено):
-  - контейнер: int32 = (длина метки «CITRUS_V1» = 9) << 14 = 147456, затем 9 байт ASCII
-    метки, 16 байт IV, int32 длина шифротекста, шифротекст. Метки длиной > 20 отвергаются;
-  - шифр: AES (CryptoServiceProvider: **CBC, PKCS7**), ключ 256 бит = SHA-256 от
-    конкатенации двух сериализаций .NET `BinaryFormatter`: boxed `UInt64` SteamID и
-    boxed `UInt32` AppID. Каждая сериализация — это отдельный поток .NET Remoting Binary
-    Format (MS-NRBF), проверено на .NET Framework:
-    - заголовок 17 байт: `00`, int32 1, int32 −1, int32 1, int32 0;
-    - запись `SystemClassWithMembersAndTypes` (0x04) с objectId 1, именем класса
-      `System.UInt64`/`System.UInt32` (строка с префиксом длины), 1 полем `m_value`,
-      BinaryType Primitive (0x00), PrimitiveType UInt64 (0x10) или UInt32 (0x0F);
-    - значение little-endian и `MessageEnd` (0x0B).
+  2. Base64(UTF-8(Vigenère(`text`, salt))), where `text` = `shadowUniqueId|authToken`.
+- **AES variant** (`CITRUS_V1`; the functions exist, no calls were found in this build):
+  - container: int32 = (length of the label "CITRUS_V1" = 9) << 14 = 147456, then 9 bytes of ASCII
+    label, 16 bytes IV, int32 ciphertext length, ciphertext. Labels longer than 20 are rejected;
+  - cipher: AES (CryptoServiceProvider: **CBC, PKCS7**), 256-bit key = SHA-256 of the
+    concatenation of two .NET `BinaryFormatter` serializations: boxed `UInt64` SteamID and
+    boxed `UInt32` AppID. Each serialization is a separate .NET Remoting Binary
+    Format (MS-NRBF) stream, verified on .NET Framework:
+    - 17-byte header: `00`, int32 1, int32 −1, int32 1, int32 0;
+    - a `SystemClassWithMembersAndTypes` record (0x04) with objectId 1, class name
+      `System.UInt64`/`System.UInt32` (a length-prefixed string), 1 field `m_value`,
+      BinaryType Primitive (0x00), PrimitiveType UInt64 (0x10) or UInt32 (0x0F);
+    - the little-endian value and `MessageEnd` (0x0B).
     
-    Итого 59 + 55 = 114 байт. Открытый текст — UTF-8 без BOM.
-- Вывод: ключ зависит только от SteamID и AppID. Сейвы кампании от SteamID **не
-  зависят** и переносимы между пользователями.
+    Total 59 + 55 = 114 bytes. The plaintext is UTF-8 without BOM.
+- Conclusion: the key depends only on SteamID and AppID. Campaign saves do **not
+  depend** on SteamID and are portable between users.
 
 ### 11.6 `col.dat`
 
-`content/Data/col.dat` — текст. Первая строка — int: число доступных цветов игрока
-(`Defines.PLAYERCOLORS_UNLOCKED`). Если значение ≤ 0 или не парсится, берётся 10.
-Значение ограничено размером палитры. В Steam-копии записано `10`.
+`content/Data/col.dat` is text. The first line is an int: the number of available player colors
+(`Defines.PLAYERCOLORS_UNLOCKED`). If the value is ≤ 0 or does not parse, 10 is used.
+The value is clamped to the palette size. The Steam copy contains `10`.
 
 ---
 
-## 12. Сквозные механизмы
+## 12. Cross-cutting mechanisms
 
-### 12.1 Хеш строк (`GetHashCodeCustom`)
+### 12.1 String hash (`GetHashCodeCustom`)
 
-Почти все ссылки по имени (строки локализации, cue, эффекты, анимации, триггеры)
-хранятся как int32-хеш. Алгоритм совпадает с 32-битным `String.GetHashCode` из
+Almost all by-name references (localization strings, cues, effects, animations, triggers)
+are stored as an int32 hash. The algorithm matches the 32-bit `String.GetHashCode` of
 .NET Framework 2.0–3.5 (x86):
 
-- два 32-битных аккумулятора, оба инициализированы `(5381<<16)+5381` = 352654597;
-- строка читается как последовательность 32-битных little-endian слов, каждое из двух
-  UTF-16 символов. Для нечётной длины последний символ дополняется нулевым терминатором;
-- слова поочерёдно подмешиваются в первый и второй аккумулятор:
-  `h = ((h<<5) + h + (h>>27)) ^ word` (сдвиг вправо арифметический, int32);
-- результат = h1 + h2 × 1566083941 (с переполнением).
+- two 32-bit accumulators, both initialized to `(5381<<16)+5381` = 352654597;
+- the string is read as a sequence of 32-bit little-endian words, each of two
+  UTF-16 characters. For an odd length, the last character is padded with the null terminator;
+- words are mixed alternately into the first and second accumulator:
+  `h = ((h<<5) + h + (h>>27)) ^ word` (arithmetic right shift, int32);
+- result = h1 + h2 × 1566083941 (with overflow).
 
-Перед хешированием строку почти всегда переводят в lowercase invariant.
-**В современном .NET `string.GetHashCode` рандомизирован, поэтому нужна своя реализация.**
-Хеши, сохранённые в бинарных ассетах, сравниваются с ней.
+Before hashing, the string is almost always converted to lowercase invariant.
+**In modern .NET `string.GetHashCode` is randomized, so a custom implementation is required.**
+Hashes stored in binary assets are compared against it.
 
-### 12.2 Синглтоны и блокировки
+### 12.2 Singletons and locks
 
-Все менеджеры — ленивые синглтоны с double-checked lock. Списки сцены защищены
-lock на сам список. Рендер работает под `lock(GraphicsDevice)`.
+All managers are lazy singletons with a double-checked lock. Scene lists are protected
+by a lock on the list itself. Render runs under `lock(GraphicsDevice)`.
 
 ---
 
-## 13. JigLibX и XNAnimation: лицензии и решение
+## 13. JigLibX and XNAnimation: licenses and decision
 
-| Библиотека | Версия в игре | Лицензия upstream | Статус проверки |
+| Library | Version in the game | Upstream license | Verification status |
 |---|---|---|---|
-| **XNAnimation** (Bruno Evangelista, CodePlex) | 0.7.0.0 (copyright 2008) | **Ms-PL** | Подтверждено по форкам на GitHub (echads/XNAnimation — порт 0.7 BETA3 на XNA 4.0; bosoni/XNAnimationMG — MonoGame) |
-| **JigLibX** (CodePlex) | 0.0.2.0 (copyright 2008) | Не подтверждено. Оригинальный JigLib (Danny Chapman) — **zlib**. Производный JigLibSDX — Ms-PL | Нужно найти архив CodePlex и `License.txt` в дистрибутиве |
+| **XNAnimation** (Bruno Evangelista, CodePlex) | 0.7.0.0 (copyright 2008) | **Ms-PL** | Confirmed via GitHub forks (echads/XNAnimation — port of 0.7 BETA3 to XNA 4.0; bosoni/XNAnimationMG — MonoGame) |
+| **JigLibX** (CodePlex) | 0.0.2.0 (copyright 2008) | Not confirmed. The original JigLib (Danny Chapman) is **zlib**. The derivative JigLibSDX is Ms-PL | Need to find the CodePlex archive and `License.txt` in the distribution |
 
-Рекомендация:
+Recommendation:
 
-- **XNAnimation — портировать upstream** (Ms-PL совместима с любой permissive-лицензией
-  проекта, нужно сохранить notice). Брать исходники из upstream или форка XNA 4.0,
-  **не из декомпиляции**. Объём небольшой: скиннинг, `AnimationClip`, контроллеры и
-  reader'ы `SkinnedModel*`. XNB-формат SkinnedModel v0.7 нужно сверить с upstream reader'ом.
+- **XNAnimation — port upstream** (Ms-PL is compatible with any permissive project
+  license; the notice must be kept). Take the sources from upstream or the XNA 4.0 fork,
+  **not from decompilation**. The scope is small: skinning, `AnimationClip`, controllers and
+  `SkinnedModel*` readers. The SkinnedModel v0.7 XNB format must be checked against the upstream reader.
 - **JigLibX:**
-  - если лицензия подтвердится как MIT, zlib или Ms-PL — **портировать upstream** (есть порты
-    на XNA 4.0/MonoGame). Сборка Magicka, вероятно, модифицирована: виртуальные запросы
-    треугольников для `IceMesh`/`WaterMesh`, регистрация пользовательских детекторов,
-    примитив с ID = NumTypes. Эти места нужно найти **сравнением поведения**, не копированием;
-  - если лицензия не найдётся — переписать минимальное подмножество с нуля. Нужны: капсула
-    персонажа против статического меша и плоскости, сферы и боксы физобъектов, hollow
-    sphere, raycast/segment, SAP broadphase, простой импульсный solver со сном. Либо взять
-    BepuPhysics v2 (Apache-2.0) и подстроить параметры под ощущения оригинала. Точное
-    совпадение физики для геймплея Magicka не критично, кроме ощущения движения персонажа.
+  - if the license is confirmed as MIT, zlib or Ms-PL — **port upstream** (there are ports
+    to XNA 4.0/MonoGame). The Magicka build is probably modified: virtual triangle
+    queries for `IceMesh`/`WaterMesh`, registration of custom detectors,
+    a primitive with ID = NumTypes. These places must be found by **comparing behavior**, not by copying;
+  - if the license is not found — rewrite a minimal subset from scratch. Required: a character
+    capsule against a static mesh and a plane, spheres and boxes for physics objects, a hollow
+    sphere, raycast/segment, SAP broadphase, a simple impulse solver with sleeping. Or take
+    BepuPhysics v2 (Apache-2.0) and tune the parameters to the feel of the original. An exact
+    physics match is not critical for Magicka gameplay, except for the feel of character movement.
 
 ---
 
-## 14. Открытые вопросы
+## 14. Open questions
 
-1. Точная раскладка каналов G-buffer (A-каналы Main/Normal, кодирование нормали,
-   где хранятся spec, emissive и reflection) и формат R32F-глубины (линейная или z/w).
-   Нужен локальный дамп FX.
-2. Какие render state и stencil ref заданы в state-блоках FX-пассов. Как FNA/MojoShader
-   их применяет и не конфликтуют ли они с кодом.
-3. Почему встроенные `DummyEffect`/`SkinnedModelDeferredEffect` отличаются от xnb, и
-   какие из них реально используются для персонажей.
-4. Поддерживает ли FAudio/FACT XACT content version **45** (xgs 42 / xsb 43 / xwb 43) и
-   **xWMA** в wave bank'ах (`Wave Bank.xwb`, `Loc.xwb`). Если нет — нужен свой
-   парсер xsb/xwb и декодер (xWMA через FFmpeg или другой декодер WMA).
-5. Лицензия JigLibX (§13) и список модификаций, внесённых Arrowhead.
-6. Формат checkpoint-состояния (`CheckpointState.Write`) — для импорта сейвов в середине уровня.
-7. Формат `LeaderBoardData` в `ch_*.sav`.
-8. Порядок перекрытия `*.loctable.xml` при дублирующихся ключах (порядок `GetFiles`).
-9. Поведение `FilterEffect`, `DeferredShading` и `Bloom` в гамма-пространстве
-   (sRGB не используется). На современных API нужно не включать sRGB-RT.
-10. `.ani`-курсоры: анимированы ли они и нужен ли собственный парсер RIFF/ACON.
+1. The exact G-buffer channel layout (A channels of Main/Normal, normal encoding,
+   where spec, emissive and reflection are stored) and the R32F depth format (linear or z/w).
+   A local FX dump is needed.
+2. Which render states and stencil refs are set in the state blocks of FX passes. How FNA/MojoShader
+   applies them and whether they conflict with the code.
+3. Why the embedded `DummyEffect`/`SkinnedModelDeferredEffect` differ from the xnb, and
+   which of them are actually used for characters.
+4. Whether FAudio/FACT supports XACT content version **45** (xgs 42 / xsb 43 / xwb 43) and
+   **xWMA** in wave banks (`Wave Bank.xwb`, `Loc.xwb`). If not, our own
+   xsb/xwb parser and decoder are needed (xWMA via FFmpeg or another WMA decoder).
+5. The JigLibX license (§13) and the list of modifications made by Arrowhead.
+6. The checkpoint state format (`CheckpointState.Write`) — for importing mid-level saves.
+7. The `LeaderBoardData` format in `ch_*.sav`.
+8. The override order of `*.loctable.xml` with duplicate keys (`GetFiles` order).
+9. Behavior of `FilterEffect`, `DeferredShading` and `Bloom` in gamma space
+   (sRGB is not used). On modern APIs, sRGB RTs must not be enabled.
+10. `.ani` cursors: whether they are animated and whether our own RIFF/ACON parser is needed.
 
-## 15. Рекомендации для реализации на FNA
+## 15. Recommendations for the FNA implementation
 
-1. **Потоки.** Logic оставить в отдельном потоке (переменный шаг, ограничение 0.05 с),
-   но **рендер-поток — единственный, кто трогает GPU**. Logic заполняет
-   CPU-снапшот кадра: списки draw-команд, камеру, массивы частиц и света. Тройной буфер
-   `DataChannel` перенести как есть. Loader-поток парсит и декодирует данные, а
-   создание GPU-ресурсов передаёт в очередь render-потока.
-2. **Контент.** Свой `ContentManager` для XNB v4 (LZX уже есть в `tools/research/xnb.py`)
-   с case-insensitive резолвером путей и счётчиками ссылок как в `SharedContentManager`.
-   Корень — `Content` пользовательской установки.
-3. **Эффекты.** Грузить `Content/Shaders/*.xnb` → `new Effect(device, bytecode)` FNA.
-   Сделать слой `GlobalEffectParams`, который перед каждым `Apply` выставляет View,
-   Projection, ViewProjection, InvViewProjection, CameraPosition, EyeOfTheBeholder и Time
-   на каждом эффекте (замена `EffectPool`). Обёртки над эффектами повторяют имена
-   параметров из §3.5. ID эффектов — стабильный enum. Начать с WOVT. Параллельно
-   держать в плане свои HLSL-шейдеры с той же раскладкой G-buffer.
-4. **RenderTarget'ы.** `RenderTarget2D` с `DepthFormat.Depth24Stencil8` и
-   `RenderTargetUsage.DiscardContents`. MRT через `SetRenderTargets(main, normal)`.
-   Глубина в `SurfaceFormat.Single`. GUI-буфер с `multiSampleCount: 4`. Сохранить
-   порядок проходов §3.3 и блендинг: свет `One/InvSrcColor`, additive `InvDestColor/One`,
-   частицы `One/SrcAlpha`.
-5. **Инстансинг** частиц и batched-света через `DrawInstancedPrimitives`. Декали — через
-   массивы констант (до 30), как в оригинале. VB частиц на 32768 инстансов, 56 байт.
-6. **Частицы.** Реализовать формат XML §5.2 (оба version). Случайные числа — таблица
-   из `new Random(0)` (в .NET с явным seed совпадает). Эмиттеры подключать через реестр имён
-   без reflection.
-7. **Хеши.** Реализовать `GetHashCodeCustom` (§12.1) и покрыть тестами на известных
-   парах «строка → хеш» из ассетов (например, ключи `.loctable.xml` против хешей в XNB).
-8. **Звук.** Сначала проверить FACT на банках v45. Сразу абстрагировать `IAudioBackend`
-   (cue по хешу имени, категории, глобальные переменные RoomType, ReverbMix,
-   MusicFocus, MusicThreat, 3D-emitter и listener), чтобы в случае несовместимости
-   заменить его на собственный парсер XACT + FAudio voices.
-9. **Ввод.** FNA Keyboard/Mouse/GamePad (SDL GameController вместо XInput и DirectInput).
-   Текст через `TextInputEXT`. Привязки хранить в своём формате, но **уметь
-   импортировать** `Settings.sav` (раскладка §11.2). DirectInput-GUID при импорте
-   игнорировать. Курсоры `.ani` распарсить сами (RIFF ACON → первый кадр или анимация) и
-   передать в SDL.
-10. **Сейвы.** Свой формат (например, JSON или версионированный binary) плюс
-    **импортёр** оригинальных `campaign.sav`, `starscampaign.sav`, `Profile.sav`,
-    `Settings.sav`, `ch_*.sav` из `<Magicka>/SaveData`. Шифрования нет, `pops.sav`
-    игнорировать. Checkpoint импортировать только при совпадении SHA-256 уровня и
-    диалогов (иначе начинать с начала главы).
-11. **Убрать** Steam-проверки, Paradox, GameSparks, DRM и hash-проверку лицензий
-    кампаний. Язык брать из настроек и ОС. `col.dat` читать для совместимости.
-12. **Камера.** Перенести константы §6 как данные (FOV 5°, offset (0, 144, 171),
-    near 105, far 500). Логика follow, magnification, confine описана в §6.
-13. **Физика.** Сначала проверить лицензию JigLibX (§13). Если неясно — минимальный
-    собственный солвер или BepuPhysics с адаптером под `CharacterBody` (капсула,
-    материалы земли по индексу примитива, вода и лёд по per-vertex freeze).
+1. **Threads.** Keep logic in a separate thread (variable step, 0.05 s clamp),
+   but **the render thread is the only one that touches the GPU**. Logic fills a
+   CPU snapshot of the frame: draw command lists, camera, particle and light arrays. Port the
+   `DataChannel` triple buffer as is. The loader thread parses and decodes data, and
+   passes GPU resource creation to the render thread's queue.
+2. **Content.** Our own `ContentManager` for XNB v4 (LZX already exists in `tools/research/xnb.py`)
+   with a case-insensitive path resolver and reference counters as in `SharedContentManager`.
+   The root is `Content` of the user's install.
+3. **Effects.** Load `Content/Shaders/*.xnb` → FNA `new Effect(device, bytecode)`.
+   Add a `GlobalEffectParams` layer that sets View,
+   Projection, ViewProjection, InvViewProjection, CameraPosition, EyeOfTheBeholder and Time
+   on each effect before every `Apply` (a replacement for `EffectPool`). Effect wrappers repeat the parameter
+   names from §3.5. Effect IDs are a stable enum. Start with WOVT. In parallel,
+   keep our own HLSL shaders with the same G-buffer layout in the plan.
+4. **Render targets.** `RenderTarget2D` with `DepthFormat.Depth24Stencil8` and
+   `RenderTargetUsage.DiscardContents`. MRT via `SetRenderTargets(main, normal)`.
+   Depth in `SurfaceFormat.Single`. GUI buffer with `multiSampleCount: 4`. Keep the
+   pass order of §3.3 and the blending: lights `One/InvSrcColor`, additive `InvDestColor/One`,
+   particles `One/SrcAlpha`.
+5. **Instancing** of particles and batched lights via `DrawInstancedPrimitives`. Decals via
+   constant arrays (up to 30), as in the original. Particle VB for 32768 instances, 56 bytes.
+6. **Particles.** Implement the XML format of §5.2 (both versions). Random numbers: a table
+   from `new Random(0)` (matches in .NET with an explicit seed). Connect emitters via a name registry
+   without reflection.
+7. **Hashes.** Implement `GetHashCodeCustom` (§12.1) and cover it with tests on known
+   "string → hash" pairs from the assets (for example, `.loctable.xml` keys against hashes in XNB).
+8. **Audio.** First check FACT on v45 banks. Abstract an `IAudioBackend` right away
+   (cue by name hash, categories, global variables RoomType, ReverbMix,
+   MusicFocus, MusicThreat, 3D emitter and listener), so that in case of incompatibility
+   it can be replaced with our own XACT parser + FAudio voices.
+9. **Input.** FNA Keyboard/Mouse/GamePad (SDL GameController instead of XInput and DirectInput).
+   Text via `TextInputEXT`. Store bindings in our own format, but **be able to
+   import** `Settings.sav` (layout in §11.2). Ignore DirectInput GUIDs on
+   import. Parse `.ani` cursors ourselves (RIFF ACON → first frame or animation) and
+   pass them to SDL.
+10. **Saves.** Our own format (for example, JSON or versioned binary) plus an
+    **importer** for the original `campaign.sav`, `starscampaign.sav`, `Profile.sav`,
+    `Settings.sav`, `ch_*.sav` from `<Magicka>/SaveData`. There is no encryption; ignore
+    `pops.sav`. Import a checkpoint only if the SHA-256 of the level and
+    dialogs match (otherwise start from the beginning of the chapter).
+11. **Remove** Steam checks, Paradox, GameSparks, DRM and the campaign license hash
+    check. Take the language from settings and the OS. Read `col.dat` for compatibility.
+12. **Camera.** Port the constants of §6 as data (FOV 5°, offset (0, 144, 171),
+    near 105, far 500). The follow, magnification and confine logic is described in §6.
+13. **Physics.** First check the JigLibX license (§13). If unclear, a minimal
+    custom solver or BepuPhysics with an adapter for `CharacterBody` (capsule,
+    ground materials by primitive index, water and ice by per-vertex freeze).

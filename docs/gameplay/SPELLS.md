@@ -1,47 +1,47 @@
-# Система заклинаний и боя (спецификация для реимплементации)
+# Spell and combat system (reimplementation spec)
 
-Источник поведения: `Magicka.exe` 1.10.4.2 (см. [`ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md)).
-Область: `Magicka.GameLogic.Spells` (+ `SpellEffects`), `Elements`, `StatusEffects`, `Damage` /
+Source of behavior: `Magicka.exe` 1.10.4.2 (see [`ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md)).
+Scope: `Magicka.GameLogic.Spells` (+ `SpellEffects`), `Elements`, `StatusEffects`, `Damage` /
 `DamageCollection5` / `AttackProperties` / `DamageResult`, `Defines`, `SpellManager` / `SpellTree` /
-`MagickTree`, а также связанная логика урона и статусов в `Character`, `Barrier`, `Shield`,
+`MagickTree`, and the related damage and status logic in `Character`, `Barrier`, `Shield`,
 `SpellMine`, `Railgun`, `LightningBolt`, `Blast`.
 
-> **Clean-room.** Ниже только правила, формулы, константы и идентификаторы. Код оригинала не
-> переносится. Формулы записаны в собственной нотации.
+> **Clean-room.** Below are only rules, formulas, constants and identifiers. No original code is
+> carried over. Formulas are written in our own notation.
 >
-> Нотация: `E, W, C, F, Z, A, L, S, I, T, P` — *магнитуды* (количество) элементов Earth, Water,
-> Cold, Fire, Lightning (Z), Arcane, Life, Shield, Ice, sTeam, Poison в итоговом заклинании.
-> `√x` — квадратный корень, `min1(x) = min(1, x)`, `trunc` — отбрасывание дробной части.
-> «Тик» = одно применение `DamageCollection5` к цели.
+> Notation: `E, W, C, F, Z, A, L, S, I, T, P` are the *magnitudes* (counts) of the elements Earth, Water,
+> Cold, Fire, Lightning (Z), Arcane, Life, Shield, Ice, sTeam, Poison in the final spell.
+> `√x` is the square root, `min1(x) = min(1, x)`, `trunc` drops the fractional part.
+> "Tick" = one application of a `DamageCollection5` to a target.
 
 ---
 
-## 1. Элементы
+## 1. Elements
 
-### 1.1 Флаги `Elements` (int, `[Flags]`)
+### 1.1 `Elements` flags (int, `[Flags]`)
 
-| Индекс | Элемент | Флаг | Клавиша (по умолч.) | Геймпад (2 шага) | Получение |
+| Index | Element | Flag | Key (default) | Gamepad (2 steps) | Obtained |
 |---:|---|---|---|---|---|
-| 0 | Earth (=Physical) | `0x001` | D | Down → Left | базовый |
-| 1 | Water | `0x002` | Q | Left → Up | базовый |
-| 2 | Cold | `0x004` | R | Right → Up | базовый |
-| 3 | Fire | `0x008` | F | Right → Down | базовый |
-| 4 | Lightning | `0x010` | A | Left → Down | базовый |
-| 5 | Arcane | `0x020` | S | Up → Right | базовый |
-| 6 | Life | `0x040` | W | Up → Left | базовый |
-| 7 | Shield | `0x080` | E | Down → Right | базовый |
+| 0 | Earth (=Physical) | `0x001` | D | Down → Left | basic |
+| 1 | Water | `0x002` | Q | Left → Up | basic |
+| 2 | Cold | `0x004` | R | Right → Up | basic |
+| 3 | Fire | `0x008` | F | Right → Down | basic |
+| 4 | Lightning | `0x010` | A | Left → Down | basic |
+| 5 | Arcane | `0x020` | S | Up → Right | basic |
+| 6 | Life | `0x040` | W | Up → Left | basic |
+| 7 | Shield | `0x080` | E | Down → Right | basic |
 | 8 | Ice | `0x100` | — | — | Water + Cold |
 | 9 | Steam | `0x200` | — | — | Water + Fire |
-| 10 | Poison | `0x400` | — | — | **игроку недоступен** (только NPC/предметы/магики) |
+| 10 | Poison | `0x400` | — | — | **not available to the player** (NPCs/items/magicks only) |
 
-Индекс = log2(флаг). Особые значения: `None = 0`, `All = Magick = 0xFFFF` (маркер «это магик»,
-индекс 11 в `Defines.ElementIndex`, 15 в `Spell.ElementIndex`).
+Index = log2(flag). Special values: `None = 0`, `All = Magick = 0xFFFF` (marker "this is a magick",
+index 11 in `Defines.ElementIndex`, 15 in `Spell.ElementIndex`).
 
-Составные маски (используются в правилах ниже):
+Composite masks (used in the rules below):
 
-| Имя | Значение | Состав |
+| Name | Value | Contents |
 |---|---|---|
-| `Basic` | `0x0FF` | 8 базовых |
+| `Basic` | `0x0FF` | the 8 basic ones |
 | `PhysicalElements` | `0x101` | Earth, Ice |
 | `Beams` | `0x060` | Arcane, Life |
 | `ShieldElements` | `0x0E0` | Arcane, Life, Shield |
@@ -50,359 +50,359 @@
 | `Instant` | `0x371` | Earth, Lightning, Arcane, Life, Ice, Steam |
 | `InstantPhysical` | `0x171` | Earth, Lightning, Arcane, Life, Ice |
 | `InstantNonPhysical` | `0x270` | Lightning, Arcane, Life, Steam |
-| `Offensive` | `0xFF3F` | всё, кроме Life и Shield |
+| `Offensive` | `0xFF3F` | everything except Life and Shield |
 
-`Defines.NR_OF_ELEMENTS = 11`. Локализация: `#element_earth` … `#element_poison` (порядок индексов).
+`Defines.NR_OF_ELEMENTS = 11`. Localization: `#element_earth` … `#element_poison` (in index order).
 
-### 1.2 Ввод элементов
+### 1.2 Element input
 
-- Клавиатура: каждая клавиша элемента имеет собственный кулдаун **0.125 с** (`MagickaElement`);
-  набор включённых элементов управляется `ElementManager`/`TutorialManager` (обучение может
-  отключать элементы). В `ElementManager` нет Poison.
-- Геймпад: `SpellTree` — дерево из 5 направлений (Center/Up/Down/Left/Right), глубина 2; каждому
-  листу назначен базовый элемент (таблица выше). Буфер направлений игрока (`InputQueue`) проходит
-  по дереву; при отсутствии потомка первый элемент буфера отбрасывается; найденный элемент
-  возвращается, буфер очищается. Клавиатура просто эмулирует нужную пару направлений.
-- Бинды: `KeyboardBindings` (Water, Life, Shield, Cold, Lightning, Arcane, Earth, Fire, Cast, CastSelf,
-  Boost, Move, Block, Shift, Inventory, PrevMagick, NextMagick). Каст: ПКМ = Cast, Shift = модификатор
-  Area/Weapon, СКМ = CastSelf, Пробел = Boost (каст магика), ЛКМ = Move/атака.
+- Keyboard: each element key has its own cooldown of **0.125 s** (`MagickaElement`);
+  the set of enabled elements is controlled by `ElementManager`/`TutorialManager` (the tutorial can
+  disable elements). `ElementManager` has no Poison.
+- Gamepad: `SpellTree` is a tree of 5 directions (Center/Up/Down/Left/Right), depth 2; each
+  leaf is assigned a basic element (table above). The player's direction buffer (`InputQueue`) walks
+  the tree; if there is no child, the first element of the buffer is dropped; a found element
+  is returned and the buffer is cleared. The keyboard simply emulates the needed pair of directions.
+- Bindings: `KeyboardBindings` (Water, Life, Shield, Cold, Lightning, Arcane, Earth, Fire, Cast, CastSelf,
+  Boost, Move, Block, Shift, Inventory, PrevMagick, NextMagick). Casting: RMB = Cast, Shift = modifier
+  Area/Weapon, MMB = CastSelf, Space = Boost (cast a magick), LMB = Move/attack.
 
-### 1.3 Побочные эффекты при призыве элемента (Avatar)
+### 1.3 Side effects when conjuring an element (Avatar)
 
-Если игрок призывает **Lightning, будучи Wet** (и у него нет пассивки предмета `WetLightning`),
-или **Fire, будучи Greased**: элемент в очередь не добавляется; вместо этого считается урон
-`Spell(элемент).CalculateDamage(Lightning, Self)`, магнитуды всех записей ×0.5, и он применяется
-к самому заклинателю. Буфер ввода очищается.
+If the player conjures **Lightning while Wet** (and has no `WetLightning` item passive),
+or **Fire while Greased**: the element is not added to the queue; instead damage
+`Spell(element).CalculateDamage(Lightning, Self)` is computed, the magnitudes of all entries ×0.5, and it is applied
+to the caster. The input buffer is cleared.
 
 ---
 
-## 2. Очередь элементов (spell queue)
+## 2. Element queue (spell queue)
 
-- Ёмкость: `Defines.SPELL_QUECAP = 5` у игрока (у NPC — ёмкость их списка; у предмета-оружия тоже 5).
-- Элемент очереди — это `Spell` с магнитудой 1 одного элемента (или результат слияния, см. ниже).
+- Capacity: `Defines.SPELL_QUECAP = 5` for the player (for NPCs, the capacity of their list; for a weapon item, also 5).
+- A queue entry is a `Spell` with magnitude 1 of one element (or the result of a merge, see below).
 
-### 2.1 Отношения между элементами
+### 2.1 Relations between elements
 
-| Отношение | Пары | Результат |
+| Relation | Pairs | Result |
 |---|---|---|
-| **Opposites** (взаимоуничтожение) | Arcane–Life, Fire–Cold, Earth–Lightning, Water–Lightning, **Shield–Shield** | обе записи удаляются |
-| **Revertable** (обратимые) | Cold–Steam, Ice–Fire | слияние → Water |
-| **Combinable** (комбинирование) | Water–Cold, Water–Fire | слияние → Ice / Steam |
+| **Opposites** (mutual cancellation) | Arcane–Life, Fire–Cold, Earth–Lightning, Water–Lightning, **Shield–Shield** | both entries are removed |
+| **Revertable** | Cold–Steam, Ice–Fire | merge → Water |
+| **Combinable** | Water–Cold, Water–Fire | merge → Ice / Steam |
 
-Замечания:
-- Проверка «противоположностей» идёт по флагам записей: Steam не является Water, поэтому
-  Steam + Lightning **не** гасятся; Ice + Lightning тоже не гасятся.
-- `InclusiveOpposites` = Opposites + пара Fire–Water. Используется при встрече лучей и при уроне
-  элементальным барьерам (не в очереди).
-- Poison–Life гасятся только на уровне магнитуд при сложении заклинаний (раздел 3), не в очереди.
+Notes:
+- The "opposites" check uses the entries' flags: Steam is not Water, so
+  Steam + Lightning do **not** cancel; Ice + Lightning do not cancel either.
+- `InclusiveOpposites` = Opposites + the Fire–Water pair. Used when beams meet and for damage
+  to elemental barriers (not in the queue).
+- Poison–Life cancel only at the magnitude level when adding spells (section 3), not in the queue.
 
-### 2.2 Алгоритм добавления элемента `X`
+### 2.2 Algorithm for adding element `X`
 
-**Если в очереди < 5 записей:**
-1. `X` добавляется в конец.
-2. Проход «Opposites»: от последней записи к первой; для каждой записи `i` ищется ближайшая
-   *более ранняя* запись `j < i`, противоположная ей (поиск от `i−1` к 0). Если найдена — удаляются
-   обе, обход продолжается с позиции до них.
-3. Проход «Revertable»: аналогично от конца; найденная пара сливается (сумма заклинаний,
-   раздел 3) **на место более ранней** записи, поздняя удаляется.
-4. Проход «Combinable»: то же для пар Water+Cold / Water+Fire.
+**If the queue has < 5 entries:**
+1. `X` is appended to the end.
+2. "Opposites" pass: from the last entry to the first; for each entry `i`, find the nearest
+   *earlier* entry `j < i` that is its opposite (search from `i−1` down to 0). If found, both are
+   removed and the walk continues from the position before them.
+3. "Revertable" pass: likewise from the end; a found pair is merged (spell sum,
+   section 3) **into the place of the earlier** entry, the later one is removed.
+4. "Combinable" pass: the same for Water+Cold / Water+Fire pairs.
 
-Каждый проход выполняется ровно один раз, в этом порядке. Следствие: продукт слияния из шага 3
-(Water) уже не проверяется на противоположность в этом же добавлении (так достижим, например,
-магик Amalgameddon: `S Q R A F` → `[Arcane, Water, Lightning]`).
+Each pass runs exactly once, in this order. Consequence: the merge product of step 3
+(Water) is not checked for opposites again during the same addition (this is how, for example,
+the Amalgameddon magick is reachable: `S Q R A F` → `[Arcane, Water, Lightning]`).
 
-**Если очередь полна (5):** ищется (от конца к началу) первая запись, противоположная `X` → она
-удаляется; иначе первая обратимая → сливается с `X` на её месте; иначе первая комбинируемая →
-сливается на её месте; иначе `X` отбрасывается. (Для оружия с флагом *lightning precedence*,
-если ничего не нашлось, первая с конца запись, отличная от Lightning, заменяется на Lightning.)
+**If the queue is full (5):** search (from end to start) for the first entry opposite to `X` → it
+is removed; otherwise the first revertable one → merged with `X` in its place; otherwise the first combinable one →
+merged in its place; otherwise `X` is discarded. (For a weapon with the *lightning precedence* flag,
+if nothing was found, the first entry from the end that is not Lightning is replaced with Lightning.)
 
-Функция возвращает «элемент добавлен» только если длина очереди выросла на 1.
+The function returns "element added" only if the queue length grew by 1.
 
-### 2.3 Примеры
+### 2.3 Examples
 
-- `Q F` → `[Steam]`; `Q R` → `[Ice]`; `R Q` → `[Ice]` (вода ищет более ранний холод).
-- `Q A` → `[]` (Water–Lightning); `E E` → `[]` (второй щит гасит первый).
-- `Q F R` → `[Water]` (Steam+Cold обратимы); `Q R F` → `[Water]` (Ice+Fire).
-- `F D Q` → `[Steam, Earth]` (вода сливается с *самым поздним* подходящим — здесь Fire в позиции 0).
+- `Q F` → `[Steam]`; `Q R` → `[Ice]`; `R Q` → `[Ice]` (water looks for an earlier cold).
+- `Q A` → `[]` (Water–Lightning); `E E` → `[]` (the second shield cancels the first).
+- `Q F R` → `[Water]` (Steam+Cold are revertable); `Q R F` → `[Water]` (Ice+Fire).
+- `F D Q` → `[Steam, Earth]` (water merges with the *latest* suitable entry, here Fire at position 0).
 
 ---
 
-## 3. Итоговое заклинание (`Spell`)
+## 3. Final spell (`Spell`)
 
-`Spell` хранит маску `Element` и 11 магнитуд (float). При касте `SpellManager.Combine` сворачивает
-очередь слева направо оператором сложения. Если первая запись — магик (`Element == All`),
-возвращается она.
+`Spell` stores an `Element` mask and 11 magnitudes (float). On cast, `SpellManager.Combine` folds
+the queue left to right with the addition operator. If the first entry is a magick (`Element == All`),
+it is returned.
 
-### 3.1 Оператор сложения A + B (по шагам)
+### 3.1 Addition operator A + B (step by step)
 
-Пусть `ΣX = A.X + B.X` для каждого элемента.
+Let `ΣX = A.X + B.X` for each element.
 
 1. `E = max(0, ΣE − ΣZ)`, `C = max(0, ΣC − ΣF)`, `F = max(0, ΣF − ΣC)`, `Z = max(0, ΣZ − ΣE)`,
    `P = max(0, ΣP − ΣL)`.
-2. `I = ΣI`; если `I > 0` и `ΣF > 0`: `k = min(I, ΣF)`; `W += k`, `F −= k`, `I −= k`.
-3. `T = ΣT`; если `T > 0` и `ΣC > 0`: `k = min(T, ΣC)`; `W += k`, `C −= k`, `T −= k`.
+2. `I = ΣI`; if `I > 0` and `ΣF > 0`: `k = min(I, ΣF)`; `W += k`, `F −= k`, `I −= k`.
+3. `T = ΣT`; if `T > 0` and `ΣC > 0`: `k = min(T, ΣC)`; `W += k`, `C −= k`, `T −= k`.
 4. `L = ΣL`, `A = ΣA`, `S = ΣS`, `W += ΣW`.
 5. `k = min(ΣW, ΣF)`: `T += k`, `W −= k`, `F −= k`.
 6. `k = min(ΣW, ΣC)`: `I += k`, `W −= k`, `C −= k`.
-7. `Element` = объединение флагов всех элементов с магнитудой > 0.
+7. `Element` = union of the flags of all elements with magnitude > 0.
 
-Поскольку очередь уже нормализована, на практике магнитуда элемента = число его записей в очереди
-(например, `Q F Q F D` → Steam 2, Earth 1). `Spell.DefaultSpell(mask)` даёт магнитуду 1 на каждый
-флаг. `Normalize()` делит все магнитуды на сумму (используется при зарядке оружия).
+Since the queue is already normalized, in practice an element's magnitude = the number of its entries in the queue
+(for example, `Q F Q F D` → Steam 2, Earth 1). `Spell.DefaultSpell(mask)` gives magnitude 1 for each
+flag. `Normalize()` divides all magnitudes by their sum (used when charging a weapon).
 
-Вспомогательные величины:
-- `TotalMagnitude` = сумма всех 11 магнитуд.
+Helper quantities:
+- `TotalMagnitude` = sum of all 11 magnitudes.
 - `TotalSprayMagnitude` = F + C + T + W + P.
-- `BlastSize` = `√(m / 5)`, где `m` зависит от типа: Spray → max(T, F, C, W, P); Projectile →
-  max(E, I); Beam → max(A, L); иначе 0. Радиус «взрыва» обычно `BlastSize × 10`
-  (5 элементов → радиус 10).
-- `ArcaneMultiplier(m) = 3·√(m/5)` (вспомогательная, используется вне ядра).
+- `BlastSize` = `√(m / 5)`, where `m` depends on the type: Spray → max(T, F, C, W, P); Projectile →
+  max(E, I); Beam → max(A, L); otherwise 0. The "blast" radius is usually `BlastSize × 10`
+  (5 elements → radius 10).
+- `ArcaneMultiplier(m) = 3·√(m/5)` (helper, used outside the core).
 
-### 3.2 Определение типа заклинания (`GetSpellType`) — по приоритету
+### 3.2 Spell type detection (`GetSpellType`), by priority
 
 1. `Element == All` → **Magick**
-2. `Element == None` → **Push** (пустая очередь: «толчок»)
-3. содержит Shield → **Shield**
-4. содержит Earth или Ice → **Projectile**
-5. содержит Arcane или Life → **Beam** (railgun)
-6. содержит Lightning и **не** содержит Steam → **Lightning**
-7. иначе → **Spray** (Water, Cold, Fire, Steam, Poison, Steam+Lightning)
+2. `Element == None` → **Push** (empty queue: "push")
+3. contains Shield → **Shield**
+4. contains Earth or Ice → **Projectile**
+5. contains Arcane or Life → **Beam** (railgun)
+6. contains Lightning and does **not** contain Steam → **Lightning**
+7. otherwise → **Spray** (Water, Cold, Fire, Steam, Poison, Steam+Lightning)
 
 ---
 
-## 4. Типы каста и жизненный цикл
+## 4. Cast types and lifecycle
 
-`CastType`: `None/Blast = 0`, `Force = 1` (ПКМ), `Area = 2` (Shift+ПКМ), `Self = 3` (СКМ),
-`Weapon = 4` (Shift+ЛКМ, «зачарование» оружия), `Magick = 5` (Пробел).
+`CastType`: `None/Blast = 0`, `Force = 1` (RMB), `Area = 2` (Shift+RMB), `Self = 3` (MMB),
+`Weapon = 4` (Shift+LMB, weapon "imbue"), `Magick = 5` (Space).
 
-Порядок: при нажатии каста очередь сворачивается в `Spell` (очередь игрока очищается), персонаж
-переходит в `CastState` (или `ChargeState`), по событию анимации вызывается `Spell.Cast(castType)`,
-который берёт из пула эффект по `SpellType` и вызывает `CastForce/CastArea/CastSelf/CastWeapon`.
+Order: when cast is pressed, the queue is folded into a `Spell` (the player's queue is cleared), the character
+enters `CastState` (or `ChargeState`), and an animation event calls `Spell.Cast(castType)`,
+which takes an effect from the pool by `SpellType` and calls `CastForce/CastArea/CastSelf/CastWeapon`.
 
-| SpellType | Класс эффекта |
+| SpellType | Effect class |
 |---|---|
 | Push | `PushSpell` |
 | Spray | `SpraySpell` |
 | Projectile | `ProjectileSpell` |
 | Shield | `ShieldSpell` |
-| Beam | `RailGunSpell` (+ сущность `Railgun`) |
+| Beam | `RailGunSpell` (+ entity `Railgun`) |
 | Lightning | `LightningSpell` (+ `LightningBolt`) |
-| Magick | `SpecialAbility` по `MagickType` (раздел 10) |
+| Magick | `SpecialAbility` by `MagickType` (section 10) |
 
-Базовые правила эффекта (`SpellEffect`):
-- minTTL/maxTTL: Force/Area/Weapon = 0.5 / 1.5 с, Self = 0.2 / 0.2 с.
-- Непрерывный эффект (всё, кроме Projectile) прерывается, если игрок отпустил кнопку после
-  истечения minTTL, если заклинатель умер, или если его `CastType` стал `None`.
-- Скорость поворота во время каста (множитель): база 0.75; Spray 0.6; Lightning 0.1; Shield 0.1;
+Basic effect rules (`SpellEffect`):
+- minTTL/maxTTL: Force/Area/Weapon = 0.5 / 1.5 s, Self = 0.2 / 0.2 s.
+- A continuous effect (everything except Projectile) is interrupted if the player released the button after
+  minTTL expired, if the caster died, or if the caster's `CastType` became `None`.
+- Turn speed while casting (multiplier): base 0.75; Spray 0.6; Lightning 0.1; Shield 0.1;
   Beam 0.0325; Push 0; Projectile 0.
-- Пулы эффектов по 16 экземпляров каждого типа.
+- Effect pools hold 16 instances of each type.
 
-**Заряд (SpellPower).** Если тип Projectile и каст Force, либо тип Push и каст Force/Area, персонаж
-входит в `ChargeState`: проигрывается `charge_force`/`charge_area`, `SpellPower` линейно растёт
-от 0 до 1 по длительности клипа, после окончания клипа = 1 (loop-анимация). Отпускание кнопки →
-каст. Поворот при зарядке ×0.125. Для не-аватаров заряд снарядов фиксирован 0.5.
+**Charge (SpellPower).** If the type is Projectile and the cast is Force, or the type is Push and the cast is Force/Area, the character
+enters `ChargeState`: `charge_force`/`charge_area` plays, `SpellPower` grows linearly
+from 0 to 1 over the clip duration, and after the clip ends it is 1 (loop animation). Releasing the button →
+cast. Turning while charging ×0.125. For non-avatars, projectile charge is fixed at 0.5.
 
-**Weapon (зачарование).** У аватара каст Weapon не создаёт эффект сразу: все записи очереди
-переносятся в очередь удерживаемого оружия (`Item.TryAddToQueue`, с `Normalize` и теми же
-правилами слияния, ёмкость 5), очередь игрока очищается. Когда оружие «заряжено» и очередь игрока
-пуста, атака вызывает `Cast(Weapon)` сохранённого заклинания.
+**Weapon (imbue).** For the avatar, a Weapon cast does not create an effect right away: all queue entries
+are moved into the held weapon's queue (`Item.TryAddToQueue`, with `Normalize` and the same
+merge rules, capacity 5), and the player's queue is cleared. When the weapon is "charged" and the player's queue
+is empty, an attack calls `Cast(Weapon)` of the stored spell.
 
 ---
 
-## 5. Поведение по типам
+## 5. Behavior by type
 
-### 5.1 Push (пустая очередь)
+### 5.1 Push (empty queue)
 
 | | Force | Area |
 |---|---|---|
-| Сила | `50 + 500·SpellPower` | то же |
-| Конус / радиус | угол π/6, дальность 10 | 360°, радиус `3.5 + AdditionalPushRadius` |
-| Время действия | 0.25 с; радиус охвата растёт от 25 % до 100 % | то же |
+| Strength | `50 + 500·SpellPower` | same |
+| Cone / radius | angle π/6, range 10 | 360°, radius `3.5 + AdditionalPushRadius` |
+| Duration | 0.25 s; the coverage radius grows from 25 % to 100 % | same |
 
-Удар: `Damage(Pushed, Earth, amount = сила, magnitude = 1.5)` — один раз на цель (hit list),
-только при прямой видимости (луч до цели не пересекает геометрию уровня). Сущности без
-`IDamageable` получают импульс напрямую (подъём `10° + SpellPower·0.1·π/8`). Self/Weapon — пусто.
+Hit: `Damage(Pushed, Earth, amount = strength, magnitude = 1.5)`, once per target (hit list),
+only with line of sight (the ray to the target does not cross level geometry). Entities without
+`IDamageable` get the impulse directly (elevation `10° + SpellPower·0.1·π/8`). Self/Weapon do nothing.
 
 ### 5.2 Spray
 
-- **Force**: луч-конус, угол π/10 (18°), длительность до **4 с** (пока зажата кнопка).
-  Базовая дальность `R = 5 + TotalSprayMagnitude` (при 5 элементах — 10). Дальность нарастает
-  за 0.25 с (множитель +4/с до 1). Фактическая дальность поражения на кадре = `R · (0.1·R·f)`,
-  где `f ≤ 1` — доля луча до первого препятствия (геометрия уровня или щит). Т.е. без
-  препятствий ≈ `R²/10`.
-  Каждая цель в дуге получает коллекцию урона **с магнитудами ×0.25**, не чаще раза в 0.25 с
-  (hit list с таймером 0.25 с) ⇒ ≈ 1 «полная» коллекция в секунду.
-  Холод/вода в струе замораживают поверхности жидкостей (`Liquid.Freeze`). На полу остаются
-  декали (Fire/Cold/Water), при F ≥ 1 — эффект `fire_scourge`.
-- **Area**: мгновенный `FullBlast` радиуса `BlastSize·10` вокруг заклинателя (сам заклинатель
-  исключён), с затуханием (5.8).
-- **Self**: коллекция `(Spray, Self)` применяется к себе один раз (типично: вода тушит огонь, огонь
-  сушит).
-- **Weapon**: дуговой удар радиуса 6, угол π/2 из точки оружия.
-- Если заклинатель **Greased** и в коллекции есть огонь — первая огненная запись применяется к
-  самому заклинателю (Force/Area/Weapon).
-- Вода без пара формально вызывает «электризацию» (`Electrocute`), но у `Character` эта функция
-  пустая (реально работает только у электрических барьеров).
+- **Force**: cone ray, angle π/10 (18°), duration up to **4 s** (while the button is held).
+  Base range `R = 5 + TotalSprayMagnitude` (10 with 5 elements). The range builds up
+  over 0.25 s (multiplier +4/s up to 1). The actual hit range in a frame = `R · (0.1·R·f)`,
+  where `f ≤ 1` is the fraction of the ray up to the first obstacle (level geometry or a shield). I.e. with no
+  obstacles ≈ `R²/10`.
+  Each target in the arc gets the damage collection **with magnitudes ×0.25**, no more than once per 0.25 s
+  (hit list with a 0.25 s timer) ⇒ ≈ 1 "full" collection per second.
+  Cold/water in the spray freeze liquid surfaces (`Liquid.Freeze`). Decals remain on the floor
+  (Fire/Cold/Water); with F ≥ 1, the `fire_scourge` effect.
+- **Area**: instant `FullBlast` of radius `BlastSize·10` around the caster (the caster is
+  excluded), with falloff (5.8).
+- **Self**: the collection `(Spray, Self)` is applied to self once (typically: water puts out fire, fire
+  dries).
+- **Weapon**: arc strike of radius 6, angle π/2 from the weapon point.
+- If the caster is **Greased** and the collection contains fire, the first fire entry is applied to
+  the caster (Force/Area/Weapon).
+- Water without steam formally triggers "electrification" (`Electrocute`), but in `Character` this function
+  is empty (it really works only for electric barriers).
 
 ### 5.3 Projectile (Earth/Ice)
 
-**Force** (заряжаемый):
-- Скорость `v0 = 25 + 85·SpellPower`; с Earth: `v0 ×= 0.5 + 0.5/E`. Масса снаряда `1 + 50·E`,
-  радиус `0.075 + 0.075·E`, время жизни 10 с.
-- С Earth — **один** валун. Без Earth (только Ice) — `N = trunc(3·I)` осколков.
-- Интервал между выстрелами: `(0.0875 + Total/5·0.2625) / N`.
-- Все снаряды, кроме последнего, получают случайный поворот по Y в пределах `±(π/4)·(1−заряд)`
-  и скорость `v0·(1.25 + 0.75·rand)`; последний летит точно по направлению со скоростью `v0`.
-- Если отрезок «центр персонажа → точка вылета» пересекает щит, снаряд не создаётся.
-- Модели: `Models/Missiles/Earth0..3` (индекс `clamp(E−1, 0, 4)`, 2 и 3 совпадают),
-  `Ice3`, `IceEarth0..3` (индекс `clamp(I+E−1,0,4)`).
-- Попадание: урон `(Projectile, Force)` (раздел 6.3); у каменных снарядов первая запись
-  масштабируется скоростью: `amount × |v| / 50`. Ледяные осколки — Piercing, магнитуды ×`1/N`.
-- Валун с прочими элементами (кроме Ice): при попадании/столкновении — взрыв радиуса
-  `BlastSize(заклинание без Earth)·10` с уроном `CalculateDamage(тип_остатка, Area)` от полного
-  заклинания. Без «остатка» валун пробивает до 25 целей.
-- Столкновение со средой: декаль `Crater`.
+**Force** (chargeable):
+- Speed `v0 = 25 + 85·SpellPower`; with Earth: `v0 ×= 0.5 + 0.5/E`. Projectile mass `1 + 50·E`,
+  radius `0.075 + 0.075·E`, lifetime 10 s.
+- With Earth, **one** boulder. Without Earth (Ice only), `N = trunc(3·I)` shards.
+- Interval between shots: `(0.0875 + Total/5·0.2625) / N`.
+- All projectiles except the last get a random Y rotation within `±(π/4)·(1−charge)`
+  and speed `v0·(1.25 + 0.75·rand)`; the last one flies exactly along the direction at speed `v0`.
+- If the segment "character center → launch point" crosses a shield, the projectile is not created.
+- Models: `Models/Missiles/Earth0..3` (index `clamp(E−1, 0, 4)`, 2 and 3 are the same),
+  `Ice3`, `IceEarth0..3` (index `clamp(I+E−1,0,4)`).
+- Hit: damage `(Projectile, Force)` (section 6.3); for stone projectiles the first entry
+  is scaled by speed: `amount × |v| / 50`. Ice shards are Piercing, magnitudes ×`1/N`.
+- A boulder with other elements (except Ice): on hit/collision, a blast of radius
+  `BlastSize(spell without Earth)·10` with damage `CalculateDamage(remainder_type, Area)` from the full
+  spell. Without a "remainder", the boulder pierces up to 25 targets.
+- Collision with the environment: `Crater` decal.
 
-**Area**: `GroundBlast` радиуса `BlastSize·10` (Earth/Ice), без затухания, игнорирует
-левитирующих; с Ice появляются ледяные шипы (`IceSpikes`). Урон `(Projectile, Area)`.
+**Area**: `GroundBlast` of radius `BlastSize·10` (Earth/Ice), no falloff, ignores
+levitating targets; with Ice, ice spikes appear (`IceSpikes`). Damage `(Projectile, Area)`.
 
-**Self**: снаряды падают на самого заклинателя: осколки — из случайных точек на окружности
-радиуса 6 на высоте +10, последний (или единственный валун) — с высоты +8 строго вниз.
+**Self**: projectiles fall on the caster: shards from random points on a circle
+of radius 6 at height +10, the last one (or the single boulder) from height +8 straight down.
 
-**Weapon**: с Ice — ледяной клинок (`IceBlade`) длиной `3.75 + 1.25·I`; с Earth — по окончании
-анимации удара запускается подземная волна (`UnderGroundAttack`) скоростью 40, дальностью 15,
-каждый получает урон один раз.
+**Weapon**: with Ice, an ice blade (`IceBlade`) of length `3.75 + 1.25·I`; with Earth, when the
+strike animation ends, an underground wave (`UnderGroundAttack`) is launched with speed 40, range 15;
+each target takes damage once.
 
-### 5.4 Beam (Arcane/Life — «railgun»)
+### 5.4 Beam (Arcane/Life, "railgun")
 
-- **Force**: луч длительностью `TTL = 1 + 2·(A + L)` с (с учётом баффов `ModifySpellTTL`).
-  Длина растёт со скоростью 90 ед/с до максимума **75**. Урон цели (первой пересечённой) —
-  каждые 0.25 с коллекция с магнитудами ×0.25. Луч отражается от материала `Reflect`, щитов и
-  персонажей под щитом-пузырём, проходит через порталы, игнорирует нетвёрдые барьеры и поля
-  смазки. Максимальная глубина цепочки отражений/слияний — 6.
-- **Пересечение лучей** (расстояние между отрезками ≤ 1):
-  - «Взрыв» через 0.25 с, если: у лучей есть общий владелец, ИЛИ их дополнительные элементы
-    (`W, C, F, Z, T, P`) — `InclusiveOpposites`, ИЛИ один Arcane, а другой Life, ИЛИ направления
-    почти противоположны (|среднее направлений| < 0.2). Взрыв: `FullBlast` каждой коллекции
-    урона владельцев радиусом `3 + число_владельцев`, плюс Knockback 500 / магнитуда 2 радиусом 5.
-    Ачивка `nevercrossthebeams`.
-  - Иначе лучи **сливаются**: из точки встречи выходит дочерний луч по среднему направлению,
-    несущий урон всех родителей.
-- Arcane/Life урон лучом накапливается на персонаже (`AccumulateArcaneDamage`); при смерти от
-  луча персонаж «раздувается» и взрывается (`BloatKill`, `BLOATTIME = 0.333`).
-- **Area**: `FullBlast` радиуса `BlastSize·10` (визуально `ArcaneBlast`, без затухания по
-  дистанции для Arcane/Life — см. 5.8).
-- **Self**: коллекция `(Beam, Self)` применяется к себе (Life — лечение).
-- **Weapon**: `ArcaneBlade`; мгновенный дуговой удар радиуса `1.5 + Total/2`, угол 81° (9π/20).
+- **Force**: a beam lasting `TTL = 1 + 2·(A + L)` s (including `ModifySpellTTL` buffs).
+  Length grows at 90 units/s up to a maximum of **75**. Damage to the target (the first one crossed):
+  every 0.25 s, the collection with magnitudes ×0.25. The beam reflects off the `Reflect` material, shields and
+  characters inside a bubble shield, passes through portals, ignores non-solid barriers and grease
+  fields. Maximum depth of the reflection/merge chain is 6.
+- **Beam crossing** (distance between segments ≤ 1):
+  - "Explosion" after 0.25 s if: the beams share an owner, OR their extra elements
+    (`W, C, F, Z, T, P`) are `InclusiveOpposites`, OR one is Arcane and the other Life, OR the directions are
+    nearly opposite (|mean of the directions| < 0.2). Explosion: `FullBlast` of each owner's damage
+    collection with radius `3 + number_of_owners`, plus Knockback 500 / magnitude 2 with radius 5.
+    Achievement `nevercrossthebeams`.
+  - Otherwise the beams **merge**: a child beam leaves the meeting point along the mean direction,
+    carrying the damage of all parents.
+- Arcane/Life beam damage accumulates on the character (`AccumulateArcaneDamage`); on death from
+  a beam the character "bloats" and explodes (`BloatKill`, `BLOATTIME = 0.333`).
+- **Area**: `FullBlast` of radius `BlastSize·10` (visually `ArcaneBlast`, no distance falloff
+  for Arcane/Life, see 5.8).
+- **Self**: the collection `(Beam, Self)` is applied to self (Life heals).
+- **Weapon**: `ArcaneBlade`; instant arc strike of radius `1.5 + Total/2`, angle 81° (9π/20).
 
 ### 5.5 Lightning
 
 | | Force / Weapon | Area | Self |
 |---|---|---|---|
-| Число разрядов | 8 за 1 с | 32 за 1 с | 1 (по себе) |
-| Дальность | `4 + 0.8·Z` | `2 + 0.4·Z` | — |
-| Направление | по взгляду | по кругу, шаг π/4 | — |
-| Магнитуда на разряд | ×1/8 | ×1/16 | ×1 |
+| Number of bolts | 8 per 1 s | 32 per 1 s | 1 (on self) |
+| Range | `4 + 0.8·Z` | `2 + 0.4·Z` | — |
+| Direction | along facing | in a circle, step π/4 | — |
+| Magnitude per bolt | ×1/8 | ×1/16 | ×1 |
 
-(Дальность модифицируется баффами `ModifySpellRange`.) Если заклинатель **Wet** (без пассивки
-`WetLightning`) — дальность 2 и режим «по кругу».
+(Range is modified by `ModifySpellRange` buffs.) If the caster is **Wet** (without the
+`WetLightning` passive), range is 2 and the mode is "in a circle".
 
-Разряд (`LightningBolt`): первая цель — среди `IDamageable` в радиусе, в секторе ±90° от
-направления, не за щитом; выбирается кандидат с меньшим углом и меньшей дистанцией. Затем цепь:
-от поражённой цели ищется ближайшая новая цель в радиусе `оставшаяся_дальность − пройденное`,
-в секторе ±45° от направления разряда. Цепь не продолжается от барьеров, щитов и зон боссов.
-Блокирующий персонаж поглощает молнию в своё оружие (добавляет Lightning в очередь предмета).
-Если цели нет — разряд рисуется в случайном отклонении ±π/16 и гаснет.
+Bolt (`LightningBolt`): the first target is chosen among `IDamageable` within the radius, in a sector of ±90° from the
+direction, not behind a shield; the candidate with the smaller angle and smaller distance is picked. Then the chain:
+from the hit target, the nearest new target is searched within radius `remaining_range − traveled`,
+in a sector of ±45° from the bolt direction. The chain does not continue from barriers, shields and boss zones.
+A blocking character absorbs the lightning into their weapon (adds Lightning to the item's queue).
+If there is no target, the bolt is drawn with a random deviation of ±π/16 and fades.
 
-### 5.6 Shield (содержит Shield)
+### 5.6 Shield (contains Shield)
 
-Обозначим `X = Element без Shield`.
+Let `X = Element without Shield`.
 
-**X пусто (чистый щит):**
+**X empty (pure shield):**
 
-| Каст | Результат |
+| Cast | Result |
 |---|---|
-| Force | Щит-«диск» радиус 5.5, HP 800; центр смещён на 3.5 назад от заклинателя (дуга ≈2 м впереди) |
-| Area | Сфера радиус 5.5, HP 1000 вокруг заклинателя |
-| Weapon | Стена радиус 5.5, HP 800 впереди на `радиус_персонажа + 7.5` |
-| Self | Пузырь (`SelfShield`) — см. ниже |
+| Force | Shield "disc" radius 5.5, HP 800; center offset 3.5 behind the caster (arc ≈2 m in front) |
+| Area | Sphere radius 5.5, HP 1000 around the caster |
+| Weapon | Wall radius 5.5, HP 800 in front at `character_radius + 7.5` |
+| Self | Bubble (`SelfShield`), see below |
 
-Сущность `Shield`: теряет 10 HP каждые 0.1 с (**100 HP/с**), макс. HP 5000; урон получает только
-от атак с флагами Damage/Status (`amount × magnitude`), прочие отражаются. Блокирует спреи, лучи
-(отражение), молнии, снаряды.
+`Shield` entity: loses 10 HP every 0.1 s (**100 HP/s**), max HP 5000; takes damage only
+from attacks with the Damage/Status flags (`amount × magnitude`), others are reflected. Blocks sprays, beams
+(reflection), lightning, projectiles.
 
-**X без Earth/Ice, но с Arcane или Life → мины (`SpellMine`):**
-- Force: дуга окружности радиуса 4 (центр на 1 м позади), две первые мины по сторонам, далее
-  цепочкой каждые 0.1 с до длины дуги `2π·4·0.125 ≈ 3.14` в каждую сторону.
-- Area: полная окружность радиуса 4 вокруг заклинателя.
-- Weapon: линия вперёд: `2 + trunc(max(Total/2, 1))` мин с шагом 2.5.
-- Мина: радиус 1; активируется по окончании анимации появления; срабатывает через **0.5 с**
-  после касания персонажем/зоной босса/снарядом (не эфирным и не левитирующим; владелец должен
-  сначала сойти с мины); `FullBlast` радиус **3** с уроном `(Shield, Force|Area|Weapon)`.
-  Взрывается, если владелец дальше 30 ед. Новые барьеры, появляющиеся поверх мины, взрывают её.
+**X without Earth/Ice, but with Arcane or Life → mines (`SpellMine`):**
+- Force: an arc of a circle of radius 4 (center 1 m behind), the first two mines on the sides, then
+  a chain every 0.1 s up to an arc length of `2π·4·0.125 ≈ 3.14` in each direction.
+- Area: a full circle of radius 4 around the caster.
+- Weapon: a line forward: `2 + trunc(max(Total/2, 1))` mines with step 2.5.
+- Mine: radius 1; activates when the spawn animation ends; triggers **0.5 s**
+  after being touched by a character/boss zone/projectile (not ethereal and not levitating; the owner must
+  first step off the mine); `FullBlast` radius **3** with damage `(Shield, Force|Area|Weapon)`.
+  Explodes if the owner is farther than 30 units. New barriers spawning on top of a mine detonate it.
 
-**Иначе → барьеры/стены (`Barrier`):**
-- Force: дуга радиуса 4, шаг сегментов `2·GetRadius` (1.25 для твёрдых, 0.75 для
-  элементальных, с подгонкой масштаба), цепочка каждые 0.075 с на `≈π` в каждую сторону. Если в
-  заклинании нет статусных элементов, Steam и Lightning (т.е. чисто каменная/ледяная стена,
-  возможно с Arcane/Life), центр дуги сдвинут на 2 м назад.
-- Area: кольцо радиуса `S + 3` вокруг заклинателя.
-- Weapon: линия вперёд как у мин.
-- **Твёрдый барьер** (есть Earth или Ice):
-  - HP `(1 + E)·500`, броня `trunc(50·I)` вычитается из входящего урона (кроме огня по льду).
-  - Теряет 10 HP каждые 0.2 с (**50 HP/с**).
-  - Иммунитет к «противоречащим» элементам: холодный барьер не получает урон от Fire/Steam,
-    паровой — от Cold, водяной — от Fire, огненный — от Water.
-  - При появлении бьёт всех в радиусе `1.25·масштаб·радиус` уроном `(Projectile, Area)` один раз.
-  - Контактный урон `(Shield, Force|Area)` (раз в 0.25 с на цель) активен, пока «эффект» жив:
-    чисто ледяные шипы живут `I` секунд (затем барьер исчезает); у ледяного «гейзера» время
-    эффекта = магнитуда доминирующего доп. элемента; у «теслы» (Ice+Lightning) = `Z` с;
-    у Ice+Earth ледяная оболочка живёт `I` с.
-- **Элементальный барьер** (без Earth/Ice — «шторм»/стена стихии):
-  - HP `Total·100` (Shield входит в Total), та же убыль 50 HP/с.
-  - Урон получает только от противоположных стихий: `HP −= trunc(доля·amount·5)`, где
-    `доля = (число элементов барьера, InclusiveOpposite входящему) / (число элементов барьера без Shield)`.
-  - Контакт: урон `(Shield, ...)` раз в 0.25 с на цель; с Lightning — бьёт разрядом.
-- Появляющийся барьер уничтожает барьеры других кастов и взрывает мины в радиусе `0.8·масштаб·радиус`.
-- Камера трясётся с силой `0.25..0.75` и длительностью `0.5·S`.
+**Otherwise → barriers/walls (`Barrier`):**
+- Force: an arc of radius 4, segment step `2·GetRadius` (1.25 for solid, 0.75 for
+  elemental, with scale fitting), a chain every 0.075 s over `≈π` in each direction. If the
+  spell has no status elements, Steam or Lightning (i.e. a pure stone/ice wall,
+  possibly with Arcane/Life), the arc center is shifted 2 m back.
+- Area: a ring of radius `S + 3` around the caster.
+- Weapon: a line forward, as for mines.
+- **Solid barrier** (has Earth or Ice):
+  - HP `(1 + E)·500`, armor `trunc(50·I)` is subtracted from incoming damage (except fire against ice).
+  - Loses 10 HP every 0.2 s (**50 HP/s**).
+  - Immune to "contradicting" elements: a cold barrier takes no damage from Fire/Steam,
+    a steam one from Cold, a water one from Fire, a fire one from Water.
+  - On spawn, hits everyone within radius `1.25·scale·radius` with damage `(Projectile, Area)` once.
+  - Contact damage `(Shield, Force|Area)` (once per 0.25 s per target) is active while the "effect" is alive:
+    pure ice spikes live `I` seconds (then the barrier disappears); for an ice "geyser" the effect
+    time = the magnitude of the dominant extra element; for a "tesla" (Ice+Lightning) = `Z` s;
+    for Ice+Earth the ice shell lives `I` s.
+- **Elemental barrier** (without Earth/Ice, a "storm"/wall of an element):
+  - HP `Total·100` (Shield counts in Total), the same decay of 50 HP/s.
+  - Takes damage only from opposite elements: `HP −= trunc(share·amount·5)`, where
+    `share = (number of barrier elements that are InclusiveOpposite to the incoming one) / (number of barrier elements without Shield)`.
+  - Contact: damage `(Shield, ...)` once per 0.25 s per target; with Lightning, it strikes with a bolt.
+- A spawning barrier destroys barriers from other casts and detonates mines within radius `0.8·scale·radius`.
+- The camera shakes with strength `0.25..0.75` and duration `0.5·S`.
 
 **Self:**
-- X пусто → пузырь `SelfShield`: 500 HP, −100 HP/с; поглощает все атаки Damage/Status (полностью
-  отражает); физические попадания превращаются в отбрасывание.
-- X содержит Earth/Ice → **броня**:
-  - HP 1500 при Earth, иначе 900 (Ice); не убывает со временем; масса персонажа 1001 (не
-    толкается); скорость `0.9 − (0.075·E + 0.025·I)`.
-  - Физический урон: `amount −= 10` (Earth) или `−= 70` (иначе), затем `× (1 − (0.05·I + 0.15·E))`;
-    остаток сверх HP брони проходит дальше. Огонь (DoT) по ледяной броне ×`(1 + I)`; лечение по
-    броне не проходит.
-  - Ледяная броня при наложении наносит в радиусе 3 урон `Earth|Piercing` 275, магнитуда
+- X empty → `SelfShield` bubble: 500 HP, −100 HP/s; absorbs all Damage/Status attacks (fully
+  reflects); physical hits are turned into knockback.
+- X contains Earth/Ice → **armor**:
+  - HP 1500 with Earth, otherwise 900 (Ice); does not decay over time; character mass 1001 (cannot
+    be pushed); speed `0.9 − (0.075·E + 0.025·I)`.
+  - Physical damage: `amount −= 10` (Earth) or `−= 70` (otherwise), then `× (1 − (0.05·I + 0.15·E))`;
+    the remainder beyond the armor HP passes through. Fire (DoT) against ice armor ×`(1 + I)`; healing does not pass
+    through the armor.
+  - When applied, ice armor deals damage `Earth|Piercing` 275 within radius 3, magnitude
     `max(1, I + E)`.
-- X содержит Lightning/Arcane/Life/Steam/Water/Cold/Fire → **элементальная аура-оберег**: для
-  каждого такого элемента — бафф-сопротивление с множителем 0 (иммунитет) для **всех** в радиусе
-  `1.5·m`, длительность `15 + 5·m` с, где `m = max(1, макс. магнитуда этих элементов)`.
-  Снимает прежний пузырь (если не накладывалась броня) и прежнюю ауру.
+- X contains Lightning/Arcane/Life/Steam/Water/Cold/Fire → **elemental ward aura**: for
+  each such element, a resistance buff with multiplier 0 (immunity) for **everyone** within radius
+  `1.5·m`, duration `15 + 5·m` s, where `m = max(1, max magnitude of these elements)`.
+  Removes the previous bubble (if armor was not applied) and the previous aura.
 
-### 5.7 Magick — см. раздел 10.
+### 5.7 Magick: see section 10.
 
-### 5.8 Взрывы (`Blast`)
+### 5.8 Blasts (`Blast`)
 
-- `FullBlast(radius)`: все `IDamageable` в радиусе (кроме исключённого), с прямой видимостью от
-  центра; расстояние = до центра минус радиус цели. Затухание магнитуды
-  `k = 1 − (d / radius)³` — **кроме** коллекций, содержащих Arcane/Life. Тряска камеры
-  `radius/3`, 0.3 с.
-- `GroundBlast(radius)`: без затухания, не задевает левитирующих, тряска 2 / 0.9 с.
-- Обе вызывают `Liquid.Freeze` по кругу (холод замораживает воду).
+- `FullBlast(radius)`: all `IDamageable` within the radius (except the excluded one), with line of sight from
+  the center; distance = to the center minus the target radius. Magnitude falloff
+  `k = 1 − (d / radius)³`, **except** for collections containing Arcane/Life. Camera shake
+  `radius/3`, 0.3 s.
+- `GroundBlast(radius)`: no falloff, does not hit levitating targets, shake 2 / 0.9 s.
+- Both call `Liquid.Freeze` in a circle (cold freezes water).
 
 ---
 
-## 6. Расчёт урона заклинания (`Spell.CalculateDamage`)
+## 6. Spell damage calculation (`Spell.CalculateDamage`)
 
-Результат — `DamageCollection5`: до 5 записей `Damage {AttackProperty, Element, Amount, Magnitude}`.
-Пустая запись тоже занимает слот. `ScaleAmount(base, m) = base·√m`.
+The result is a `DamageCollection5`: up to 5 entries `Damage {AttackProperty, Element, Amount, Magnitude}`.
+An empty entry also takes a slot. `ScaleAmount(base, m) = base·√m`.
 
-### 6.1 Базовые константы (`Defines`, static — «таблица баланса»)
+### 6.1 Base constants (`Defines`, static, the "balance table")
 
-| Имя | Значение | Имя | Значение |
+| Name | Value | Name | Value |
 |---|---:|---|---:|
 | `SPELL_DAMAGE_EARTH` | 150 | `SPELL_DAMAGE_BARRIER_LIGHTNING` | 130 |
 | `SPELL_DAMAGE_ICEEARTH` | 275 | `SPELL_DAMAGE_BARRIER_ICE` | 275 |
@@ -418,263 +418,263 @@
 | `STATUS_POISON_DAMAGE` | 50 | `SPELL_DAMAGE_SELF_POISON` | 50 |
 | `STATUS_LIFE_DAMAGE` | −80 | `MJOLNIR_DAMAGE` | Damage+Pushed, Lightning, 1000, 1 |
 
-(Отрицательный amount = лечение. `SPELL_DAMAGE_ICE`, `SELF_EARTH/ICE/POISON`, `BARRIER_STEAM/FIRE/POISON`
-в ядре заклинаний не используются.)
+(A negative amount = healing. `SPELL_DAMAGE_ICE`, `SELF_EARTH/ICE/POISON`, `BARRIER_STEAM/FIRE/POISON`
+are not used in the spell core.)
 
-Общие «строительные блоки»:
+Common "building blocks":
 
-- **StatusMix** (если есть W/C/F/T/P): `Status`, элементы `Element ∩ StatusEffects`,
+- **StatusMix** (if W/C/F/T/P present): `Status`, elements `Element ∩ StatusEffects`,
   amount `50·min1(P) + 60·min1(F)`, magnitude `min1(W + F + C + P + T)`.
-  Внимание: все статусы этой записи получают один и тот же amount (как DPS).
-- **LifeStatus** (если есть L): `Status`, элемент Life, amount `−80·√L`, magnitude 1
-  (при Self — `L`).
-- **StatusB** («CalculateStatus»): `Status`, элементы `Element ∩ (StatusEffects ∪ Arcane)`, плюс
-  Water если есть Steam; amount `60·√F`; magnitude `min1(W + F + C + 0.5·T)`.
-- **Misc(cast)**: если есть W или A — флаг `Pushed`; элементы Water (+ Earth/Arcane для
-  Area/Weapon); amount `trunc(70·W)` (+ `trunc(120·A)` для Area/Weapon); magnitude
-  `W` (+ `E + A` для Area/Weapon); при Earth (Area/Weapon) — ещё флаг `Knockdown`.
+  Note: all statuses of this entry get the same amount (as DPS).
+- **LifeStatus** (if L present): `Status`, element Life, amount `−80·√L`, magnitude 1
+  (for Self, `L`).
+- **StatusB** ("CalculateStatus"): `Status`, elements `Element ∩ (StatusEffects ∪ Arcane)`, plus
+  Water if Steam is present; amount `60·√F`; magnitude `min1(W + F + C + 0.5·T)`.
+- **Misc(cast)**: if W or A present, flag `Pushed`; elements Water (+ Earth/Arcane for
+  Area/Weapon); amount `trunc(70·W)` (+ `trunc(120·A)` for Area/Weapon); magnitude
+  `W` (+ `E + A` for Area/Weapon); with Earth (Area/Weapon), also the `Knockdown` flag.
 
 ### 6.2 Spray
 
-| Запись | Force / Area | Weapon | Self |
+| Entry | Force / Area | Weapon | Self |
 |---|---|---|---|
-| StatusMix | да | да | да |
-| LifeStatus | (недостижимо для Spray) | | |
-| Direct (если C/F/Z/T) | `Damage`, элементы `∩{C,F,Z,T}`, amount `60√F + 25√C + 280√T`, mag `min1(F+C+T+Z)` | то же | amount `60√F + 25√C + 80√T` |
-| Water push (если W) | `Pushed`, Water, amount `trunc(70·W)`, mag `1 + W/4` | mag `W` | — |
-| Water marker (если W) | `Damage`, Water, amount 0, mag 1 | то же | — |
+| StatusMix | yes | yes | yes |
+| LifeStatus | (unreachable for Spray) | | |
+| Direct (if C/F/Z/T) | `Damage`, elements `∩{C,F,Z,T}`, amount `60√F + 25√C + 280√T`, mag `min1(F+C+T+Z)` | same | amount `60√F + 25√C + 80√T` |
+| Water push (if W) | `Pushed`, Water, amount `trunc(70·W)`, mag `1 + W/4` | mag `W` | — |
+| Water marker (if W) | `Damage`, Water, amount 0, mag 1 | same | — |
 
-Lightning в спрее (Steam+Lightning) не добавляет amount, но добавляет флаг Lightning (⇒ двойной
-урон по мокрым, см. 7).
+Lightning in a spray (Steam+Lightning) adds no amount, but adds the Lightning flag (⇒ double
+damage against Wet targets, see 7).
 
 ### 6.3 Projectile
 
-- **Force, есть Earth**: `Damage`, элементы `Element ∩ {E, I}` (+Cold при Ice), amount
-  `150·E² + 275·I²` (квадратично!), mag 1; × скорость/50 (5.3).
-- **Force, только Ice**: `Damage`, элементы `Element ∪ {Cold, Earth}`, amount
-  `275·√I + 250·√Z + 225·√A − 180·√L − 180·√L` (Life учитывается дважды), mag 1; Piercing;
-  на осколок mag ×1/N.
-- **Force, Ice + статусы**: дополнительно `Status`, элементы `∩StatusEffects`, amount
+- **Force, with Earth**: `Damage`, elements `Element ∩ {E, I}` (+Cold with Ice), amount
+  `150·E² + 275·I²` (quadratic!), mag 1; × speed/50 (5.3).
+- **Force, Ice only**: `Damage`, elements `Element ∪ {Cold, Earth}`, amount
+  `275·√I + 250·√Z + 225·√A − 180·√L − 180·√L` (Life is counted twice), mag 1; Piercing;
+  per shard mag ×1/N.
+- **Force, Ice + statuses**: additionally `Status`, elements `∩StatusEffects`, amount
   `50·min1(P) − 80·min1(L)`, mag `min1(W + C + P + L)`.
 - **Area**: 
-  - Status (если W/C/F/T): элементы `∩StatusEffects`, amount `60·min1(F)`, mag `min1(W+F+C+T)`;
+  - Status (if W/C/F/T): elements `∩StatusEffects`, amount `60·min1(F)`, mag `min1(W+F+C+T)`;
   - LifeStatus;
-  - `Damage`, элементы `(Element ∩ Instant) ∪ Earth` (огонь/холод в маску не попадают!),
+  - `Damage`, elements `(Element ∩ Instant) ∪ Earth` (fire/cold do not get into the mask!),
     amount `60√F + 25√C + 280√T + 250√Z + 275√I − 180√L + 225√A`, mag `min1(F+C+T+Z+I+A)`;
   - Water: `Pushed`, amount `trunc(70W)`, mag `W`;
   - Earth: `Knockdown`, amount `trunc(150E)`, mag `E`.
-- **Weapon**: если Ice — `Damage` (+Piercing), Earth, amount `2·275·√I + 150·√E`, mag 1;
-  затем Misc(Weapon), StatusB, пустая запись.
-- **Self**: урон считается как у снарядов Force (они падают на заклинателя).
+- **Weapon**: if Ice, `Damage` (+Piercing), Earth, amount `2·275·√I + 150·√E`, mag 1;
+  then Misc(Weapon), StatusB, an empty entry.
+- **Self**: damage is computed as for Force projectiles (they fall on the caster).
 
-### 6.4 Shield (урон мин, элементальных стен, Wave и т.п.)
+### 6.4 Shield (damage of mines, elemental walls, Wave, etc.)
 
-1. Life (без учёта Shield) → `Damage`, элементы `∩Beams`, amount −600, mag 1;
-   иначе Arcane → `Damage`, Arcane, 225, mag 1.
-2. Статусы → StatusB-подобная запись: элементы `∩(StatusEffects ∪ Arcane)` (+Water при Steam),
+1. Life (ignoring Shield) → `Damage`, elements `∩Beams`, amount −600, mag 1;
+   otherwise Arcane → `Damage`, Arcane, 225, mag 1.
+2. Statuses → a StatusB-like entry: elements `∩(StatusEffects ∪ Arcane)` (+Water with Steam),
    amount `60·√F`, mag `min1(W + F + C + 0.5·T)`.
-3. W и (E или I) → `Pushed`, Water, amount `trunc(75·√W)`, mag `√W`.
+3. W and (E or I) → `Pushed`, Water, amount `trunc(75·√W)`, mag `√W`.
 4. Z → `Damage`, Lightning, amount `130·√Z`, mag 1.
-5. A и нет E/I → `Knockback`, None, amount 500, mag 2.
+5. A and no E/I → `Knockback`, None, amount 500, mag 2.
 
 ### 6.5 Beam
 
-1. StatusMix (если W/C/F/T/P), с доп. флагом `Damage` при наличии W, +Water при Steam.
+1. StatusMix (if W/C/F/T/P), with the extra `Damage` flag when W is present, +Water with Steam.
 2. LifeStatus.
-3. `Damage`, элементы `Element ∩ {Z, A, L, T, C, F}`, mag 1, amount:
-   - не Self: `60√F + 25√C + 125√Z + 280√T − 180·min1(L) + 225·min1(A)`;
+3. `Damage`, elements `Element ∩ {Z, A, L, T, C, F}`, mag 1, amount:
+   - not Self: `60√F + 25√C + 125√Z + 280√T − 180·min1(L) + 225·min1(A)`;
    - Self: `60√F + 25√C + 80√Z + 80√T − 180·min1(L) + 200·min1(A)`.
-   Сила Arcane/Life **не растёт** с количеством — количество увеличивает длительность луча.
+   Arcane/Life strength does **not grow** with count; the count increases the beam duration.
 4. Water → `Pushed`, amount `trunc(70W)`, mag `W`.
 
 ### 6.6 Lightning
 
-1. `Damage`, все элементы заклинания, amount `250√Z + 225√A − 180√L`, mag 1.
-2. StatusMix (если W/C/F/T/P), +флаг Damage при W.
-3. Пустая запись.
+1. `Damage`, all elements of the spell, amount `250√Z + 225√A − 180√L`, mag 1.
+2. StatusMix (if W/C/F/T/P), +Damage flag with W.
+3. An empty entry.
 4. Misc(Area).
-5. StatusB, если есть статусы или Steam.
+5. StatusB, if there are statuses or Steam.
 
-### 6.7 Итоговый DPS (ориентир)
+### 6.7 Resulting DPS (reference)
 
-Для непрерывных эффектов (Spray Force, Beam) магнитуды делятся на 4 и применяются раз в 0.25 с,
-поэтому «amount за секунду» ≈ amount записи × magnitude записи. Пример: 5×Steam спрей ≈
-`280·√5 ≈ 626` до сопротивлений; Arcane-луч = 225/с весь срок `1 + 2A` с.
-
----
-
-## 7. Применение урона к цели
-
-### 7.1 Модификаторы атакующего
-
-Перед отправкой каждой записи: `amount = amount·M + B`, где по всем баффам атакующего типа
-`BoostDamage`, пересекающимся по элементам: `M = Π magnitude_баффа`, `B = Σ amount_баффа`.
-(Сетевой режим: клиент шлёт `DamageRequestMessage`, флаги `DamageFeatures` D/N/K/E решают,
-применяются ли урон/уведомление/отбрасывание/эффекты.)
-
-### 7.2 `Character.InternalDamage` — порядок для одной записи
-
-1. Мёртв / бессмертен / нет таблицы сопротивлений → ничего.
-2. `Entanglement`: если цель не горит — опутывание силой magnitude, конец.
-   Опутанного освобождают урон Damage и огненный Status.
-3. Активный `SelfShield` обрабатывает запись (5.6) и может её изменить/обнулить.
-4. Отбрасывание:
-   - `Knockback` (= Pushed|Knockdown): импульс с подъёмом 0.698 рад (40°), цель сбивается с ног
-     (если может);
-   - иначе `Pushed`: импульс с подъёмом 0.1745 рад (10°); `Knockdown`: сбивание, если
-     `magnitude ≥ KnockdownTolerance` (5000 = иммунитет).
-   - Импульс: «мощность» = amount, «дистанция» = magnitude;
-     `d' = d · max(0, 2·√(1 − (масса − мощность/4)/мощность))`; затем баллистическая скорость
-     для полёта на `d'` под углом подъёма, ×1.4. Иммунитет: бессмертие, эфирность, твёрдая
-     броня, масса > 1000, опутанность, смерть.
-5. Блок (Earth/Lightning Damage при поднятом блоке предметом): вычитается блокированное; если
-   полностью — `Deflected`.
-6. **Статусы до сопротивлений** (раздел 9): Fire→Burning, Cold→Cold, Water→Wet, Poison→Poisoned,
-   Life→Healing, Steam→Wet. DPS = amount записи, magnitude = magnitude записи.
-7. **Сопротивления** (раздел 8) → изменённые amount и magnitude. `|magnitude| ≈ 0` → `Deflected`, конец.
-8. `Stun` (amount > 0) → таймер оглушения; `Bleed` → статус Bleeding (DPS = `BleedRate` шаблона).
-9. Для флага `Damage`:
-   - Lightning по **Wet** цели → `amount ×2`;
-   - Life → уменьшает магнитуду Poisoned на magnitude записи (до снятия);
-   - Earth/Ice/Arcane по **Frozen** цели → `amount ×3` (иначе — кровь/гор);
-   - `HP −= amount × magnitude`; HP ограничено сверху MaxHP.
-   - Результаты: Damaged / Healed / Deflected (0) / Hit (`amount > HitTolerance`) / Pierced.
-10. Смерть: если HP ≤ 0 → Killed; если цель была Frozen или HP ≤ `−0.5·MaxHP − 500` →
-    **OverKill** (разлёт на куски, без трупа; HP = `−MaxHP − 1000`). Ачивка за урон > 9000.
-
-Результат по коллекции — OR результатов записей, при этом `Deflected` остаётся только если все
-пять записей «отражены».
-
-DoT-урон статусов идёт отдельным путём (`Damage(float, element)`): сопротивления не применяются
-(они уже учтены в DPS при наложении), но огонь по Greased ×2, щит/броня поглощают.
-
-### 7.3 Регенерация
-
-`HP += RegenRate·dt` (из шаблона), только если HP в (0, MaxHP] и цель не Burning/Poisoned.
+For continuous effects (Spray Force, Beam), magnitudes are divided by 4 and applied once per 0.25 s,
+so "amount per second" ≈ entry amount × entry magnitude. Example: a 5×Steam spray ≈
+`280·√5 ≈ 626` before resistances; an Arcane beam = 225/s for the whole duration of `1 + 2A` s.
 
 ---
 
-## 8. Сопротивления
+## 7. Applying damage to a target
 
-Структура `Resistance { ResistanceAgainst: Elements, Multiplier: float, Modifier: float, StatusResistance: bool }`.
+### 7.1 Attacker modifiers
 
-Источники для персонажа:
-1. Шаблон персонажа (`CharacterTemplate`, `Content/Data/Characters/*.xnb`): 11 записей по
-   умолчанию `×1, +0, false`; файл содержит список переопределений
+Before each entry is sent: `amount = amount·M + B`, where over all of the attacker's buffs of type
+`BoostDamage` that overlap by element: `M = Π buff_magnitude`, `B = Σ buff_amount`.
+(Network mode: the client sends `DamageRequestMessage`; the `DamageFeatures` flags D/N/K/E decide
+whether damage/notification/knockback/effects are applied.)
+
+### 7.2 `Character.InternalDamage`: order for one entry
+
+1. Dead / immortal / no resistance table → nothing.
+2. `Entanglement`: if the target is not burning, entangle with strength magnitude, done.
+   An entangled target is freed by Damage and by fire Status.
+3. An active `SelfShield` processes the entry (5.6) and may change/zero it.
+4. Knockback:
+   - `Knockback` (= Pushed|Knockdown): impulse with elevation 0.698 rad (40°), the target is knocked down
+     (if possible);
+   - otherwise `Pushed`: impulse with elevation 0.1745 rad (10°); `Knockdown`: knockdown if
+     `magnitude ≥ KnockdownTolerance` (5000 = immunity).
+   - Impulse: "power" = amount, "distance" = magnitude;
+     `d' = d · max(0, 2·√(1 − (mass − power/4)/power))`; then a ballistic velocity
+     for a flight of `d'` at the elevation angle, ×1.4. Immunity: immortality, ethereal, solid
+     armor, mass > 1000, entanglement, death.
+5. Block (Earth/Lightning Damage while blocking with an item): the blocked part is subtracted; if
+   fully blocked, `Deflected`.
+6. **Statuses before resistances** (section 9): Fire→Burning, Cold→Cold, Water→Wet, Poison→Poisoned,
+   Life→Healing, Steam→Wet. DPS = entry amount, magnitude = entry magnitude.
+7. **Resistances** (section 8) → modified amount and magnitude. `|magnitude| ≈ 0` → `Deflected`, done.
+8. `Stun` (amount > 0) → stun timer; `Bleed` → Bleeding status (DPS = the template's `BleedRate`).
+9. For the `Damage` flag:
+   - Lightning against a **Wet** target → `amount ×2`;
+   - Life → reduces the Poisoned magnitude by the entry magnitude (until removed);
+   - Earth/Ice/Arcane against a **Frozen** target → `amount ×3` (otherwise blood/gore);
+   - `HP −= amount × magnitude`; HP is capped above at MaxHP.
+   - Results: Damaged / Healed / Deflected (0) / Hit (`amount > HitTolerance`) / Pierced.
+10. Death: if HP ≤ 0 → Killed; if the target was Frozen or HP ≤ `−0.5·MaxHP − 500` →
+    **OverKill** (shatters into pieces, no corpse; HP = `−MaxHP − 1000`). Achievement for damage > 9000.
+
+The result for the collection is the OR of the entry results, but `Deflected` remains only if all
+five entries were "deflected".
+
+Status DoT damage goes a separate path (`Damage(float, element)`): resistances are not applied
+(they are already accounted for in the DPS on application), but fire against Greased ×2, and shield/armor absorb it.
+
+### 7.3 Regeneration
+
+`HP += RegenRate·dt` (from the template), only if HP is in (0, MaxHP] and the target is not Burning/Poisoned.
+
+---
+
+## 8. Resistances
+
+Structure `Resistance { ResistanceAgainst: Elements, Multiplier: float, Modifier: float, StatusResistance: bool }`.
+
+Sources for a character:
+1. The character template (`CharacterTemplate`, `Content/Data/Characters/*.xnb`): 11 entries, by
+   default `×1, +0, false`; the file contains a list of overrides
    `(element:int32, multiplier:float, modifier:float, statusResistance:bool)`.
-2. Для аватара — дополнительно посох (`Equipment[1]`, `Item.Resistance`, `Content/Data/items`).
-3. Баффы `BuffType.Resistance` (ауры, магики, оберег 5.6).
+2. For the avatar, additionally the staff (`Equipment[1]`, `Item.Resistance`, `Content/Data/items`).
+3. `BuffType.Resistance` buffs (auras, magicks, the ward from 5.6).
 
-`Damage.ApplyResistances`: для **каждого** флага элемента записи и каждого источника:
-- `mag_mult *= |Multiplier|`; если Multiplier < 0 — флаг «инверсия» (отдельно отмечается Life);
-- `amount += Modifier` с отсечкой к нулю (положительный amount не уходит ниже 0, отрицательный —
-  выше 0).
-- После цикла: если был отрицательный множитель у Life → `amount = |amount|` (лечение вредит,
-  например нежити); иначе если был любой отрицательный множитель → `amount = −amount`
-  (поглощение стихии лечит). `magnitude *= mag_mult`.
-- `ArmourPiercing`: игнорируются множители ≤ 1 и модификаторы ≤ 0.
+`Damage.ApplyResistances`: for **each** element flag of the entry and each source:
+- `mag_mult *= |Multiplier|`; if Multiplier < 0, an "inversion" flag (Life is marked separately);
+- `amount += Modifier`, clamped at zero (a positive amount does not go below 0, a negative one does not
+  go above 0).
+- After the loop: if Life had a negative multiplier → `amount = |amount|` (healing hurts,
+  for example, undead); otherwise if any negative multiplier occurred → `amount = −amount`
+  (element absorption heals). `magnitude *= mag_mult`.
+- `ArmourPiercing`: multipliers ≤ 1 and modifiers ≤ 0 are ignored.
 
-Итог: `урон ≈ (amount + ΣModifier) · magnitude · Π|Multiplier| · спецмножители`.
+Result: `damage ≈ (amount + ΣModifier) · magnitude · Π|Multiplier| · special_multipliers`.
 
-Статус-сопротивление (`AddStatusEffect`, раздел 9): множитель/модификатор соответствующего
-элемента (Fire для Burning, Cold, Water для Wet и Greased, Steam, Poison, Life) применяется к
-DPS/магнитуде статуса; `StatusResistance = true` полностью запрещает статус. Для превращения
-Wet→Frozen проверяется `StatusResistance` элемента **Ice**.
+Status resistance (`AddStatusEffect`, section 9): the multiplier/modifier of the matching
+element (Fire for Burning, Cold, Water for Wet and Greased, Steam, Poison, Life) is applied to the
+status DPS/magnitude; `StatusResistance = true` forbids the status completely. For the
+Wet→Frozen conversion, the `StatusResistance` of the **Ice** element is checked.
 
-**Масштаб по числу игроков** (при загрузке шаблона не-дружественного персонажа):
-`k = 1 − (игроков − 1)·0.00666` (`DIFFICULTY_RESISTANCE_MODIFIER`); положительные множители и
-модификаторы `×k`, отрицательные `÷k`.
+**Scaling by player count** (when loading the template of a non-friendly character):
+`k = 1 − (players − 1)·0.00666` (`DIFFICULTY_RESISTANCE_MODIFIER`); positive multipliers and
+modifiers `×k`, negative ones `÷k`.
 
-`ResistanceAgainst(elements)` (для ИИ и некоторых магиков): `1 − clamp(ΣModifier/300 + ΣMultiplier, −1, 1)`,
-где Frozen даёт −350 к модификатору Earth, Greased удваивает множитель Fire. 1 = полный иммунитет.
+`ResistanceAgainst(elements)` (for AI and some magicks): `1 − clamp(ΣModifier/300 + ΣMultiplier, −1, 1)`,
+where Frozen gives −350 to the Earth modifier and Greased doubles the Fire multiplier. 1 = full immunity.
 
 ---
 
-## 9. Статус-эффекты
+## 9. Status effects
 
-`StatusEffects` (short, флаги): Burning 1, Wet 2, Frozen 4, Cold 8, Poisoned 0x10, Healing(=Life) 0x20,
-Greased 0x40, Steamed 0x80, Bleeding 0x100; `NR_OF_STATUSEFFECTS = 9`. У персонажа массив из 9
-слотов (индекс = log2), маска текущих статусов пересчитывается после каждого изменения.
+`StatusEffects` (short, flags): Burning 1, Wet 2, Frozen 4, Cold 8, Poisoned 0x10, Healing(=Life) 0x20,
+Greased 0x40, Steamed 0x80, Bleeding 0x100; `NR_OF_STATUSEFFECTS = 9`. A character has an array of 9
+slots (index = log2); the mask of current statuses is recomputed after every change.
 
-Каждый статус: `magnitude` (жив, пока > 0), `DPS`, накопитель дробного урона (урон наносится
-целыми единицами).
+Each status has: `magnitude` (alive while > 0), `DPS`, and an accumulator of fractional damage (damage is dealt
+in whole units).
 
-| Статус | Кап магн. | Убыль магн. | Эффект |
+| Status | Mag. cap | Mag. decay | Effect |
 |---|---:|---|---|
-| Burning | 3 | 0.2/с (1 ед. ≈ 5 с) | DPS растёт на 25 %/с от себя, до `500·magnitude`; урон Fire; панику даёт |
-| Cold | 3 | 0.1/с | множитель скорости `0.333 + 0.667·0.001^magnitude` |
-| Wet | 1 | **нет** (до снятия) | Lightning ×2; призыв Lightning бьёт себя |
-| Frozen | 3 | 0.25/с (1 ед. = 4 с) | обездвижен, каст прерывается; Earth/Ice/Arcane ×3; убийство → OverKill |
-| Poisoned | 1 | нет (кроме спец. «истекающих») | урон `DPS·magnitude`/с (Poison); скорость ×0.5; нет регена |
-| Healing | 3 | 1/с; при полном HP — сразу | лечение `DPS`/с (DPS отрицательный); при создании `magnitude = 0.5 + 0.5·m` |
-| Greased | — | нет | Fire ×2; поджог: DPS ×4 и смазка снимается |
-| Steamed | 1 | 1/с | панику даёт (источник в ванильном коде не найден) |
-| Bleeding | — | нет (кроме «истекающих») | урон `BleedRate`/с; снимается лечением |
+| Burning | 3 | 0.2/s (1 unit ≈ 5 s) | DPS grows by 25 %/s of itself, up to `500·magnitude`; Fire damage; causes panic |
+| Cold | 3 | 0.1/s | speed multiplier `0.333 + 0.667·0.001^magnitude` |
+| Wet | 1 | **none** (until removed) | Lightning ×2; conjuring Lightning hits self |
+| Frozen | 3 | 0.25/s (1 unit = 4 s) | immobilized, cast is interrupted; Earth/Ice/Arcane ×3; kill → OverKill |
+| Poisoned | 1 | none (except special "expiring" ones) | damage `DPS·magnitude`/s (Poison); speed ×0.5; no regen |
+| Healing | 3 | 1/s; at full HP, immediately | heals `DPS`/s (DPS is negative); on creation `magnitude = 0.5 + 0.5·m` |
+| Greased | — | none | Fire ×2; ignition: DPS ×4 and the grease is removed |
+| Steamed | 1 | 1/s | causes panic (source not found in vanilla code) |
+| Bleeding | — | none (except "expiring" ones) | damage `BleedRate`/s; removed by healing |
 
-Сложение одинаковых статусов: магнитуды суммируются (Healing — максимум), DPS: Burning — максимум,
-прочие — среднее, взвешенное по магнитудам. Огненный DoT наносится элементом Fire, яд — Poison,
-лечение — Life, прочие — Earth.
+Stacking identical statuses: magnitudes add up (Healing takes the maximum); DPS: Burning takes the maximum,
+others take the magnitude-weighted average. Fire DoT is dealt with the Fire element, poison with Poison,
+healing with Life, others with Earth.
 
-Взаимодействия при наложении (`AddStatusEffect`):
+Interactions on application (`AddStatusEffect`):
 
-| Накладывается | Условие | Результат |
+| Applied | Condition | Result |
 |---|---|---|
-| Burning | есть Cold | Cold снят, Burning **не** накладывается |
-| Burning | есть Wet | Wet снят (сушка 0.9 с, эффект `drying_steam`), Burning не накладывается |
-| Burning | есть Frozen | магн. Frozen −= магн. огня; Burning не накладывается |
-| Burning | Greased | DPS ×4, Greased снят |
+| Burning | has Cold | Cold removed, Burning is **not** applied |
+| Burning | has Wet | Wet removed (drying 0.9 s, effect `drying_steam`), Burning not applied |
+| Burning | has Frozen | Frozen mag. −= fire mag.; Burning not applied |
+| Burning | Greased | DPS ×4, Greased removed |
 | Burning | — | `DPS = (DPS + modFire)·multFire` |
-| Cold | Burning или идёт сушка | Burning снят, Cold не накладывается |
-| Cold | Wet (и нет StatusResistance у Ice) | **Frozen** с магн. 1, Wet и Cold сняты, каст прерван |
-| Cold | уже Frozen | магн. Frozen = 1 (обновление) |
-| Wet / Steam | Burning или идёт сушка | Burning снят, Wet не накладывается |
-| Wet | Greased | Greased снят |
-| Greased | Wet | Wet снят |
-| Steamed | Cold | Cold снят |
-| Healing | Poisoned / Bleeding | оба сняты |
+| Cold | Burning or drying in progress | Burning removed, Cold not applied |
+| Cold | Wet (and Ice has no StatusResistance) | **Frozen** with mag. 1, Wet and Cold removed, cast interrupted |
+| Cold | already Frozen | Frozen mag. = 1 (refresh) |
+| Wet / Steam | Burning or drying in progress | Burning removed, Wet not applied |
+| Wet | Greased | Greased removed |
+| Greased | Wet | Wet removed |
+| Steamed | Cold | Cold removed |
+| Healing | Poisoned / Bleeding | both removed |
 
-Состояние «сушки» (`DryTimer`, 0.9 с ≈ `STATUS_DRYING_TIME`) блокирует новый Wet/Cold сразу после
-испарения.
+The "drying" state (`DryTimer`, 0.9 s ≈ `STATUS_DRYING_TIME`) blocks new Wet/Cold right after
+evaporation.
 
 ---
 
-## 10. Магики
+## 10. Magicks
 
-### 10.1 Распознавание
+### 10.1 Recognition
 
-`MagickTree`: префиксное дерево, узел имеет 11 потомков (по индексу элемента), лист хранит
-`MagickType`. Последовательности (ниже) задаются **элементами очереди после слияний** (Steam/Ice —
-отдельные элементы).
+`MagickTree`: a prefix tree; a node has 11 children (by element index), a leaf stores a
+`MagickType`. The sequences (below) are given as **queue elements after merges** (Steam/Ice are
+separate elements).
 
-- `IsMagick` / `CombineMagick`: проход по очереди от первого элемента; каждый шаг обязан
-  существовать, конечный узел должен содержать магик, и магик должен быть разрешён. Тогда
-  `CombineMagick` заменяет очередь одной записью `{Element = All, MagickType}`.
-- `GetMagickType` (подсказка HUD): то же, но допускает «обрыв».
-- `Equatable(combo, queue)`: префиксное сравнение по флагам (для подсветки в книге магиков).
-- Каст: Boost (Пробел) → `CombineMagick` или уже лежащая запись-магик → `CastType = Magick` →
-  `SpecialAbility.Execute`. **Мгновенные** магики (Revive, Haste, Invisibility, Teleport, Napalm,
-  ChainLightning) можно кастовать и будучи Frozen / в полёте / сбитым.
+- `IsMagick` / `CombineMagick`: walk the queue from the first element; every step must
+  exist, the final node must hold a magick, and the magick must be allowed. Then
+  `CombineMagick` replaces the queue with a single entry `{Element = All, MagickType}`.
+- `GetMagickType` (HUD hint): the same, but allows a "cut-off".
+- `Equatable(combo, queue)`: prefix comparison by flags (for highlighting in the magick book).
+- Cast: Boost (Space) → `CombineMagick` or an already present magick entry → `CastType = Magick` →
+  `SpecialAbility.Execute`. **Instant** magicks (Revive, Haste, Invisibility, Teleport, Napalm,
+  ChainLightning) can be cast even while Frozen / in flight / knocked down.
 
-### 10.2 Разрешение (unlock)
+### 10.2 Permission (unlock)
 
-Разблокировка — бит `1 << MagickType` в `Player.UnlockedMagicks` (ulong; сохраняется в сейве).
-- Campaign / Mythos / Challenge / StoryChallenge: магик разрешён, если он открыт хотя бы у одного
-  играющего игрока. Прочие режимы (Versus и т.д.) — по каждому игроку. NPC (player = null) могут
-  использовать любой.
-- Источники: действие триггера `<unlockMagick magicktype="…" delay="…"/>` и книга
-  `<spawnMagick magick="…" area="…" immovable="…"/>` (`BookOfMagick`, подбор → unlock) в XML
-  сцен (`Content/Levels/**.xml`). В Versus — `VersusRuleset`/`Krietor`.
-- `VANILLA_CAMPAIGN_MAGICKS = 0x7FEFFE` (типы 1–22, кроме MeteorS) — прогресс ачивки
+Unlocking is the bit `1 << MagickType` in `Player.UnlockedMagicks` (ulong; stored in the save).
+- Campaign / Mythos / Challenge / StoryChallenge: a magick is allowed if it is unlocked for at least one
+  playing player. Other modes (Versus, etc.): per player. NPCs (player = null) can
+  use any.
+- Sources: the trigger action `<unlockMagick magicktype="…" delay="…"/>` and the book
+  `<spawnMagick magick="…" area="…" immovable="…"/>` (`BookOfMagick`, pickup → unlock) in scene
+  XML (`Content/Levels/**.xml`). In Versus: `VersusRuleset`/`Krietor`.
+- `VANILLA_CAMPAIGN_MAGICKS = 0x7FEFFE` (types 1–22, except MeteorS) is the progress for the achievement
   `iputonmyrobeandwizar`. `MYTHOS_CAMPAIGN_MAGICKS` = Revive, Haste, Portal, TractorPull,
   ProppMagick, Levitate, ChainLightning.
 
-### 10.3 Список магиков игрока
+### 10.3 Player magick list
 
-Клавиши: Q Water, W Life, E Shield, R Cold, A Lightning, S Arcane, D Earth, F Fire. Колонка
-«клавиши» — одна из кратчайших раскладок, вычисленная собственным симулятором правил раздела 2
-(не единственная).
+Keys: Q Water, W Life, E Shield, R Cold, A Lightning, S Arcane, D Earth, F Fire. The "Keys"
+column is one of the shortest layouts, computed by our own simulator of the section 2 rules
+(not the only one).
 
-| # | MagickType | Последовательность элементов | Клавиши | Instant | Где открывается (кампании) |
+| # | MagickType | Element sequence | Keys | Instant | Where unlocked (campaigns) |
 |---:|---|---|---|:-:|---|
 | 1 | Revive | Life, Lightning | W A | ✓ | WizardCastle/wc_s2, Tsar/twc_s1 |
 | 2 | Grease | Water, Earth, Life | Q D W | | WizardCastle/wc2_s1, wc_s4 |
@@ -690,7 +690,7 @@ Greased 0x40, Steamed 0x80, Bleeding 0x100; `NR_OF_STATUSEFFECTS = 9`. У пер
 | 12 | MeteorS (Meteor Shower) | Fire, Earth, Steam, Earth, Fire | F D F Q D F | | WizardCastle/wc_s2 |
 | 13 | Conflagration | Steam, Fire, Steam, Fire, Steam | Q F F F Q F F Q | | Havindr/havindr_s5 |
 | 14 | ThunderS (Thunder Storm) | Steam, Steam, Lightning, Arcane, Lightning | Q Q F F A S A | | Mines/mi_s1, Swamp/sw_s4 |
-| 15 | TimeWarp | Cold, Shield | R E | | (в кампании не найден; Challenges: chs_osotc_s3, chs_vietnam_s3; BattleField) |
+| 15 | TimeWarp | Cold, Shield | R E | | (not found in the campaign; Challenges: chs_osotc_s3, chs_vietnam_s3; BattleField) |
 | 16 | Vortex | Ice, Arcane, Ice, Shield, Ice | Q R S Q E Q R R | | EndofWorld/ew2_s2 |
 | 17 | SUndead (Raise Dead) | Ice, Earth, Arcane, Cold | Q R D S R | | Swamp/sw_s3 |
 | 18 | SElemental | Arcane, Shield, Earth, Steam, Arcane | S E D Q S F | | Ruins/ru_s3s |
@@ -699,7 +699,7 @@ Greased 0x40, Steamed 0x80, Bleeding 0x100; `NR_OF_STATUSEFFECTS = 9`. У пер
 | 21 | Nullify | Arcane, Shield | S E | | MountainDale/md_s4 |
 | 22 | Corporealize | Arcane, Steam, Lightning, Shield, Arcane | S Q F A E S | | Ruins/ru_s6BF |
 | 23 | CTD (Crash to Desktop) | Lightning, Lightning, Fire, Life | A A F W | | WizardCastle/wc_s2 |
-| 24 | Napalm | Steam, Earth, Life, Fire, Fire | Q D W F F F | ✓ | только Challenges (chs_fields, chs_vietnam_s1..s3 — DLC Vietnam) |
+| 24 | Napalm | Steam, Earth, Life, Fire, Fire | Q D W F F F | ✓ | Challenges only (chs_fields, chs_vietnam_s1..s3, Vietnam DLC) |
 | 25 | Portal | Steam, Lightning, Shield | Q F A E | | Tsar_Rlyeh/tr_s2 (Mythos) |
 | 26 | TractorPull | Earth, Arcane | D S | | Tsar_WizardCastle/twc_s1 (Mythos) |
 | 27 | ProppMagick | Fire, Steam, Arcane | F F Q S | | Tsar_Mountaindale/tmd_s2 (Mythos) |
@@ -709,113 +709,113 @@ Greased 0x40, Steamed 0x80, Bleeding 0x100; `NR_OF_STATUSEFFECTS = 9`. У пер
 | 31 | Wave | Earth, Steam, Earth, Steam, Earth | D Q D Q D F F | | Challenges (chs_woot_bout_of_madness) |
 | 32 | PerformanceEnchantment | Life, Fire, Lightning, Fire, Life | W F A F W | | Challenges (chs_woot_bout_of_madness) |
 | 33 | JudgementSpray | Ice, Ice, Arcane, Shield | Q Q R R S E | | Challenges (chs_dungeons_ch2_s2, chs_woot_bout_of_madness) |
-| 34 | Amalgameddon | Arcane, Water, Lightning | S Q R A F | | (требует трюка Ice+Fire→Water) |
+| 34 | Amalgameddon | Arcane, Water, Lightning | S Q R A F | | (requires the Ice+Fire→Water trick) |
 
-Значение `NrOfMagicks = 35`. Типы ≥ 36 (Grow, Shrink, Etherealize, Polymorph, Earthquake, Votal,
+The value `NrOfMagicks = 35`. Types ≥ 36 (Grow, Shrink, Etherealize, Polymorph, Earthquake, Votal,
 KnockDownChance, SummonCross, VladZap, SpawnSlime, SpawnSlimeOverkill, GreaseSplash, EtherealClone,
-InflictBleedDamage, InflictPoisonDamage) — служебные способности NPC/предметов, комбинации нет.
+InflictBleedDamage, InflictPoisonDamage) are internal NPC/item abilities with no combination.
 
-Классы эффектов (`Magicka.GameLogic.Entities.Abilities.SpecialAbilities`): Haste, Revive, Rain,
+Effect classes (`Magicka.GameLogic.Entities.Abilities.SpecialAbilities`): Haste, Revive, Rain,
 Thunderbolt, Teleport, MeteorShower, Charm, SummonZombie, Conflagration, SummonPhoenix, Fear,
 Invisibility, Thunderstorm, TimeWarp, Blizzard, Tornado, Grease, Vortex, SummonElemental,
 SummonDeath, Corporealize, Nullify, CTD, Napalm, Portal, TractorPull, ProppMagick, Levitate,
 Zap (ChainLightning), Confuse, Wave, PerformanceEnchantment, JudgementSpray, Amalgameddon.
-Их поведение — отдельный документ (вне этой спецификации).
+Their behavior is a separate document (outside this spec).
 
-Локализация: `#magick_<имя>` (название) и `#magick_<имя>d` (описание), имя в нижнем регистре
+Localization: `#magick_<name>` (title) and `#magick_<name>d` (description), name in lower case
 (`thunderb`, `sundead`, `performance` …).
 
 ---
 
-## 11. Что лежит в данных, а что в коде
+## 11. What lives in data and what lives in code
 
-| Что | Где |
+| What | Where |
 |---|---|
-| Правила очереди, слияний, типов, формулы урона, статусов, длительности | **код** (захардкожено) |
-| Комбинации магиков | **код** (`SpellManager`, таблица 10.3) |
-| Сопротивления, HP, реген, BleedRate, KnockdownTolerance, HitTolerance персонажей | `Content/Data/Characters/*.xnb` (`CharacterTemplateReader`) |
-| Сопротивления и пассивки посохов/оружия (`WetLightning`, `MeleeBoost`…) | `Content/Data/items/*.xnb` (`ItemReader`) |
-| Разблокировка магиков | XML сцен: `unlockMagick`, `spawnMagick` |
-| Визуальные эффекты заклинаний | `Content/Effects/Spells/**` (`Spray/Spray_Fire1.xml`, `Self/Self_Life.xml`…), `Effects/Barriers`, `Effects/StatusEffects`; ключ — хеш имени файла (`spray_<el>1`, `self_<el>`, `barrier_<el>1_b`, `projectile_<el>4`, `projectiletrail_<el>`, `projectilehit[_big]_<el>`, `statuseffect_*`, `drying_steam`, `fire_scourge`, `push_force`, `push_area`, `elementeffect_<el>`) |
-| Звуки | XACT `Content/Audio/Spells.xsb/.xwb`: `spell_<el>_<spray|projectile|hit|blast|barrier|area|self|force|chasm>`, `spell_push_force/area`; UI: `ui_element_<el>` |
-| Модели снарядов, стен | `Content/Models/Missiles/*` (Earth0–3, Ice3, IceEarth0–3…), модели барьеров |
-| Текстура лучей | `Content/EffectTextures/Beams` |
+| Rules for the queue, merges, types, damage formulas, statuses, durations | **code** (hardcoded) |
+| Magick combinations | **code** (`SpellManager`, table 10.3) |
+| Character resistances, HP, regen, BleedRate, KnockdownTolerance, HitTolerance | `Content/Data/Characters/*.xnb` (`CharacterTemplateReader`) |
+| Resistances and passives of staffs/weapons (`WetLightning`, `MeleeBoost`…) | `Content/Data/items/*.xnb` (`ItemReader`) |
+| Magick unlocks | Scene XML: `unlockMagick`, `spawnMagick` |
+| Spell visual effects | `Content/Effects/Spells/**` (`Spray/Spray_Fire1.xml`, `Self/Self_Life.xml`…), `Effects/Barriers`, `Effects/StatusEffects`; the key is the hash of the file name (`spray_<el>1`, `self_<el>`, `barrier_<el>1_b`, `projectile_<el>4`, `projectiletrail_<el>`, `projectilehit[_big]_<el>`, `statuseffect_*`, `drying_steam`, `fire_scourge`, `push_force`, `push_area`, `elementeffect_<el>`) |
+| Sounds | XACT `Content/Audio/Spells.xsb/.xwb`: `spell_<el>_<spray|projectile|hit|blast|barrier|area|self|force|chasm>`, `spell_push_force/area`; UI: `ui_element_<el>` |
+| Projectile and wall models | `Content/Models/Missiles/*` (Earth0–3, Ice3, IceEarth0–3…), barrier models |
+| Beam texture | `Content/EffectTextures/Beams` |
 
 ---
 
-## 12. Прочие константы `Defines`
+## 12. Other `Defines` constants
 
-Часть констант объявлена как `const` и в IL встраивается по месту, поэтому их фактическое
-использование нужно подтверждать литералами в коде (в разделах выше указаны значения из кода).
+Some constants are declared `const` and are inlined in IL at the use site, so their actual
+use must be confirmed by literals in the code (the sections above give the values from the code).
 
-| Константа | Значение | Комментарий |
+| Constant | Value | Comment |
 |---|---:|---|
-| `SPELL_QUECAP` | 5 | ёмкость очереди |
-| `SPELL_RANGE_PROJECTILE_BASE/VAR` | 25 / 85 | скорость снаряда |
-| `SPELL_STRENGTH_PUSH_BASE/VAR` | 50 / 500 | сила толчка |
-| `SPELL_ANGLE_PUSH/SPRAY/LIGHTNING` | π/6, π/10, π/4 | углы |
+| `SPELL_QUECAP` | 5 | queue capacity |
+| `SPELL_RANGE_PROJECTILE_BASE/VAR` | 25 / 85 | projectile speed |
+| `SPELL_STRENGTH_PUSH_BASE/VAR` | 50 / 500 | push strength |
+| `SPELL_ANGLE_PUSH/SPRAY/LIGHTNING` | π/6, π/10, π/4 | angles |
 | `SPELL_RANGE_PUSH/AREA_PUSH` | 1.5 / 3.5 | |
-| `SPELL_RANGE_SPRAY/AREA/LIGHTNING/AREA_LIGHTNING` | 10 / 10 / 8 / 4 | максимумы при 5 элементах |
+| `SPELL_RANGE_SPRAY/AREA/LIGHTNING/AREA_LIGHTNING` | 10 / 10 / 8 / 4 | maximums with 5 elements |
 | `SPELL_RANGE_SHIELD/SHIELD_MIN/BUBBLE` | 5.5 / 3 / 1.3 | |
-| `SPELL_RANGE_RAILGUN/_WIDTH` | 15 / 0.75 | (фактический луч до 75) |
+| `SPELL_RANGE_RAILGUN/_WIDTH` | 15 / 0.75 | (actual beam up to 75) |
 | `SPELL_RAILGUN_BASE_TTL/MOD_TTL` | 1 / 2 | `1 + 2(A+L)` |
 | `SPELL_TIME_SPRAY/LIGHTNING/PUSH/ICE/GROUND` | 4 / 1 / 0.25 / 0.35 / 15 | |
-| `SPELL_AMOUNT_LIGHTNINGS/ICE` | 8 / 3 | разряды / осколков на Ice |
-| `SPELL_STRENGTH_SHIELD/BARRIER/BARRIER_ELEMENTAL` | 500 / 500 / 100 | HP-коэффициенты |
+| `SPELL_AMOUNT_LIGHTNINGS/ICE` | 8 / 3 | bolts / shards per Ice |
+| `SPELL_STRENGTH_SHIELD/BARRIER/BARRIER_ELEMENTAL` | 500 / 500 / 100 | HP coefficients |
 | `SPELL_ARMOR_EARTH/ICE` | 90 / 50 | |
 | `SELF_SHIELD_HEALTH/DECAY` | 500 / 100 | |
-| `SELF_STONE_HEALTH/MULTIPLIER/MODIFIER` | 1500 / 0.15 / 10 | броня Earth |
-| `SELF_ICE_HEALTH/MULTIPLIER/MODIFIER` | 900 / 0.05 / 70 | броня Ice |
-| `SELF_ELEMENTAL_AURA_BASE_TTL/MODIFIER_TTL/RADIUS_MODIFIER` | 15 / 5 / 1.5 | оберег |
-| `BARRIER_DAMAGE_OVER_TIME` | 10 | убыль HP барьера за шаг |
+| `SELF_STONE_HEALTH/MULTIPLIER/MODIFIER` | 1500 / 0.15 / 10 | Earth armor |
+| `SELF_ICE_HEALTH/MULTIPLIER/MODIFIER` | 900 / 0.05 / 70 | Ice armor |
+| `SELF_ELEMENTAL_AURA_BASE_TTL/MODIFIER_TTL/RADIUS_MODIFIER` | 15 / 5 / 1.5 | ward |
+| `BARRIER_DAMAGE_OVER_TIME` | 10 | barrier HP loss per step |
 | `BARRIER_BLAST_RADIUS` | 2.6 | |
 | `STATUS_DRYING_TIME` | 0.9 | |
 | `STATUS_FROZEN_ARMOR/MAGNITUDE` | 50 / 10 | |
-| `MAX_STATUS_MAGNITUDE` | 3 | кап статусов |
-| `HITLIST_COOLDOWN` | 0.25 | повторный удар по цели |
-| `KNOCKBACK_ELEVATION / PUSH_ELEVATION` | 0.698 / 0.1745 рад | |
-| `BLOCKANGLE` | 1.0996 рад (63°) | сектор блока |
+| `MAX_STATUS_MAGNITUDE` | 3 | status cap |
+| `HITLIST_COOLDOWN` | 0.25 | repeat hit on a target |
+| `KNOCKBACK_ELEVATION / PUSH_ELEVATION` | 0.698 / 0.1745 rad | |
+| `BLOCKANGLE` | 1.0996 rad (63°) | block sector |
 | `KNOCKDOWN_IMMUNITY_TOLERANCE` | 5000 | |
-| `FALLING_DAMAGE_POWER / KNOCKDOWN_THRESHOLD` | −50 / 100 | падение |
+| `FALLING_DAMAGE_POWER / KNOCKDOWN_THRESHOLD` | −50 / 100 | falling |
 | `LIGHTNING_FRIEDTIME` | 0.1 | |
 | `MAX_NR_OF_SUMMONS_PER_CHARACTER / UNDEAD / FLAMER` | 16 / 1 / 4 | |
-| `DIFFICULTY_RESISTANCE_MODIFIER` | 0.00666 | масштаб по игрокам |
-| `PASSIVE_ABILITY_*` | 0.25 / 2 / 4 / 1.5 / 7 | пассивки предметов |
+| `DIFFICULTY_RESISTANCE_MODIFIER` | 0.00666 | scaling by players |
+| `PASSIVE_ABILITY_*` | 0.25 / 2 / 4 / 1.5 / 7 | item passives |
 
-Цвета элементов (`Spell.*COLOR`, HDR RGB): Earth (0.3, 0.2, 0.1), Water (0, 0.7, 1.3), Cold
+Element colors (`Spell.*COLOR`, HDR RGB): Earth (0.3, 0.2, 0.1), Water (0, 0.7, 1.3), Cold
 (1, 1, 1.4), Fire (1.8, 0.6, 0.4), Lightning (0.75, 0.5, 1), Arcane (2, 0.4, 0.6), Life
 (0.2, 1.6, 0.2), Shield (2, 1.5, 1), Steam (1, 1, 1), Ice (0.8, 0.9, 1.4), Poison (1, 1.2, 0).
-Цвет заклинания — среднее цветов (Fire и Lightning взвешены магнитудой).
+The spell color is the average of the colors (Fire and Lightning weighted by magnitude).
 
 ---
 
-## 13. Открытые вопросы
+## 13. Open questions
 
-1. **Дальность спрея**: формула `R·(0.1·R·f)` даёт ≈ `R²/10` (1×Fire ≈ 3.6, 5 элементов ≈ 10).
-   Это намеренно или артефакт? Нужно сверить с игрой; для 1:1 воспроизводим как есть.
-2. **Wet и Greased не истекают** сами (магнитуда не убывает). Проверить в игре, нет ли внешнего
-   снятия (вода уровня, время), не найденного в `Character`.
-3. **Steamed**: в ванильном коде не найден источник наложения (только обработка). Возможно, мёртвый
-   статус или накладывается из данных/DLC.
-4. Константы `const` из `Defines` (SPELL_TIME_*, SELF_*_MODIFIER, STATUS_*_TIME …) — какие реально
-   используются (встраивание в IL) — нужен поиск литералов в IL, а не по имени.
-5. Life учитывается дважды в уроне ледяного снаряда (Force, только Ice) — баг оригинала; решить,
-   сохранять ли (по умолчанию — сохранять для совместимости).
-6. В `(Projectile, Area)` огонь/холод входят в amount, но не в маску элементов записи (урон
-   резистится как Earth/прочие) — подтвердить в игре.
-7. `Electrocute` у `Character` пустой: «вода + молния» в спреях/взрывах не бьёт током мокрых целей
-   через этот путь. Проверить, нет ли другого механизма (например, через статусы).
-8. Точная геометрия цепочек барьеров/мин (шаг, масштаб сегментов, подгонка числа сегментов)
-   описана приближённо; нужен отдельный разбор `Barrier.SpawnNextBarrier` / `SpellMine`.
-9. Поведение клинков (`IceBlade`, `ArcaneBlade`), `UnderGroundAttack`, `IceSpikes` и блока
-   (`BlockDamage`) — частоты ударов и урон не разобраны детально.
-10. TimeWarp, Wave, PerformanceEnchantment в кампании: найдены только в Challenges — уточнить
-    (возможно, выпадают из персонажей через `DropMagicks` или из DLC-кампаний).
-11. Порядок применения статусов **до** сопротивлений приводит к тому, что магнитуда статуса не
-    зависит от `Multiplier` атаки (только от статус-сопротивления). Подтвердить на целях с
-    иммунитетом к огню.
-12. Как именно влияет масштаб по числу игроков на уже закешированные шаблоны (применяется при
-    загрузке шаблона, а шаблоны кешируются `ContentManager`) — возможная зависимость от порядка
-    загрузки.
-13. Сетевая модель (кто считает урон, `DamageFeatures`) — нужна ли совместимость, решается вне
-    этого документа.
+1. **Spray range**: the formula `R·(0.1·R·f)` gives ≈ `R²/10` (1×Fire ≈ 3.6, 5 elements ≈ 10).
+   Is this intentional or an artifact? Needs checking against the game; for 1:1 we reproduce it as is.
+2. **Wet and Greased do not expire** on their own (magnitude does not decay). Check in the game whether there is external
+   removal (level water, time) not found in `Character`.
+3. **Steamed**: no source applying it was found in vanilla code (only handling). Possibly a dead
+   status, or it is applied from data/DLC.
+4. `const` constants from `Defines` (SPELL_TIME_*, SELF_*_MODIFIER, STATUS_*_TIME …): which are actually
+   used (inlined in IL) needs a search for literals in IL, not by name.
+5. Life is counted twice in ice projectile damage (Force, Ice only), a bug in the original; decide
+   whether to keep it (default: keep for compatibility).
+6. In `(Projectile, Area)`, fire/cold are included in the amount but not in the entry's element mask (the damage
+   is resisted as Earth/others); confirm in the game.
+7. `Electrocute` in `Character` is empty: "water + lightning" in sprays/blasts does not shock Wet targets
+   through this path. Check whether there is another mechanism (for example, via statuses).
+8. The exact geometry of barrier/mine chains (step, segment scale, fitting of the segment count)
+   is described approximately; needs a separate analysis of `Barrier.SpawnNextBarrier` / `SpellMine`.
+9. Behavior of blades (`IceBlade`, `ArcaneBlade`), `UnderGroundAttack`, `IceSpikes` and blocking
+   (`BlockDamage`): hit rates and damage are not analyzed in detail.
+10. TimeWarp, Wave, PerformanceEnchantment in the campaign: found only in Challenges; clarify
+    (they may drop from characters via `DropMagicks` or come from DLC campaigns).
+11. Applying statuses **before** resistances means that a status's magnitude does not
+    depend on the attack's `Multiplier` (only on status resistance). Confirm on targets with
+    fire immunity.
+12. How exactly player-count scaling affects already cached templates (it is applied at
+    template load, and templates are cached by `ContentManager`): possible dependence on load
+    order.
+13. Network model (who computes damage, `DamageFeatures`): whether compatibility is needed is decided outside
+    this document.

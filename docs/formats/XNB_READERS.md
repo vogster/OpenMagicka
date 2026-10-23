@@ -1,121 +1,121 @@
-# XNB v4: бинарные макеты ContentTypeReader'ов Magicka
+# XNB v4: binary layouts of Magicka's ContentTypeReaders
 
-Документ описывает **точный порядок байт** всех нестандартных reader'ов, которые встречаются в
-`Content/` Steam-версии Magicka 1.10.4.2, а также стандартных reader'ов XNA 3.1 в том виде, в котором
-они реально записаны в файлах (формат XNB v4 отличается от XNA 4.0 / MonoGame v5).
+This document describes the **exact byte order** of all non-standard readers found in
+`Content/` of the Steam version of Magicka 1.10.4.2. It also describes the standard XNA 3.1 readers in the form
+in which they are actually written in the files (the XNB v4 format differs from XNA 4.0 / MonoGame v5).
 
-> Clean-room: ниже только описание формата и поведения (порядок полей, типы, условия). Код
-> оригинала не воспроизводится. Имена классов/полей приводятся как идентификаторы.
+> Clean-room: below is only a description of the format and behavior (field order, types, conditions). The
+> original code is not reproduced. Class/field names are given as identifiers.
 
-Статус проверки: **каждый** перечисленный reader проверен исследовательским парсером на всех
-файлах соответствующего типа: файл разбирается целиком (главный объект + все shared resources),
-и проверяется, что съедено ровно `decompressedSize` байт (остаток = 0). Подробности — в §7.
+Verification status: **every** listed reader was verified by a research parser on all
+files of the corresponding type: the file is parsed in full (main object + all shared resources),
+and the parser checks that exactly `decompressedSize` bytes were consumed (remainder = 0). Details are in §7.
 
 ---
 
-## 0. Общие соглашения
+## 0. General conventions
 
-### 0.1 Примитивы (`BinaryReader` .NET 2.0 / `ContentReader` XNA 3.1)
+### 0.1 Primitives (`BinaryReader` .NET 2.0 / `ContentReader` XNA 3.1)
 
-Порядок байт little-endian везде.
+Byte order is little-endian everywhere.
 
-| Обозначение | Размер | Описание |
+| Notation | Size | Description |
 |---|---|---|
-| `u8` / `byte` | 1 | беззнаковый байт; enum'ы с базой `byte` |
-| `bool` | 1 | 0 или 1 (во всех файлах других значений не встречено) |
-| `u16` / `i32` / `u32` | 2 / 4 / 4 | целые |
+| `u8` / `byte` | 1 | unsigned byte; enums with `byte` as the underlying type |
+| `bool` | 1 | 0 or 1 (no other values were found in any file) |
+| `u16` / `i32` / `u32` | 2 / 4 / 4 | integers |
 | `f32` | 4 | IEEE-754 float |
-| `7bit` | 1–5 | 7-битное var-int (младшие группы первыми, старший бит = «есть продолжение») |
-| `string` | 7bit + N | длина **в байтах** (7bit) + UTF-8 |
-| `char` | 1–3 | один символ UTF-8 (`BinaryReader.ReadChar` с UTF-8): длина по первому байту (`<0x80`→1, `<0xE0`→2, иначе 3) |
-| `Vector2/3/4` | 8/12/16 | float'ы X,Y(,Z(,W)) |
+| `7bit` | 1–5 | 7-bit var-int (low groups first, high bit = "continuation follows") |
+| `string` | 7bit + N | length **in bytes** (7bit) + UTF-8 |
+| `char` | 1–3 | one UTF-8 character (`BinaryReader.ReadChar` with UTF-8): length from the first byte (`<0x80`→1, `<0xE0`→2, otherwise 3) |
+| `Vector2/3/4` | 8/12/16 | floats X,Y(,Z(,W)) |
 | `Quaternion` | 16 | X,Y,Z,W |
-| `Matrix` | 64 | 16 float в порядке M11,M12,M13,M14,M21,…,M44 (row-major, XNA-конвенция: строка 4 = трансляция) |
-| `BoundingSphere` | 16 | Vector3 центр + f32 радиус |
+| `Matrix` | 64 | 16 floats in the order M11,M12,M13,M14,M21,…,M44 (row-major, XNA convention: row 4 = translation) |
+| `BoundingSphere` | 16 | Vector3 center + f32 radius |
 
-### 0.2 Объектная модель ContentReader
+### 0.2 ContentReader object model
 
-| Операция | Байты |
+| Operation | Bytes |
 |---|---|
-| `Object<T>` (ReadObject) | `7bit typeId`; 0 = null; иначе `typeId-1` — индекс в таблице reader'ов файла, далее данные этого reader'а. **Тип определяется таблицей, а не ожидаемым T** (например, на месте `Object<Texture2D>` может стоять `ExternalReferenceReader`). |
-| `Raw<T>` (значимые типы внутри коллекций) | только данные reader'а, без typeId |
-| `ExtRef<T>` (ReadExternalReference) | `string` — путь к ассету **относительно каталога текущего файла**, без расширения, с `\` (например `..\..\..\Models\Items_NPC\acc_ammoBelt_0`); пустая строка = null |
-| `SharedRef<T>` (ReadSharedResource) | `7bit`; 0 = null; иначе 1-based индекс в таблице shared resources файла; значение подставляется **после** чтения главного объекта (отложенный fix-up) |
+| `Object<T>` (ReadObject) | `7bit typeId`; 0 = null; otherwise `typeId-1` is an index into the file's reader table, followed by that reader's data. **The type is determined by the table, not by the expected T** (for example, an `ExternalReferenceReader` can appear in place of `Object<Texture2D>`). |
+| `Raw<T>` (value types inside collections) | reader data only, no typeId |
+| `ExtRef<T>` (ReadExternalReference) | `string` — asset path **relative to the directory of the current file**, without extension, with `\` (for example `..\..\..\Models\Items_NPC\acc_ammoBelt_0`); empty string = null |
+| `SharedRef<T>` (ReadSharedResource) | `7bit`; 0 = null; otherwise a 1-based index into the file's shared resource table; the value is filled in **after** the main object is read (deferred fix-up) |
 
-### 0.3 Контейнер XNB v4 (XNA 3.1)
+### 0.3 XNB v4 container (XNA 3.1)
 
-| Смещение | Тип | Значение |
+| Offset | Type | Value |
 |---|---|---|
-| 0 | 3 байта | `XNB` |
-| 3 | u8 | платформа: `w` (во всех файлах) |
-| 4 | u8 | версия: **4** (XNA 3.1); у XNA 4.0 — 5 |
-| 5 | u8 | флаги: `0x80` = LZX-сжатие. Бита `0x01` (HiDef, XNA 4.0) нет. 4299 файлов сжаты, 9 — нет (один из них — `Item`) |
-| 6 | u32 | полный размер файла |
-| 10 | u32 | (только если сжат) размер распакованных данных |
-| 10/14 | … | данные (LZX: окно 64 КБ, фреймы 32 КБ; см. `tools/research/xnb.py`) |
+| 0 | 3 bytes | `XNB` |
+| 3 | u8 | platform: `w` (in all files) |
+| 4 | u8 | version: **4** (XNA 3.1); XNA 4.0 uses 5 |
+| 5 | u8 | flags: `0x80` = LZX compression. There is no `0x01` bit (HiDef, XNA 4.0). 4299 files are compressed, 9 are not (one of them is an `Item`) |
+| 6 | u32 | total file size |
+| 10 | u32 | (only if compressed) decompressed data size |
+| 10/14 | … | data (LZX: 64 KB window, 32 KB frames; see `tools/research/xnb.py`) |
 
-Распакованное тело:
+Decompressed body:
 
-1. `7bit readerCount`, затем `readerCount` × (`string` имя reader'а, `i32` версия reader'а). У всех reader'ов версия = 0. Имена — assembly-qualified строки (например `Magicka.ContentReaders.LevelModelReader, Magicka` или с `Version=1.0.0.0, Culture=neutral`; generic'и — в синтаксисе ``ListReader`1[[Microsoft.Xna.Framework.Vector3, Microsoft.Xna.Framework, Version=3.1.0.0, …]]``). Для сопоставления надёжно брать часть до первой запятой (для generic — с учётом `[[…]]`).
+1. `7bit readerCount`, then `readerCount` × (`string` reader name, `i32` reader version). All readers have version = 0. Names are assembly-qualified strings (for example `Magicka.ContentReaders.LevelModelReader, Magicka` or with `Version=1.0.0.0, Culture=neutral`; generics use the syntax ``ListReader`1[[Microsoft.Xna.Framework.Vector3, Microsoft.Xna.Framework, Version=3.1.0.0, …]]``). For matching, it is reliable to take the part before the first comma (for generics, taking `[[…]]` into account).
 2. `7bit sharedResourceCount`.
-3. `Object` — главный объект (с typeId).
-4. `sharedResourceCount` × `Object` — shared resources (каждый с typeId).
+3. `Object` — the main object (with typeId).
+4. `sharedResourceCount` × `Object` — shared resources (each with typeId).
 
-В таблице reader'ов могут быть записи, которые ни разу не используются (например `TextureReader` в моделях с EffectMaterial — reader зарегистрирован, но объекта такого типа в потоке нет).
+The reader table can contain entries that are never used (for example `TextureReader` in models with EffectMaterial — the reader is registered, but no object of that type exists in the stream).
 
-### 0.4 Хэш строк `GetHashCodeCustom`
+### 0.4 String hash `GetHashCodeCustom`
 
-Многие строковые поля сразу при загрузке превращаются в `int`-хэш (имена эффектов, звуков, локаторов,
-триггеров, ID шаблонов). Для совместимости ID нужно воспроизвести алгоритм — это фиксированная
-реализация `String.GetHashCode` из .NET 2.0/3.5 (x86):
+Many string fields are converted to an `int` hash right at load time (names of effects, sounds, locators,
+triggers, template IDs). For ID compatibility the algorithm must be reproduced. It is a fixed
+implementation of `String.GetHashCode` from .NET 2.0/3.5 (x86):
 
-- два 32-битных аккумулятора, оба стартуют с `0x15051505` (352654597);
-- строка обрабатывается как массив UTF-16 code unit'ов, читаемых **парами** как 32-битные слова
-  (младшее слово — первый символ); после последнего символа в памяти лежит `\0`, поэтому у строки
-  нечётной длины последнее слово = (последний символ, 0);
-- на каждом шаге (по 4 символа) первый аккумулятор: `h1 = ((h1 << 5) + h1 + (h1 >> 27)) ^ word0`,
-  затем, если осталось больше 2 символов, второй аналогично со `word1`; арифметический сдвиг вправо,
-  переполнение 32-бит;
-- результат `h1 + h2 * 1566083941` (mod 2^32, знаковый int).
+- two 32-bit accumulators, both start at `0x15051505` (352654597);
+- the string is processed as an array of UTF-16 code units, read **in pairs** as 32-bit words
+  (low word = first character); after the last character there is a `\0` in memory, so for a string
+  of odd length the last word = (last character, 0);
+- on each step (4 characters) the first accumulator: `h1 = ((h1 << 5) + h1 + (h1 >> 27)) ^ word0`,
+  then, if more than 2 characters remain, the second one in the same way with `word1`; arithmetic right shift,
+  32-bit overflow;
+- result `h1 + h2 * 1566083941` (mod 2^32, signed int).
 
-Перед хэшированием строка часто приводится к нижнему регистру (`ToLowerInvariant`) — это отмечено
-в таблицах как «→hash(lower)».
+Before hashing, the string is often converted to lower case (`ToLowerInvariant`). This is marked
+in the tables as "→hash(lower)".
 
-### 0.5 Часто используемые enum'ы (как хранятся)
+### 0.5 Frequently used enums (how they are stored)
 
-| Enum | Хранение | Значения |
+| Enum | Storage | Values |
 |---|---|---|
-| `Elements` | i32, флаги | Earth=1, Water=2, Cold=4, Fire=8, Lightning=0x10, Arcane=0x20, Life=0x40, Shield=0x80, Ice=0x100, Steam=0x200, Poison=0x400. Индекс 0..10 в массивах сопротивлений — порядковый номер бита |
-| `AttackProperties` | i32, флаги | Damage=1, Knockdown=2, Pushed=4, Knockback=6, Piercing=8, ArmourPiercing=0x10, Status=0x20, Entanglement=0x40, Stun=0x80, Bleed=0x100 |
-| `Banks` (XACT-банк) | i32, флаги | WaveBank=1, Music=2, Ambience=4, UI=8, Spells=0x10, Characters=0x20, Footsteps=0x40, Weapons=0x80, Misc=0x100, Additional=0x200, AdditionalMusic=0x400 |
-| `LightType` | i32 | Point=0, Directional=1, Spot=2 (Custom=10 → ошибка загрузки) |
-| `LightVariationType` | i32 (в LevelModel) / u8 (в Character/Item/LightEvent) | None, Sine, Flicker, Candle, Strobe |
+| `Elements` | i32, flags | Earth=1, Water=2, Cold=4, Fire=8, Lightning=0x10, Arcane=0x20, Life=0x40, Shield=0x80, Ice=0x100, Steam=0x200, Poison=0x400. Index 0..10 in resistance arrays is the bit number |
+| `AttackProperties` | i32, flags | Damage=1, Knockdown=2, Pushed=4, Knockback=6, Piercing=8, ArmourPiercing=0x10, Status=0x20, Entanglement=0x40, Stun=0x80, Bleed=0x100 |
+| `Banks` (XACT bank) | i32, flags | WaveBank=1, Music=2, Ambience=4, UI=8, Spells=0x10, Characters=0x20, Footsteps=0x40, Weapons=0x80, Misc=0x100, Additional=0x200, AdditionalMusic=0x400 |
+| `LightType` | i32 | Point=0, Directional=1, Spot=2 (Custom=10 → load error) |
+| `LightVariationType` | i32 (in LevelModel) / u8 (in Character/Item/LightEvent) | None, Sine, Flicker, Candle, Strobe |
 | `CollisionMaterials` | u8 | Generic, Gravel, Grass, Wood, Snow, Stone, Mud, Reflect, Water, Lava |
-| `MovementProperties` | u8, флаги | Default=0, Water=1, Jump=2, Fly=4, Dynamic=0x80 |
-| `WeaponClass` | u8 | 27 значений (Default, Thrust_*, Crush_*, Slash_*, Throw_*, Unarmed, Handgun, Rifle, Machinegun, Heavy, Staff, NewAnimationSet0..7) — индекс набора анимаций |
-| `Animations` | строка в файле | имя enum'а (231 значение), парсится без учёта регистра |
+| `MovementProperties` | u8, flags | Default=0, Water=1, Jump=2, Fly=4, Dynamic=0x80 |
+| `WeaponClass` | u8 | 27 values (Default, Thrust_*, Crush_*, Slash_*, Throw_*, Unarmed, Handgun, Rifle, Machinegun, Heavy, Staff, NewAnimationSet0..7) — animation set index |
+| `Animations` | string in the file | enum name (231 values), parsed case-insensitively |
 
 ---
 
-## 1. Стандартные reader'ы XNA 3.1 (как они лежат в файлах)
+## 1. Standard XNA 3.1 readers (as they are stored in the files)
 
 ### 1.1 `Microsoft.Xna.Framework.Content.Texture2DReader` (v0)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | i32 | `SurfaceFormat` (нумерация **XNA 3.1**) |
+| 1 | i32 | `SurfaceFormat` (**XNA 3.1** numbering) |
 | 2 | u32 | width |
 | 3 | u32 | height |
 | 4 | u32 | mipCount |
-| 5 | mipCount × (`u32 size`, `size` байт) | уровни, от крупного к мелкому |
+| 5 | mipCount × (`u32 size`, `size` bytes) | levels, from largest to smallest |
 
-Встреченные форматы (2296 файлов + вложенные): **1 = Color**, **28 = Dxt1**, **32 = Dxt5**.
-Размеры подтверждают: Color 4 Б/пиксель, Dxt1 8 Б на блок 4×4, Dxt5 16 Б на блок. В XNA 4.0 те же
-форматы имеют номера 0 / 4 / 6 — **это главное отличие от v5**. Порядок байт `Color` — **B,G,R,A**
-(D3DFMT_A8R8G8B8; проверено по цветам текстур `lava`, `timer_fill_blue/red`). В XNA 4.0 `Color` —
-R,G,B,A, т.е. при переносе на FNA/MonoGame нужен swizzle (или формат Bgra32).
+Formats found (2296 files + nested): **1 = Color**, **28 = Dxt1**, **32 = Dxt5**.
+The sizes confirm this: Color is 4 B/pixel, Dxt1 is 8 B per 4×4 block, Dxt5 is 16 B per block. In XNA 4.0 the same
+formats have numbers 0 / 4 / 6 — **this is the main difference from v5**. The byte order of `Color` is **B,G,R,A**
+(D3DFMT_A8R8G8B8; verified against the colors of the textures `lava`, `timer_fill_blue/red`). In XNA 4.0 `Color` is
+R,G,B,A, so porting to FNA/MonoGame needs a swizzle (or the Bgra32 format).
 
-Полная таблица SurfaceFormat 3.1 (по документации XNA 3.1, в файлах встречены только 1/28/32):
+Full SurfaceFormat 3.1 table (from the XNA 3.1 documentation; only 1/28/32 were found in the files):
 Color=1, Bgr32=2, Bgra1010102=3, Rgba32=4, Rgb32=5, Rgba1010102=6, Rg32=7, Rgba64=8, Bgr565=9,
 Bgra5551=10, Bgr555=11, Bgra4444=12, Bgr444=13, Bgra2338=14, Alpha8=15, Bgr233=16, Bgr24=17,
 NormalizedByte2=18, NormalizedByte4=19, NormalizedShort2=20, NormalizedShort4=21, Single=22,
@@ -124,142 +124,142 @@ Dxt4=31, Dxt5=32, Luminance8=33, …
 
 ### 1.2 `Texture3DReader` (v0)
 
-`i32 format`, `u32 width`, `u32 height`, `u32 depth`, `u32 mipCount`, затем mipCount × (`u32 size`, данные).
-7 файлов (`EffectTextures/Particles*`), формат 1 (Color), 256×256×1, 9 мипов. Совпадает по макету с 4.0 (кроме enum'а формата).
+`i32 format`, `u32 width`, `u32 height`, `u32 depth`, `u32 mipCount`, then mipCount × (`u32 size`, data).
+7 files (`EffectTextures/Particles*`), format 1 (Color), 256×256×1, 9 mips. The layout matches 4.0 (except for the format enum).
 
 ### 1.3 `TextureCubeReader` (v0)
 
-`i32 format`, `u32 size`, `u32 mipCount`, затем **6 граней** × mipCount × (`u32 size`, данные) — грань-major
-(+X, −X, +Y, −Y, +Z, −Z — порядок CubeMapFace). 13 файлов, формат 32 (Dxt5).
+`i32 format`, `u32 size`, `u32 mipCount`, then **6 faces** × mipCount × (`u32 size`, data) — face-major
+(+X, −X, +Y, −Y, +Z, −Z — CubeMapFace order). 13 files, format 32 (Dxt5).
 
-### 1.4 `VertexDeclarationReader` (v0) — отличается от 4.0
+### 1.4 `VertexDeclarationReader` (v0) — differs from 4.0
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | u32 | elementCount |
-| 2 | elementCount × 8 байт | `u16 stream`, `u16 offset`, `u8 VertexElementFormat`, `u8 VertexElementMethod`, `u8 VertexElementUsage`, `u8 usageIndex` |
+| 2 | elementCount × 8 bytes | `u16 stream`, `u16 offset`, `u8 VertexElementFormat`, `u8 VertexElementMethod`, `u8 VertexElementUsage`, `u8 usageIndex` |
 
-Stride в декларации **не хранится** (в 3.1 он передаётся отдельно — см. `BiTreeRootNode.vertexStride`,
-`Liquid.stride`; в Model он вычисляется). В XNA 4.0 формат другой: `u32 stride`, `u32 count`, по 16 байт
-на элемент (`i32 offset`, `i32 format`, `i32 usage`, `i32 usageIndex`) с другими номерами enum'ов.
+The stride is **not stored** in the declaration (in 3.1 it is passed separately — see `BiTreeRootNode.vertexStride`,
+`Liquid.stride`; in Model it is computed). In XNA 4.0 the format is different: `u32 stride`, `u32 count`, 16 bytes
+per element (`i32 offset`, `i32 format`, `i32 usage`, `i32 usageIndex`) with different enum numbers.
 
-Нумерация 3.1 (подтверждена смещениями/размерами в файлах):
+3.1 numbering (confirmed by offsets/sizes in the files):
 
 - `VertexElementFormat`: Single=0, Vector2=1, Vector3=2, Vector4=3, Color=4, Byte4=5, Short2=6, Short4=7, …
 - `VertexElementUsage`: Position=0, BlendWeight=1, BlendIndices=2, Normal=3, PointSize=4, TextureCoordinate=5, Tangent=6, Binormal=7, TessellateFactor=8, Color=10, Fog=11, Depth=12, Sample=13
-- `VertexElementMethod`: везде 0 (Default); `stream` везде 0.
+- `VertexElementMethod`: 0 everywhere (Default); `stream` is 0 everywhere.
 
-Встреченные комбинации: Position(Vector3), Normal(Vector3), TexCoord(Vector2, индексы 0/1), Tangent(Vector3),
-Binormal(Vector3), Color(Vector4 или Color), BlendIndices(Byte4) + BlendWeight(Vector4) у скинированных
-моделей, Color(Single) у воды/лавы (уровень «заморозки»).
+Combinations found: Position(Vector3), Normal(Vector3), TexCoord(Vector2, indices 0/1), Tangent(Vector3),
+Binormal(Vector3), Color(Vector4 or Color), BlendIndices(Byte4) + BlendWeight(Vector4) in skinned
+models, Color(Single) in water/lava ("freeze" level).
 
-### 1.5 `VertexBufferReader` (v0) — отличается от 4.0
+### 1.5 `VertexBufferReader` (v0) — differs from 4.0
 
-`u32 sizeInBytes` + сырые вершины. Декларации и числа вершин **нет** (в 4.0: встроенная декларация + `u32 vertexCount` + данные).
+`u32 sizeInBytes` + raw vertices. There is **no** declaration and no vertex count (in 4.0: embedded declaration + `u32 vertexCount` + data).
 
 ### 1.6 `IndexBufferReader` (v0)
 
-`bool is16Bit`, `u32 sizeInBytes`, данные. Во всех файлах is16Bit = true. Совпадает с 4.0.
+`bool is16Bit`, `u32 sizeInBytes`, data. In all files is16Bit = true. Matches 4.0.
 
 ### 1.7 `EffectReader` (v0)
 
-`u32 size` + бинарник DX9 Effect (`fx_2_0`, начинается с `01 09 FF FE`). 52 файла (`Content/Shaders/*.xnb`
-и `SkinnedModelBasicEffect.xnb`). Макет совпадает с 4.0, но MonoGame ожидает свой формат шейдера; FNA
-(MojoShader) может исполнять этот байткод напрямую.
+`u32 size` + a DX9 Effect binary (`fx_2_0`, starts with `01 09 FF FE`). 52 files (`Content/Shaders/*.xnb`
+and `SkinnedModelBasicEffect.xnb`). The layout matches 4.0, but MonoGame expects its own shader format; FNA
+(MojoShader) can execute this bytecode directly.
 
-### 1.8 `ModelReader` (v0) — сильно отличается от 4.0
+### 1.8 `ModelReader` (v0) — differs significantly from 4.0
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | u32 | boneCount |
-| 2 | boneCount × (`Object<string>` name, `Matrix` transform) | кости |
-| 3 | boneCount × (`BoneRef` parent, `u32` childCount, childCount × `BoneRef`) | иерархия |
+| 2 | boneCount × (`Object<string>` name, `Matrix` transform) | bones |
+| 3 | boneCount × (`BoneRef` parent, `u32` childCount, childCount × `BoneRef`) | hierarchy |
 | 4 | u32 | **vertexDeclarationCount** |
-| 5 | vertexDeclarationCount × `Object<VertexDeclaration>` | таблица деклараций модели |
+| 5 | vertexDeclarationCount × `Object<VertexDeclaration>` | model declaration table |
 | 6 | u32 | meshCount |
-| 7 | meshCount × Mesh | см. ниже |
+| 7 | meshCount × Mesh | see below |
 | 8 | `BoneRef` | root bone |
-| 9 | `Object` | Tag (во всех файлах null) |
+| 9 | `Object` | Tag (null in all files) |
 
-`BoneRef`: `u8`, если boneCount < 255, иначе `u32`; 0 = нет кости, иначе индекс+1.
+`BoneRef`: `u8` if boneCount < 255, otherwise `u32`; 0 = no bone, otherwise index+1.
 
 Mesh:
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | `Object<string>` | name |
 | 2 | `BoneRef` | parentBone |
 | 3 | BoundingSphere | bounds |
-| 4 | `Object<VertexBuffer>` | **общий VB меша** |
-| 5 | `Object<IndexBuffer>` | **общий IB меша** |
+| 4 | `Object<VertexBuffer>` | **shared VB of the mesh** |
+| 5 | `Object<IndexBuffer>` | **shared IB of the mesh** |
 | 6 | `Object` | Tag (null) |
 | 7 | u32 | partCount |
 | 8 | partCount × MeshPart | |
 
 MeshPart:
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | u32 | streamOffset (байт) |
+| 1 | u32 | streamOffset (bytes) |
 | 2 | u32 | baseVertex |
 | 3 | u32 | numVertices |
 | 4 | u32 | startIndex |
 | 5 | u32 | primitiveCount |
-| 6 | u32 | **индекс декларации** в таблице п.5 |
+| 6 | u32 | **declaration index** into the table from item 5 |
 | 7 | `Object` | Tag (null) |
-| 8 | `SharedRef<Effect>` | эффект (лежит в shared resources файла) |
+| 8 | `SharedRef<Effect>` | effect (stored in the file's shared resources) |
 
-Vertex stride части = размер её декларации (сумма размеров элементов). В 4.0 таблицы деклараций нет,
-VB/IB — shared resources у каждой части, а у частей поля `vertexOffset/numVertices/startIndex/primitiveCount`.
+The vertex stride of a part = the size of its declaration (sum of element sizes). In 4.0 there is no declaration table,
+VB/IB are shared resources of each part, and parts have the fields `vertexOffset/numVertices/startIndex/primitiveCount`.
 
-Какие эффекты встречаются в shared resources Model: `RenderDeferredEffect` (статичные модели, предметы,
-части уровней), `AdditiveEffect`, `SkinnedModelBasicEffect` / `SkinnedModelDeferredNormalMappedEffect`
-(внутри SkinnedModel), стандартные `BasicEffect` (6 файлов) и `EffectMaterial` (3 файла, ассеты-заглушки
-из Maya).
+Effects found in Model shared resources: `RenderDeferredEffect` (static models, items,
+level parts), `AdditiveEffect`, `SkinnedModelBasicEffect` / `SkinnedModelDeferredNormalMappedEffect`
+(inside SkinnedModel), standard `BasicEffect` (6 files) and `EffectMaterial` (3 files, placeholder assets
+from Maya).
 
 ### 1.9 `BasicEffectReader` (v0)
 
 `ExtRef<Texture>` texture, `Vector3` diffuseColor, `Vector3` emissiveColor, `Vector3` specularColor,
-`f32` specularPower, `f32` alpha, `bool` vertexColorEnabled. (Порядок подтверждён правдоподобными
-значениями: alpha=1, specularPower=16/64.)
+`f32` specularPower, `f32` alpha, `bool` vertexColorEnabled. (The order is confirmed by plausible
+values: alpha=1, specularPower=16/64.)
 
 ### 1.10 `EffectMaterialReader` (v0)
 
-`ExtRef<Effect>` + `Object<Dictionary<string,object>>` параметров. Значения словаря — `SingleReader`,
-`BooleanReader`, `Vector3Reader`, `MatrixReader`, `ExternalReferenceReader` (текстуры). Используется
-в 3 файлах (`Models/AnimatedProps/Dungeons/*`), ссылки ведут на `..\..\..\Shaders\Maya\SkinnedModelEffect_0`.
+`ExtRef<Effect>` + `Object<Dictionary<string,object>>` of parameters. Dictionary values are `SingleReader`,
+`BooleanReader`, `Vector3Reader`, `MatrixReader`, `ExternalReferenceReader` (textures). Used
+in 3 files (`Models/AnimatedProps/Dungeons/*`), the references point to `..\..\..\Shaders\Maya\SkinnedModelEffect_0`.
 
-### 1.11 Прочие стандартные
+### 1.11 Other standard readers
 
-| Reader | Байты |
+| Reader | Bytes |
 |---|---|
 | `StringReader` | `string` |
-| `SingleReader` / `BooleanReader` / `Vector3Reader` / `MatrixReader` | соответствующий примитив |
-| `ExternalReferenceReader` | `string` (путь, как в ExtRef). Появляется как значение `Object<T>`, когда ассет вынесен в отдельный файл |
-| ``ListReader`1[Vector3]`` | `u32 count` + count × Vector3 (**без** typeId — значимый тип) |
-| ``ListReader`1[String]`` | `u32 count` + count × `Object<string>` (с typeId). Только `Audio/SoundList.xnb` |
+| `SingleReader` / `BooleanReader` / `Vector3Reader` / `MatrixReader` | the corresponding primitive |
+| `ExternalReferenceReader` | `string` (path, as in ExtRef). Appears as the value of `Object<T>` when the asset is stored in a separate file |
+| ``ListReader`1[Vector3]`` | `u32 count` + count × Vector3 (**without** typeId — value type) |
+| ``ListReader`1[String]`` | `u32 count` + count × `Object<string>` (with typeId). Only `Audio/SoundList.xnb` |
 | ``DictionaryReader`2[String,Object]`` | `u32 count` + count × (`Object` key, `Object` value) |
-| `TextureReader` | присутствует в таблицах, но объектов этого типа в данных нет |
+| `TextureReader` | present in the tables, but there are no objects of this type in the data |
 
 ---
 
 ## 2. XNAnimation 0.7 (`XNAnimation.Pipeline.*`)
 
-### 2.1 `SkinnedModelReader` (v0) — главный тип 327 файлов
+### 2.1 `SkinnedModelReader` (v0) — main type of 327 files
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | `Object<Model>` | обычная XNA 3.1 Model (§1.8); эффекты частей — `SkinnedModelBasicEffect` или `SkinnedModelDeferredNormalMappedEffect` в shared resources |
+| 1 | `Object<Model>` | a regular XNA 3.1 Model (§1.8); part effects are `SkinnedModelBasicEffect` or `SkinnedModelDeferredNormalMappedEffect` in shared resources |
 | 2 | i32 | boneCount |
-| 3 | boneCount × `SharedRef<SkinnedModelBone>` | скелет (порядок = индекс кости) |
+| 3 | boneCount × `SharedRef<SkinnedModelBone>` | skeleton (order = bone index) |
 | 4 | i32 | clipCount |
-| 5 | clipCount × `SharedRef<AnimationClip>` | клипы, ключ словаря = AnimationClip.Name |
+| 5 | clipCount × `SharedRef<AnimationClip>` | clips, dictionary key = AnimationClip.Name |
 
-Файлы `*_animations*.xnb` содержат и меш, и клипы; «мешевые» файлы могут иметь clipCount = 0.
+The `*_animations*.xnb` files contain both the mesh and the clips; "mesh" files can have clipCount = 0.
 
 ### 2.2 `SkinnedModelBoneReader` (v0) (shared resource)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | u16 | index |
 | 2 | string | name |
@@ -267,26 +267,26 @@ VB/IB — shared resources у каждой части, а у частей пол
 | 4 | Quaternion | bindPose.Orientation |
 | 5 | Vector3 | bindPose.Scale |
 | 6 | Matrix | inverseBindPoseTransform |
-| 7 | `SharedRef<SkinnedModelBone>` | parent (0 у корня) |
+| 7 | `SharedRef<SkinnedModelBone>` | parent (0 for the root) |
 | 8 | i32 | childCount |
 | 9 | childCount × `SharedRef<SkinnedModelBone>` | children |
 
 ### 2.3 `AnimationClipReader` (v0) (shared resource)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | string | name |
-| 2 | f32 | duration (секунды) |
+| 2 | f32 | duration (seconds) |
 | 3 | i32 | channelCount |
 | 4 | channelCount × (`string` boneName, AnimationChannel) | |
 
-**AnimationChannel** (тот же макет используется в `AnimatedLevelPart`): `i32 keyframeCount`, затем
-keyframeCount × (`f32 time`, `Vector3 translation`, `Quaternion orientation`, `Vector3 scale`) — 44 байта
-на ключ. Поиск ключа по времени — бинарный, ключи отсортированы по времени.
+**AnimationChannel** (the same layout is used in `AnimatedLevelPart`): `i32 keyframeCount`, then
+keyframeCount × (`f32 time`, `Vector3 translation`, `Quaternion orientation`, `Vector3 scale`) — 44 bytes
+per key. Keys are looked up by time with a binary search; keys are sorted by time.
 
 ### 2.4 `SkinnedModelBasicEffectReader` (v0) (shared resource)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | u8 | technique (enum `SkinnedModelBasicEffect.Technique`) |
 | 2 | f32 | EmissiveAmount |
@@ -298,37 +298,37 @@ keyframeCount × (`f32 time`, `Vector3 translation`, `Quaternion orientation`, `
 | 8–13 | 6 × bool | DiffuseMap0Enabled, DiffuseMap1Enabled, SpecularMapEnabled, DamageMap0Enabled, DamageMap1Enabled, NormalMapEnabled |
 | 14–19 | 6 × `Object<Texture2D>` | DiffuseMap0, DiffuseMap1, SpecularMap, DamageMap0, DamageMap1, NormalMap |
 
-Важно: текстуры здесь — `Object`, а не ExtRef. В файлах на их месте стоит typeId
-`ExternalReferenceReader` + путь (или 0 = null), т.е. на практике это тоже внешние ссылки, но с typeId.
-Для создания требуется глобальный `EffectPool` (шейдер берётся из `SkinnedModelBasicEffect.xnb`).
+Important: the textures here are `Object`, not ExtRef. In the files, their place holds the typeId of
+`ExternalReferenceReader` + a path (or 0 = null), so in practice these are also external references, but with a typeId.
+Creation requires a global `EffectPool` (the shader is taken from `SkinnedModelBasicEffect.xnb`).
 
 ---
 
 ## 3. PolygonHead (`PolygonHead.Pipeline.*`)
 
-### 3.1 `RenderDeferredEffectReader` (v0) — основной материал статической геометрии
+### 3.1 `RenderDeferredEffectReader` (v0) — main material of static geometry
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | f32 | Alpha |
 | 2 | f32 | Sharpness |
 | 3 | bool | VertexColorEnabled |
 | 4 | bool | UseMaterialTextureForReflectiveness |
 | 5 | `ExtRef<TextureCube>` | ReflectionMap |
-| 6 | Layer0 | см. ниже |
+| 6 | Layer0 | see below |
 | 7 | bool | hasLayer1 |
-| 8 | Layer1 | только если hasLayer1 |
+| 8 | Layer1 | only if hasLayer1 |
 
-Layer (суффикс 0/1): `bool DiffuseTextureNAlphaDisabled`, `bool AlphaMaskNEnabled`, `Vector3 DiffuseColorN`,
+Layer (suffix 0/1): `bool DiffuseTextureNAlphaDisabled`, `bool AlphaMaskNEnabled`, `Vector3 DiffuseColorN`,
 `f32 SpecAmountN`, `f32 SpecPowerN`, `f32 EmissiveAmountN`, `f32 NormalPowerN`, `f32 ReflectivenessN`,
 `ExtRef<Texture2D> DiffuseTextureN`, `ExtRef<Texture2D> MaterialTextureN`, `ExtRef<Texture2D> NormalTextureN`.
-Второй слой — для блендинга двух материалов по вершинному цвету. World = Identity после загрузки.
+The second layer is for blending two materials by vertex color. World = Identity after loading.
 
-### 3.2 `RenderDeferredLiquidEffectReader` (v0) — вода
+### 3.2 `RenderDeferredLiquidEffectReader` (v0) — water
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | `ExtRef<Texture>` | ReflectionMap (ожидается TextureCube; иначе null) |
+| 1 | `ExtRef<Texture>` | ReflectionMap (a TextureCube is expected; otherwise null) |
 | 2 | f32 | WaveHeight |
 | 3 | Vector2 | WaveSpeed0 |
 | 4 | Vector2 | WaveSpeed1 |
@@ -348,11 +348,11 @@ Layer (суффикс 0/1): `bool DiffuseTextureNAlphaDisabled`, `bool AlphaMask
 | 18 | ExtRef<Texture2D> | IceDiffuseMap |
 | 19 | ExtRef<Texture2D> | IceNormalMap |
 
-Встречается только внутри LevelModel (Liquid), а также как эффект частей моделей AnimatedLevelPart.
+Found only inside LevelModel (Liquid), and also as the effect of model parts in AnimatedLevelPart.
 
-### 3.3 `LavaEffectReader` (v0) — лава (4 уровня: `ru_s5`, `ru_s6BF`, `ew_s4`, `ch_volcano_hideout`)
+### 3.3 `LavaEffectReader` (v0) — lava (4 levels: `ru_s5`, `ru_s6BF`, `ew_s4`, `ch_volcano_hideout`)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | f32 | MaskDistortion |
 | 2 | Vector2 | Speed0 |
@@ -375,99 +375,99 @@ Layer (суффикс 0/1): `bool DiffuseTextureNAlphaDisabled`, `bool AlphaMask
 
 ### 3.4 `AdditiveEffectReader` (v0)
 
-`Vector3 ColorTint` (W принудительно = 1), `bool VertexColorEnabled`, `bool TextureEnabled`, `ExtRef<Texture2D> Texture`.
-Встречается как эффект корней BiTree и частей Model (аддитивные объекты рисуются отдельным проходом).
+`Vector3 ColorTint` (W forced to 1), `bool VertexColorEnabled`, `bool TextureEnabled`, `ExtRef<Texture2D> Texture`.
+Found as the effect of BiTree roots and Model parts (additive objects are drawn in a separate pass).
 
 ### 3.5 `SkinnedModelDeferredNormalMappedEffectReader` (v0)
 
 `Vector3 DiffuseColor`, `f32 SpecularAmount`, `f32 SpecularPower`, `f32 EmissiveAmount`, `f32 NormalPower`,
-затем 5 × `ExtRef<Texture2D>`: DiffuseMap, MaterialMap, DamageMap, NormalMap, NormalDamageMap.
-OverrideColor обнуляется. Только 4 файла (`Models/Bosses/cthulhu/*`). Требует глобальный EffectPool.
+then 5 × `ExtRef<Texture2D>`: DiffuseMap, MaterialMap, DamageMap, NormalMap, NormalDamageMap.
+OverrideColor is reset to zero. Only 4 files (`Models/Bosses/cthulhu/*`). Requires a global EffectPool.
 
-(В PolygonHead есть ещё `SkinnedModelDeferredEffect` со своим методом чтения, но reader'а для него
-в контенте нет — не используется.)
+(PolygonHead also has `SkinnedModelDeferredEffect` with its own read method, but there is no reader for it
+in the content — it is not used.)
 
-### 3.6 `BiTreeModelReader` (v0) — статическая геометрия уровня (BSP-подобное дерево AABB)
+### 3.6 `BiTreeModelReader` (v0) — static level geometry (BSP-like AABB tree)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | i32 | rootCount |
 | 2 | rootCount × BiTreeRootNode | |
 
-BiTreeRootNode (по одному на материал/батч):
+BiTreeRootNode (one per material/batch):
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | bool | Visible |
 | 2 | bool | CastShadows |
-| 3 | f32 | Sway (амплитуда покачивания растительности) |
-| 4 | f32 | EntityInfluence (реакция покачивания на сущности) |
+| 3 | f32 | Sway (amplitude of vegetation sway) |
+| 4 | f32 | EntityInfluence (sway reaction to entities) |
 | 5 | f32 | GroundLevel |
 | 6 | i32 | numVertices |
-| 7 | i32 | vertexStride (байт; встречены 44, 60, 64, 72, 80, 96) |
+| 7 | i32 | vertexStride (bytes; found 44, 60, 64, 72, 80, 96) |
 | 8 | `Object<VertexDeclaration>` | |
 | 9 | `Object<VertexBuffer>` | |
 | 10 | `Object<IndexBuffer>` | |
-| 11 | `Object<Effect>` | `RenderDeferredEffect` или `AdditiveEffect` (inline, не shared) |
-| 12 | i32 | primitiveCount (всего узла) |
+| 11 | `Object<Effect>` | `RenderDeferredEffect` or `AdditiveEffect` (inline, not shared) |
+| 12 | i32 | primitiveCount (of the whole node) |
 | 13 | i32 | startIndex |
 | 14 | Vector3 | bbox.Min |
 | 15 | Vector3 | bbox.Max |
 | 16 | bool | hasChildA → BiTreeNode |
 | 17 | bool | hasChildB → BiTreeNode |
 
-BiTreeNode (рекурсивно, в порядке: A полностью, затем B): `i32 primitiveCount`, `i32 startIndex`,
-`Vector3 min`, `Vector3 max`, `bool hasChildA` [+узел], `bool hasChildB` [+узел]. numVertices наследуется от корня.
+BiTreeNode (recursive, in order: A fully, then B): `i32 primitiveCount`, `i32 startIndex`,
+`Vector3 min`, `Vector3 max`, `bool hasChildA` [+node], `bool hasChildB` [+node]. numVertices is inherited from the root.
 
-Поведение: при отрисовке, если узел полностью в фрустуме — рисуется весь его диапазон индексов; если
-пересекается и есть оба ребёнка — рекурсия; иначе рисуется целиком. Т.е. диапазон родителя покрывает
-диапазоны детей (индексы упорядочены по дереву). Рисуется `TriangleList`, baseVertex = 0.
+Behavior: during rendering, if a node is fully inside the frustum, its whole index range is drawn; if it
+intersects and has both children, the renderer recurses; otherwise it is drawn in full. So the parent range covers
+the children's ranges (indices are ordered by the tree). `TriangleList` is drawn, baseVertex = 0.
 
-### 3.7 `BitmapFontReader` (v0) — 66 файлов `Languages/<lang>/Font/*.xnb`
+### 3.7 `BitmapFontReader` (v0) — 66 files `Languages/<lang>/Font/*.xnb`
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | i32 | LineHeight |
 | 2 | i32 | BaseLine |
 | 3 | char | DefaultCharacter (UTF-8) |
-| 4 | `Object<Texture2D>` | атлас (inline Texture2D, формат Color) |
-| 5 | i32 | glyphCount (до 263 в файлах) |
+| 4 | `Object<Texture2D>` | atlas (inline Texture2D, Color format) |
+| 5 | i32 | glyphCount (up to 263 in the files) |
 | 6 | glyphCount × Glyph | |
-| 7 | i32 | kerningCount (в части шрифтов > 0) |
+| 7 | i32 | kerningCount (> 0 in some fonts) |
 | 8 | kerningCount × (`char` first, `char` second, `i32` amount) | |
 
 Glyph: `char Character`, `i32 Origin.X`, `i32 Origin.Y`, `i32 Size.X`, `i32 Size.Y`, `i32 AdvanceWidth`,
-`i32 LeftSideBearing`, `bool ForceWhite`. Origin/Size — пиксели в атласе. Spacing = 0. При отсутствии
-символа используется DefaultCharacter, затем любой первый.
+`i32 LeftSideBearing`, `bool ForceWhite`. Origin/Size are pixels in the atlas. Spacing = 0. If a
+character is missing, DefaultCharacter is used, then any first one.
 
 ---
 
-## 4. Magicka: `LevelModelReader` (132 файла `Levels/**/*.xnb`)
+## 4. Magicka: `LevelModelReader` (132 files `Levels/**/*.xnb`)
 
-Главный объект уровня-сцены. Поля строго по порядку:
+Main object of a level scene. Fields strictly in order:
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | `Object<BiTreeModel>` | статическая геометрия (§3.6) |
-| 2 | i32 + N × AnimatedLevelPart | анимированные части (рекурсивные) |
-| 3 | i32 + N × LevelLight | источники света |
-| 4 | i32 + N × VisualEffectStorage | эффекты-частицы на уровне |
-| 5 | i32 + N × (`Matrix` startTransform, `string` template) | физ-объекты; шаблон грузится как `Data/PhysicsEntities/<template>` |
-| 6 | i32 + N × Liquid | вода/лава |
-| 7 | i32 + N × ForceField | силовые поля |
-| 8 | **10** × CollisionMeshSlot | статическая коллизия, по слоту на материал |
-| 9 | bool + CameraMesh | опциональная коллизия камеры |
-| 10 | i32 + N × (`string` name, TriggerArea) | зоны триггеров; ключ = hash(lower(name)); дополнительно движок добавляет «any»-зону |
-| 11 | i32 + N × (`string` name, Locator) | локаторы; ключ = hash(name) (без lower) |
-| 12 | NavMesh | навигационная сетка (всегда) |
+| 1 | `Object<BiTreeModel>` | static geometry (§3.6) |
+| 2 | i32 + N × AnimatedLevelPart | animated parts (recursive) |
+| 3 | i32 + N × LevelLight | light sources |
+| 4 | i32 + N × VisualEffectStorage | particle effects on the level |
+| 5 | i32 + N × (`Matrix` startTransform, `string` template) | physics objects; the template is loaded as `Data/PhysicsEntities/<template>` |
+| 6 | i32 + N × Liquid | water/lava |
+| 7 | i32 + N × ForceField | force fields |
+| 8 | **10** × CollisionMeshSlot | static collision, one slot per material |
+| 9 | bool + CameraMesh | optional camera collision |
+| 10 | i32 + N × (`string` name, TriggerArea) | trigger zones; key = hash(lower(name)); the engine additionally adds an "any" zone |
+| 11 | i32 + N × (`string` name, Locator) | locators; key = hash(name) (without lower) |
+| 12 | NavMesh | navigation mesh (always) |
 
-Shared resources файла — эффекты (`RenderDeferredEffect`/`AdditiveEffect`) частей Model внутри AnimatedLevelPart.
+The file's shared resources are the effects (`RenderDeferredEffect`/`AdditiveEffect`) of Model parts inside AnimatedLevelPart.
 
 ### 4.1 LevelLight
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | string | name (ключ = hash(name)) |
+| 1 | string | name (key = hash(name)) |
 | 2 | Vector3 | position |
 | 3 | Vector3 | direction |
 | 4 | i32 | LightType (0 point, 1 directional, 2 spot) |
@@ -481,57 +481,57 @@ Shared resources файла — эффекты (`RenderDeferredEffect`/`Additive
 | 12 | f32 | SpecularAmount |
 | 13 | f32 | VariationSpeed |
 | 14 | f32 | VariationAmount |
-| 15 | i32 | ShadowMapSize (корректируется настройкой качества теней) |
-| 16 | bool | CastShadows (у directional-света, созданного из уровня, конструктор ставит false, но потом поле перезаписывается этим значением) |
+| 15 | i32 | ShadowMapSize (adjusted by the shadow quality setting) |
+| 16 | bool | CastShadows (for a directional light created from the level, the constructor sets false, but the field is then overwritten with this value) |
 
-Поля 6–9 читаются всегда, независимо от типа.
+Fields 6–9 are always read, regardless of the type.
 
-### 4.2 VisualEffectStorage (уровень и AnimatedLevelPart)
+### 4.2 VisualEffectStorage (level and AnimatedLevelPart)
 
 `string id` (→hash(lower)), `Vector3 position`, `Vector3 forward`, `f32 range`, `string effect`
-(→hash; в LevelModel без lower, в AnimatedLevelPart — с lower). Трансформ = `CreateWorld(position, forward, up=+Y)`.
-`effect` — имя XML-эффекта из `Content/Effects`.
+(→hash; in LevelModel without lower, in AnimatedLevelPart with lower). Transform = `CreateWorld(position, forward, up=+Y)`.
+`effect` is the name of an XML effect from `Content/Effects`.
 
-### 4.3 AnimatedLevelPart (рекурсивно)
+### 4.3 AnimatedLevelPart (recursive)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | string | name (→lower, ID = hash) |
 | 2 | bool | AffectShields |
-| 3 | `Object<Model>` | модель части (эффекты частей — Additive/RenderDeferred/RenderDeferredLiquid, иначе ошибка) |
-| 4 | i32 + N × (`string` meshName, `bool`, `bool`) | MeshSettings: пара флагов на меш (по использованию — видимость и отбрасывание тени; не проверено) |
-| 5 | i32 + N × Liquid | жидкости, привязанные к части |
-| 6 | i32 + N × (`string` name, Locator) | локаторы части |
+| 3 | `Object<Model>` | part model (part effects are Additive/RenderDeferred/RenderDeferredLiquid, otherwise an error) |
+| 4 | i32 + N × (`string` meshName, `bool`, `bool`) | MeshSettings: a pair of flags per mesh (by usage — visibility and shadow casting; not verified) |
+| 5 | i32 + N × Liquid | liquids attached to the part |
+| 6 | i32 + N × (`string` name, Locator) | part locators |
 | 7 | f32 | animationDuration |
-| 8 | AnimationChannel | анимация части (§2.3, один канал) |
+| 8 | AnimationChannel | part animation (§2.3, one channel) |
 | 9 | i32 + N × VisualEffectStorage | |
-| 10 | i32 + N × (`string` lightName, `Matrix` localTransform) | ссылки на источники света уровня (по hash имени) |
-| 11 | bool hasCollision → (`u8` CollisionMaterials, `Object<List<Vector3>>` vertices, TriangleList) | коллизия части |
-| 12 | bool hasNavMesh → AnimatedNavMesh | (макет = NavMesh) |
-| 13 | i32 + N × AnimatedLevelPart | дочерние части (ключ = hash(name)) |
+| 10 | i32 + N × (`string` lightName, `Matrix` localTransform) | references to level light sources (by name hash) |
+| 11 | bool hasCollision → (`u8` CollisionMaterials, `Object<List<Vector3>>` vertices, TriangleList) | part collision |
+| 12 | bool hasNavMesh → AnimatedNavMesh | (layout = NavMesh) |
+| 13 | i32 + N × AnimatedLevelPart | child parts (key = hash(name)) |
 
-### 4.4 Liquid (вода/лава)
+### 4.4 Liquid (water/lava)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | `Object<Effect>` | `RenderDeferredLiquidEffect` → Water, `LavaEffect` → Lava; другое — ошибка |
+| 1 | `Object<Effect>` | `RenderDeferredLiquidEffect` → Water, `LavaEffect` → Lava; anything else is an error |
 | 2 | `Object<VertexBuffer>` | |
 | 3 | `Object<IndexBuffer>` | |
-| 4 | `Object<VertexDeclaration>` | движок добавляет к ней элемент stream 1, Single, Color index 1 (динамический буфер «заморозки») |
+| 4 | `Object<VertexDeclaration>` | the engine adds an element to it: stream 1, Single, Color index 1 (dynamic "freeze" buffer) |
 | 5 | i32 | vertexStride |
 | 6 | i32 | numVertices |
 | 7 | i32 | primitiveCount |
-| 8 | bool | hasCollision (создаются IceMesh + WaterMesh из позиций VB и индексов IB) |
+| 8 | bool | hasCollision (IceMesh + WaterMesh are created from VB positions and IB indices) |
 | 9 | bool | Freezable |
-| 10 | bool | AutoFreeze (все вершины изначально заморожены = 1.0) |
+| 10 | bool | AutoFreeze (all vertices are initially frozen = 1.0) |
 
-Коллизия строится по самим VB/IB: позиции берутся по смещению элемента Position, а также читается
-float по смещению элемента Color (usage 10). Порядок индексов треугольника при построении коллизии
-переставлен (0, 2, 1).
+Collision is built from the VB/IB themselves: positions are taken at the offset of the Position element, and a
+float is also read at the offset of the Color element (usage 10). The triangle index order is
+permuted when building the collision (0, 2, 1).
 
 ### 4.5 ForceField
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | Vector3 | Color |
 | 2 | f32 | Width |
@@ -546,59 +546,59 @@ float по смещению элемента Color (usage 10). Порядок и
 | 11–13 | Object VB, Object IB, Object VertexDeclaration | |
 | 14–16 | i32 ×3 | vertexStride, numVertices, primitiveCount |
 
-Позиции обязаны быть Vector3 с usageIndex 0. В проверенных файлах ForceField не встречен ни разу
-(счётчик везде 0) — макет только по коду.
+Positions must be Vector3 with usageIndex 0. ForceField was not found even once in the verified files
+(the count is 0 everywhere) — the layout is from the code only.
 
-### 4.6 CollisionMeshSlot (×10) и CameraMesh
+### 4.6 CollisionMeshSlot (×10) and CameraMesh
 
-Слот: `bool present`; если true — `Object<List<Vector3>> vertices`, `i32 triangleCount`,
-triangleCount × (`i32 I0`, `i32 I1`, `i32 I2`). Слоты 0..9 становятся примитивами одного CollisionSkin;
-индекс слота — это индекс примитива, по которому физика персонажа определяет материал поверхности,
-т.е. слот = `CollisionMaterials` (Generic, Gravel, Grass, Wood, Snow, Stone, Mud, Reflect, Water, Lava).
-Пример `bf_s1`: слоты 0, 3, 4, 5 заполнены.
+Slot: `bool present`; if true — `Object<List<Vector3>> vertices`, `i32 triangleCount`,
+triangleCount × (`i32 I0`, `i32 I1`, `i32 I2`). Slots 0..9 become primitives of one CollisionSkin;
+the slot index is the primitive index that character physics uses to determine the surface material,
+so slot = `CollisionMaterials` (Generic, Gravel, Grass, Wood, Snow, Stone, Mud, Reflect, Water, Lava).
+Example `bf_s1`: slots 0, 3, 4, 5 are filled.
 
-CameraMesh: `bool present` + тот же макет (vertices + треугольники).
+CameraMesh: `bool present` + the same layout (vertices + triangles).
 
 ### 4.7 TriggerArea
 
 `Vector3 position`, `Vector3 sideLengths`, `Quaternion orientation` → JigLibX `Box(position, R(orientation), sideLengths)`.
-**position — угол коробки**, а не центр (центр = position + R·sideLengths/2). Сущность «внутри», если
-расстояние от её позиции до коробки ≤ её радиуса.
+**position is a corner of the box**, not the center (center = position + R·sideLengths/2). An entity is "inside" if
+the distance from its position to the box is ≤ its radius.
 
 ### 4.8 Locator
 
-`Matrix transform`, `f32 radius` (имя читается перед ним снаружи).
+`Matrix transform`, `f32 radius` (the name is read before it, outside).
 
 ### 4.9 NavMesh / AnimatedNavMesh
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | u16 | vertexCount |
-| 2 | vertexCount × Vector3 | вершины |
+| 2 | vertexCount × Vector3 | vertices |
 | 3 | u16 | triangleCount |
-| 4 | triangleCount × Triangle (25 байт) | |
+| 4 | triangleCount × Triangle (25 bytes) | |
 
-Triangle: `u16 VertexA, VertexB, VertexC`, `u16 NeighbourA, NeighbourB, NeighbourC` (индексы соседних
-треугольников; 0xFFFF — вероятно «нет соседа», не проверено), `f32 CostAB, CostBC, CostCA`, `u8 MovementProperties`.
-Треугольники с флагом Dynamic (0x80) получают динамических соседей (стыковка с анимированными навмешами).
-Лимит 65535 вершин/треугольников (пример `ru_s5`: 6818 вершин, 12577 треугольников).
+Triangle: `u16 VertexA, VertexB, VertexC`, `u16 NeighbourA, NeighbourB, NeighbourC` (indices of neighboring
+triangles; 0xFFFF is probably "no neighbor", not verified), `f32 CostAB, CostBC, CostCA`, `u8 MovementProperties`.
+Triangles with the Dynamic flag (0x80) get dynamic neighbors (joining with animated navmeshes).
+Limit of 65535 vertices/triangles (example `ru_s5`: 6818 vertices, 12577 triangles).
 
 ---
 
-## 5. Magicka: шаблоны сущностей
+## 5. Magicka: entity templates
 
-### 5.1 `CharacterTemplateReader` (338 файлов `Data/Characters/*.xnb`)
+### 5.1 `CharacterTemplateReader` (338 files `Data/Characters/*.xnb`)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | string | ID (→lower, hash) |
-| 2 | string | DisplayID (→lower, hash) — ключ локализации |
-| 3 | i32 | Factions (флаги) |
+| 2 | string | DisplayID (→lower, hash) — localization key |
+| 3 | i32 | Factions (flags) |
 | 4 | i32 | BloodType (regular, green, black, wood, insect, none) |
 | 5–11 | 7 × bool | IsEthereal, LooksEthereal, Fearless, Uncharmable, Nonslippery, HasFairy, CanSeeInvisible |
-| 12 | i32 + N × (`string` cue →lower hash, `i32` Banks) | AttachedSounds. **Хранятся только первые 4; при N > 4 оригинал перестаёт читать (рассинхронизация) — в данных N ≤ 4** |
+| 12 | i32 + N × (`string` cue →lower hash, `i32` Banks) | AttachedSounds. **Only the first 4 are stored; with N > 4 the original stops reading (desynchronization) — in the data N ≤ 4** |
 | 13 | i32 + N × Gib | Gib: `ExtRef<Model>`, `f32 mass`, `f32 scale` |
-| 14 | i32 + N × PointLightHolder (N ≤ 4, иначе ошибка) | `string jointName`, `f32 radius`, `Vector3 diffuse`, `Vector3 ambient`, `f32 specular`, `u8 LightVariationType`, `f32 variationAmount`, `f32 variationSpeed` |
+| 14 | i32 + N × PointLightHolder (N ≤ 4, otherwise an error) | `string jointName`, `f32 radius`, `Vector3 diffuse`, `Vector3 ambient`, `f32 specular`, `u8 LightVariationType`, `f32 variationAmount`, `f32 variationSpeed` |
 | 15 | f32 | MaxHitpoints |
 | 16 | i32 | NumberOfHealthBars (≤0 → 1) |
 | 17 | bool | Undying |
@@ -613,7 +613,7 @@ Triangle: `u16 VertexA, VertexB, VertexC`, `u16 NeighbourA, NeighbourB, Neighbou
 | 26 | i32 | Regeneration |
 | 27 | f32 | MaxPanic |
 | 28 | f32 | ZapModifier |
-| 29 | f32 | Length (капсула; min 0.01) |
+| 29 | f32 | Length (capsule; min 0.01) |
 | 30 | f32 | Radius |
 | 31 | f32 | Mass |
 | 32 | f32 | Speed |
@@ -622,74 +622,74 @@ Triangle: `u16 VertexA, VertexB, VertexC`, `u16 NeighbourA, NeighbourB, Neighbou
 | 35 | f32 | StunTime |
 | 36 | i32 | SummonElementBank (Banks) |
 | 37 | string | SummonElementCue (hash) |
-| 38 | i32 + N × Resistance | `i32 Elements`, `f32 Multiplier`, `f32 Modifier`, `bool StatusResistance`; по умолчанию все 11 = (1, 0, false) |
-| 39 | i32 + N × ModelProperties | `ExtRef<SkinnedModel>`, `f32 scale`, `Vector3 tint` (варианты внешности) |
-| 40 | `ExtRef<SkinnedModel>` | файл со скелетом и клипами анимации |
-| 41 | i32 + N × (`string` boneName →lower, `string` effect →lower hash) | AttachedEffects (кость должна существовать) |
-| 42 | **27** × AnimationSet | по одному на WeaponClass |
-| 43 | i32 + N × (`i32 slot`, Attachment) | Equipment, слотов 8 |
-| 44 | ConditionCollection | события персонажа (§5.4) |
+| 38 | i32 + N × Resistance | `i32 Elements`, `f32 Multiplier`, `f32 Modifier`, `bool StatusResistance`; by default all 11 = (1, 0, false) |
+| 39 | i32 + N × ModelProperties | `ExtRef<SkinnedModel>`, `f32 scale`, `Vector3 tint` (appearance variants) |
+| 40 | `ExtRef<SkinnedModel>` | file with the skeleton and animation clips |
+| 41 | i32 + N × (`string` boneName →lower, `string` effect →lower hash) | AttachedEffects (the bone must exist) |
+| 42 | **27** × AnimationSet | one per WeaponClass |
+| 43 | i32 + N × (`i32 slot`, Attachment) | Equipment, 8 slots |
+| 44 | ConditionCollection | character events (§5.4) |
 | 45–57 | 13 × f32 | AlertRadius, GroupChase, GroupSeparation, GroupCohesion, GroupAlignment, GroupWander, FriendlyAvoidance, EnemyAvoidance, SightAvoidance, DangerAvoidance, AngerWeight, DistanceWeight, HealthWeight |
 | 58 | bool | Flocking |
 | 59 | f32 | BreakFreeStrength |
-| 60 | i32 + N × Ability | ИИ-способности (§5.6) |
-| 61 | i32 + N × (`u8 MovementProperties`, `i32 count`, count × `string` Animations) | MoveAnimations; MoveAbilities = OR всех флагов |
+| 60 | i32 + N × Ability | AI abilities (§5.6) |
+| 61 | i32 + N × (`u8 MovementProperties`, `i32 count`, count × `string` Animations) | MoveAnimations; MoveAbilities = OR of all flags |
 | 62 | i32 + N × BuffStorage | (§5.7) |
-| 63 | i32 + N × AuraStorage | TTL ≤ 0 → бесконечность |
+| 63 | i32 + N × AuraStorage | TTL ≤ 0 → infinity |
 
-Поведение при загрузке (не формат, но важно): для персонажей без флага FRIENDLY множители/модификаторы
-сопротивлений масштабируются от числа игроков (`k = 1 − (players−1)·0.00666`; положительные ×k, отрицательные ÷k).
-Кости `Mouth`, `RightAttach`, `LeftAttach`, `RightLeg`, `LeftLeg` и кость с индексом 1 (бедро) ищутся по имени
-без учёта регистра; bind-позы joint'ов поворачиваются на 180° вокруг Y.
+Behavior at load time (not format, but important): for characters without the FRIENDLY flag, resistance
+multipliers/modifiers are scaled by the number of players (`k = 1 − (players−1)·0.00666`; positive ×k, negative ÷k).
+The bones `Mouth`, `RightAttach`, `LeftAttach`, `RightLeg`, `LeftLeg` and the bone with index 1 (hip) are looked up by name
+case-insensitively; the bind poses of the joints are rotated by 180° around Y.
 
-**AnimationSet**: `i32 count`, count × (`string` Animations-имя, AnimationClipAction).
+**AnimationSet**: `i32 count`, count × (`string` Animations name, AnimationClipAction).
 
-**AnimationClipAction**: `string clipName` (ключ в клипах SkinnedModel), `f32 animationSpeed`, `f32 blendTime`,
+**AnimationClipAction**: `string clipName` (key in the SkinnedModel clips), `f32 animationSpeed`, `f32 blendTime`,
 `bool loop`, `i32 actionCount`, actionCount × AnimationAction.
 
-**AnimationAction**: `string typeName` (имя класса, без учёта регистра), `f32 startTime`, `f32 endTime`
-(доли длительности клипа 0..1), затем поля типа:
+**AnimationAction**: `string typeName` (class name, case-insensitive), `f32 startTime`, `f32 endTime`
+(fractions of the clip duration 0..1), then the type's fields:
 
-| Тип | Доп. поля |
+| Type | Extra fields |
 |---|---|
 | Block | `i32 weapon` |
 | BreakFree | `f32 magnitude`, `i32 weapon` |
-| CameraShake | `string` (игнорируется), `f32 duration`, `f32 magnitude` |
-| CastSpell | `bool fromStaff`; если false — `string source` (кость) |
+| CameraShake | `string` (ignored), `f32 duration`, `f32 magnitude` |
+| CastSpell | `bool fromStaff`; if false — `string source` (bone) |
 | Crouch | `f32 radius`, `f32 length` (≤0 → 0.01) |
 | DamageGrip | `bool damageToOwner`, `i32 n` (≤5), n × Damage(f32 amount) |
 | DealDamage | `i32 weapon`, `u8 Targets` (Target=0, Friendly=1, Enemy=2, NonCharacters=4, All=255) |
 | DetachItem | `i32 item`, `Vector3 velocity` |
 | Ethereal | `bool ethereal`, `f32 alpha`, `f32 speed` |
 | Footstep, OverkillGrip, ReleaseGrip, ThrowGrip | — |
-| Grip | `u8 GripType` (Pickup, Ride, Hold), `f32 radius`, `f32 breakFreeTolerance` (приводится к int; 0 → 10), `string gripAttachBone`, `string targetAttachBone`, `bool finishOnGrip` |
+| Grip | `u8 GripType` (Pickup, Ride, Hold), `f32 radius`, `f32 breakFreeTolerance` (cast to int; 0 → 10), `string gripAttachBone`, `string targetAttachBone`, `bool finishOnGrip` |
 | Gunfire | `i32 weapon`, `f32 accuracy` |
 | Immortal | `bool collide` |
 | Invisible | `bool noEffect` |
-| Jump | `f32 elevation` (градусы), `bool` [+`f32 minRange`], `bool` [+`f32 maxRange`] |
+| Jump | `f32 elevation` (degrees), `bool` [+`f32 minRange`], `bool` [+`f32 maxRange`] |
 | Move | `Vector3 velocity` |
-| PlayEffect | `string bone`, `bool attach`, `string effect` (→lower hash), `f32` (игнорируется) |
+| PlayEffect | `string bone`, `bool attach`, `string effect` (→lower hash), `f32` (ignored) |
 | PlaySound | `string cue` (hash), `i32 Banks` |
-| RemoveStatus | `string StatusEffects`-имя |
+| RemoveStatus | `string` StatusEffects name |
 | SetItemAttach | `i32 item`, `string bone` |
-| SpawnMissile | `i32 weapon`, `Vector3 velocity` (длина² ≤ 1e-6 → нет), `bool itemAligned` |
-| SpecialAbility | `i32 weapon`; если < 0 — SpecialAbility (§5.5) |
+| SpawnMissile | `i32 weapon`, `Vector3 velocity` (length² ≤ 1e-6 → none), `bool itemAligned` |
+| SpecialAbility | `i32 weapon`; if < 0 — SpecialAbility (§5.5) |
 | Suicide | `bool overkill` |
 | Tongue | `f32 maxLength` |
 | WeaponVisibility | `i32 weapon`, `bool visible` |
 
-**Attachment** (equipment): `string boneName` (должна существовать), `Vector3 rotation` (X — rotX,
-Y — rotY + π, Z — снова **rotX**; так в оригинале), `ExtRef<Item>`.
+**Attachment** (equipment): `string boneName` (must exist), `Vector3 rotation` (X — rotX,
+Y — rotY + π, Z — again **rotX**; this is how the original does it), `ExtRef<Item>`.
 
-**Damage** (во многих местах): `i32 AttackProperties`, `i32 Elements`, amount, `f32 magnitude`, где amount —
-`f32`, кроме мест, помеченных «Damage(i32)»: там amount хранится как `i32`.
+**Damage** (in many places): `i32 AttackProperties`, `i32 Elements`, amount, `f32 magnitude`, where amount is
+`f32`, except in places marked "Damage(i32)": there amount is stored as `i32`.
 
-### 5.2 `ItemReader` (454 файла `Data/Items/**`)
+### 5.2 `ItemReader` (454 files `Data/Items/**`)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | string | name (тип = hash(name), регистр сохраняется) |
-| 2 | string | displayName (hash; ключ локализации) |
+| 1 | string | name (type = hash(name), case is preserved) |
+| 2 | string | displayName (hash; localization key) |
 | 3 | string | description (hash) |
 | 4 | i32 + N × (`string` cue →lower hash, `i32` Banks) | sounds |
 | 5 | bool | Pickable |
@@ -700,10 +700,10 @@ Y — rotY + π, Z — снова **rotX**; так в оригинале), `ExtR
 | 10 | bool | HideModel |
 | 11 | bool | HideEffect |
 | 12 | bool | PauseSounds |
-| 13 | i32 + N × Resistance (с bool) | |
+| 13 | i32 + N × Resistance (with bool) | |
 | 14 | u8 | PassiveAbility (None, ShieldBoost, AreaLifeDrain, ZombieDeterrent, ReduceAggro, EnhanceAllyMelee, AreaRegeneration, InverseArcaneLife, Zap, BirchSteam, WetLightning, MoveSpeed, Glow, Mjolnr, Gungner, MasterSword, DragonSlayer) |
 | 15 | f32 | PassiveAbility variable |
-| 16 | i32 + N × string | эффекты (→lower hash) |
+| 16 | i32 + N × string | effects (→lower hash) |
 | 17 | i32 + N × PointLight (N ≤ 1) | `f32 radius`, `Vector3 diffuse`, `Vector3 ambient`, `f32 specular`, `u8 variation`, `f32 varAmount`, `f32 varSpeed` |
 | 18 | bool hasSpecial → (`f32 rechargeTime`, SpecialAbility) | |
 | 19 | f32 | MeleeRange |
@@ -712,67 +712,67 @@ Y — rotY + π, Z — снова **rotX**; так в оригинале), `ExtR
 | 22 | f32 | RangedRange |
 | 23 | bool | Facing |
 | 24 | f32 | Homing |
-| 25 | f32 | RangedElevation (градусы) |
+| 25 | f32 | RangedElevation (degrees) |
 | 26 | f32 | RangedDanger |
 | 27 | f32 | GunRange |
 | 28 | i32 | GunClip |
 | 29 | i32 | GunRate |
 | 30 | f32 | GunAccuracy |
-| 31 | string | GunSound: `""`, `cue` (банк Weapons) или `Bank/cue` |
+| 31 | string | GunSound: `""`, `cue` (Weapons bank) or `Bank/cue` |
 | 32 | string | GunMuzzleEffect (hash, `""` = 0) |
 | 33 | string | GunShellsEffect (hash) |
 | 34 | f32 | TracerVelocity |
-| 35 | string | NonTracerSprite: `""` = −1, `N` или `X/N` где X∈{B,C,D,E} добавляет 64/128/192/256 |
-| 36 | string | TracerSprite (тот же синтаксис) |
+| 35 | string | NonTracerSprite: `""` = −1, `N` or `X/N` where X∈{B,C,D,E} adds 64/128/192/256 |
+| 36 | string | TracerSprite (same syntax) |
 | 37 | ConditionCollection | GunConditions |
 | 38 | ExtRef<Model> | ProjectileModel |
 | 39 | ConditionCollection | RangedConditions |
 | 40 | f32 | Scale |
-| 41 | ExtRef<Model> | Model (из её костей `attach0/attach1/effect0/effect1` берутся точки крепления; bbox — по позициям первой части) |
-| 42 | i32 + N × AuraStorage | ауры |
+| 41 | ExtRef<Model> | Model (attachment points are taken from its bones `attach0/attach1/effect0/effect1`; bbox is from the positions of the first part) |
+| 42 | i32 + N × AuraStorage | auras |
 
-### 5.3 `PhysicsEntityTemplateReader` (69 файлов `Data/PhysicsEntities/**`, `Data/AnimatedProps/**`)
+### 5.3 `PhysicsEntityTemplateReader` (69 files `Data/PhysicsEntities/**`, `Data/AnimatedProps/**`)
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
 | 1 | bool | Movable |
 | 2 | bool | Pushable |
 | 3 | bool | Solid |
 | 4 | f32 | Mass |
-| 5 | i32 | MaxHitPoints (≤0 → неразрушаемый) |
+| 5 | i32 | MaxHitPoints (≤0 → indestructible) |
 | 6 | bool | CanHaveStatus |
-| 7 | i32 + N × (`i32 Elements`, `f32 Multiplier`, `f32 Modifier`) | сопротивления **без** bool StatusResistance |
-| 8 | i32 + N × Gib | как у персонажа |
+| 7 | i32 + N × (`i32 Elements`, `f32 Multiplier`, `f32 Modifier`) | resistances **without** bool StatusResistance |
+| 8 | i32 + N × Gib | as for a character |
 | 9 | string | HitEffect (→lower hash) |
-| 10 | string | HitSound: `""`, `cue` или `Bank/cue` |
+| 10 | string | HitSound: `""`, `cue` or `Bank/cue` |
 | 11 | string | GibTrailEffect (→lower hash) |
-| 12 | `Object<Model>` | inline Model (эффекты частей в shared resources) |
-| 13 | bool hasMesh → (`Object<List<Vector3>>`, `i32 n`, n × 3×i32) | коллизионный trimesh |
-| 14 | i32 boxCount + boxCount × (`string` name, `Vector3 position`, `Vector3 sides`, `Quaternion orientation`) | используется только первый box; остальные читаются и отбрасываются |
-| 15 | i32 + N × (`string` effect →hash, `Matrix` transform) | эффекты |
-| 16 | i32 | lightCount — **должен быть 0** (иначе NotImplemented) |
+| 12 | `Object<Model>` | inline Model (part effects in shared resources) |
+| 13 | bool hasMesh → (`Object<List<Vector3>>`, `i32 n`, n × 3×i32) | collision trimesh |
+| 14 | i32 boxCount + boxCount × (`string` name, `Vector3 position`, `Vector3 sides`, `Quaternion orientation`) | only the first box is used; the rest are read and discarded |
+| 15 | i32 + N × (`string` effect →hash, `Matrix` transform) | effects |
+| 16 | i32 | lightCount — **must be 0** (otherwise NotImplemented) |
 | 17 | ConditionCollection | |
 | 18 | string | ID (→lower, hash) |
-| 19 | bool | hasAnimation — читается в try/catch: если поток кончился, считается false (во всех 69 файлах присутствует и = true) |
-| 20 | (если 19) f32 | Radius |
+| 19 | bool | hasAnimation — read inside try/catch: if the stream has ended, it is treated as false (present and = true in all 69 files) |
+| 20 | (if 19) f32 | Radius |
 | 21 | i32 + N × ModelProperties | `ExtRef<SkinnedModel>`, `f32 scale`, `Vector3 tint` |
-| 22 | bool hasSkeleton → `ExtRef<SkinnedModel>` | скелет/клипы |
+| 22 | bool hasSkeleton → `ExtRef<SkinnedModel>` | skeleton/clips |
 | 23 | i32 + N × (`string` bone, `string` effect) | AttachedEffects |
-| 24 | 27 × AnimationSet | как у персонажа |
+| 24 | 27 × AnimationSet | as for a character |
 
-Путь шаблона берётся из AssetName (часть после `content\`, в нижнем регистре). Для событий с условием
-Hit/Collision оригинал хотел уменьшить magnitude Damage-событий в 4 раза, но индексирует не тот элемент
-(использует индекс условия вместо индекса события) — побочный эффект, не формат.
+The template path is taken from AssetName (the part after `content\`, in lower case). For events with the condition
+Hit/Collision the original intended to reduce the magnitude of Damage events by a factor of 4, but it indexes the wrong element
+(it uses the condition index instead of the event index) — a side effect, not format.
 
 ### 5.4 ConditionCollection / EventCollection / EventStorage
 
-ConditionCollection: `i32 n` (**≤ 5**, массив фиксированный), n × EventCollection.
+ConditionCollection: `i32 n` (**≤ 5**, fixed-size array), n × EventCollection.
 
 EventCollection:
 
-| # | Тип | Поле |
+| # | Type | Field |
 |---|---|---|
-| 1 | u8 | EventConditionType (флаги: Default=1, Hit=2, Collision=4, Damaged=8, Timer=0x10, Death=0x20, OverKill=0x40) |
+| 1 | u8 | EventConditionType (flags: Default=1, Hit=2, Collision=4, Damaged=8, Timer=0x10, Death=0x20, OverKill=0x40) |
 | 2 | i32 | Hitpoints |
 | 3 | i32 | Elements |
 | 4 | f32 | Threshold |
@@ -780,41 +780,41 @@ EventCollection:
 | 6 | bool | Repeat |
 | 7 | i32 + N × EventStorage | |
 
-EventStorage: `u8 EventType`, затем:
+EventStorage: `u8 EventType`, then:
 
-| EventType | Поля |
+| EventType | Fields |
 |---|---|
 | 0 Damage | Damage(f32), `bool velocityBased` |
-| 1 Splash | Damage(**i32** amount), `f32 radius` (> 0 обязательно) |
+| 1 Splash | Damage(**i32** amount), `f32 radius` (must be > 0) |
 | 2 Sound | `i32 Banks`, `string cue` (hash), `f32 magnitude`, `bool stopOnRemove` |
 | 3 Effect | `bool follow`, `bool worldAlign`, `string effect` (→lower hash) |
 | 4 Remove | `i32 bounce` |
 | 5 CameraShake | `f32 ttl`, `f32 magnitude`, `bool fromPosition` |
-| 6 Decal | `i32 a`, `i32 b` (Decal = a + 8·b), `i32 scale` (TTL = 60 c) |
-| 7 Blast | не реализовано (ошибка загрузки) |
-| 8 Spawn | `string characterType` (hash; шаблон `Data/Characters/<type>` подгружается), `string idleAnim`, `string spawnAnim`, `f32 health`, `u8 Order`, `u8 ReactTo`, `u8 Reaction` (Order), `f32 rotation` (градусы), `Vector3 offset` |
+| 6 Decal | `i32 a`, `i32 b` (Decal = a + 8·b), `i32 scale` (TTL = 60 s) |
+| 7 Blast | not implemented (load error) |
+| 8 Spawn | `string characterType` (hash; the template `Data/Characters/<type>` is loaded), `string idleAnim`, `string spawnAnim`, `f32 health`, `u8 Order`, `u8 ReactTo`, `u8 Reaction` (Order), `f32 rotation` (degrees), `Vector3 offset` |
 | 9 Overkill | — |
 | 10 SpawnGibs | `i32 startIndex`, `i32 endIndex` |
-| 11 SpawnItem | `string item` (→lower hash; подгружается `Data/Items/Wizard/<item>`, кроме «random») |
-| 12 SpawnMagick | `string MagickType`-имя (`random` → Revive) |
+| 11 SpawnItem | `string item` (→lower hash; `Data/Items/Wizard/<item>` is loaded, except for "random") |
+| 12 SpawnMagick | `string` MagickType name (`random` → Revive) |
 | 13 SpawnMissile | `string type` (→lower hash), `Vector3 velocity`, `bool facing` |
 | 14 Light | `f32 radius`, `Vector3 diffuse`, `Vector3 ambient`, `f32 specular`, `u8 variation`, `f32 varAmount`, `f32 varSpeed` |
-| 15 CastMagick | `string MagickType`-имя, `i32 n`, n × `i32 Elements` |
+| 15 CastMagick | `string` MagickType name, `i32 n`, n × `i32 Elements` |
 | 16 DamageOwner | Damage(f32), `bool velocityBased` |
-| 17 Callback | ошибка загрузки (только из кода) |
+| 17 Callback | load error (code only) |
 
-### 5.5 SpecialAbility (у предметов и в AnimationAction SpecialAbility)
+### 5.5 SpecialAbility (on items and in the SpecialAbility AnimationAction)
 
-`string typeName` (класс из `Abilities.SpecialAbilities`), `string animation` (`""` → cast_self), `string effect`
-(→lower hash, опционально), `i32 n`, n × `i32 Elements`. Конструктор выбирается по наличию элементов/эффекта.
+`string typeName` (class from `Abilities.SpecialAbilities`), `string animation` (`""` → cast_self), `string effect`
+(→lower hash, optional), `i32 n`, n × `i32 Elements`. The constructor is chosen based on the presence of elements/effect.
 
-### 5.6 Ability (ИИ-способности персонажа)
+### 5.6 Ability (character AI abilities)
 
-Общая часть: `string typeName` (подкласс Ability, без учёта регистра), `f32 cooldown`, `u8 Target`
-(Self=1, Enemy=2, Friendly=3), `bool hasFuzzy` [+`string` fuzzy-выражение], `i32 n` + n × `string` Animations.
-Затем:
+Common part: `string typeName` (Ability subclass, case-insensitive), `f32 cooldown`, `u8 Target`
+(Self=1, Enemy=2, Friendly=3), `bool hasFuzzy` [+`string` fuzzy expression], `i32 n` + n × `string` Animations.
+Then:
 
-| Тип | Доп. поля |
+| Type | Extra fields |
 |---|---|
 | Block | `f32 arc`, `i32 shield` |
 | CastSpell | `f32 minRange`, `f32 maxRange`, `f32 arc`, `f32 chantSpeed`, `f32 power`, `i32 CastType`, `i32 n`, n × `i32 Elements` |
@@ -825,20 +825,20 @@ EventStorage: `u8 EventType`, затем:
 | Jump | `f32 maxRange`, `f32 minRange`, `f32 angle`, `f32 elevation` |
 | Melee | `f32 minRange`, `f32 maxRange`, `f32 arc`, `i32 n`, n × `i32 weapon`, `bool rotate` |
 | PickUpCharacter, ZombieGrip | `f32 maxRange`, `f32 minRange`, `f32 angle`, `f32 maxWeight`, `string dropAnimation` |
-| Ranged | `f32 minRange`, `f32 maxRange`, `f32 elevation`, `f32 arc` (перезаписывается π), `f32 accuracy`, `i32 n`, n × `i32 weapon` |
+| Ranged | `f32 minRange`, `f32 maxRange`, `f32 elevation`, `f32 arc` (overwritten with π), `f32 accuracy`, `i32 n`, n × `i32 weapon` |
 | SpecialAbilityAbility | `f32 maxRange`, `f32 minRange`, `f32 angle`, `i32 weapon` |
-| ThrowGrip | `f32 maxRange`, `f32 minRange`, `f32 elevation`, `i32 n`, n × Damage(**i32** amount). Читается не больше 4 Damage (при n > 4 — рассинхронизация в оригинале) |
+| ThrowGrip | `f32 maxRange`, `f32 minRange`, `f32 elevation`, `i32 n`, n × Damage(**i32** amount). At most 4 Damage are read (with n > 4 the original desynchronizes) |
 
 ### 5.7 BuffStorage / AuraStorage
 
 BuffStorage: `u8 BuffType`, `u8 VisualCategory` (None, Offensive, Defensive, Special), `Vector3 color`, `f32 TTL`,
-`string effect` (→lower hash, `""` = 0), затем:
+`string effect` (→lower hash, `""` = 0), then:
 
-| BuffType | Поля |
+| BuffType | Fields |
 |---|---|
 | 0 BoostDamage | Damage(f32) |
-| 1 DealDamage | Damage(f32) (интервал 1 с) |
-| 2 Resistance | `i32 Elements`, `f32 Modifier`, `f32 Multiplier`, `bool status` (**порядок Modifier/Multiplier обратный** относительно Resistance в шаблонах) |
+| 1 DealDamage | Damage(f32) (1 s interval) |
+| 2 Resistance | `i32 Elements`, `f32 Modifier`, `f32 Multiplier`, `bool status` (**the Modifier/Multiplier order is reversed** compared to Resistance in templates) |
 | 3 Undying | — |
 | 4 Boost | `f32 amount` |
 | 5 ReduceAgro | `f32 amount` |
@@ -848,9 +848,9 @@ BuffStorage: `u8 BuffType`, `u8 VisualCategory` (None, Offensive, Defensive, Spe
 
 AuraStorage: `u8 AuraTarget` (Friendly, FriendlyButSelf, Enemy, All, AllButSelf, Self, Type, TypeButSelf, Faction,
 FactionButSelf), `u8 AuraType`, `u8 VisualCategory`, `Vector3 color`, `string effect` (→lower hash), `f32 TTL`,
-`f32 radius`, `string targetTypes` (→lower, через запятую, каждый → hash), `i32 targetFaction`, затем:
+`f32 radius`, `string targetTypes` (→lower, comma-separated, each → hash), `i32 targetFaction`, then:
 
-| AuraType | Поля |
+| AuraType | Fields |
 |---|---|
 | 0 Buff | BuffStorage |
 | 1 Deflect | `f32 strength` |
@@ -862,69 +862,69 @@ FactionButSelf), `u8 AuraType`, `u8 VisualCategory`, `Vector3 color`, `string ef
 
 ## 6. `Magicka.Physics.CollisionSkinReader`
 
-Reader существует в коде, но **ни один файл контента его не использует** (в таблицах reader'ов нет).
-Макет по коду: `i32 vertexCount`, vertexCount × Vector3, `i32 indexCount` (число **индексов**, треугольников =
-indexCount/3), затем на треугольник 3 × i32, которые присваиваются в обратном порядке (I2, I1, I0) —
-обратный winding по сравнению с треугольниками LevelModel/PhysicsEntityTemplate (I0, I1, I2).
-Не проверен на данных (нет файлов).
+The reader exists in the code, but **no content file uses it** (it is not in any reader table).
+Layout from the code: `i32 vertexCount`, vertexCount × Vector3, `i32 indexCount` (the number of **indices**; triangles =
+indexCount/3), then 3 × i32 per triangle, which are assigned in reverse order (I2, I1, I0) —
+reversed winding compared to the triangles of LevelModel/PhysicsEntityTemplate (I0, I1, I2).
+Not verified on data (no files).
 
 ---
 
-## 7. Статус проверки
+## 7. Verification status
 
-Парсер: Python, на базе `tools/research/xnb.py` (LZX), вспомогательные скрипты вне репозитория. Для каждого
-файла читается главный объект и все shared resources и проверяется, что прочитано ровно столько байт,
-сколько в распакованном теле.
+Parser: Python, based on `tools/research/xnb.py` (LZX), helper scripts outside the repository. For each
+file, the main object and all shared resources are read, and the parser checks that exactly as many bytes were read
+as the decompressed body contains.
 
-| Reader (главный тип файла) | Файлов | Разобрано без остатка | Пример |
+| Reader (main type of the file) | Files | Parsed with no remainder | Example |
 |---|---|---|---|
-| Texture2DReader | 2296 | 2296 | `EffectTextures/ArcaneBlade.xnb` (Dxt1, 128², 8 мипов) |
+| Texture2DReader | 2296 | 2296 | `EffectTextures/ArcaneBlade.xnb` (Dxt1, 128², 8 mips) |
 | TextureCubeReader | 13 | 13 | `EffectTextures/burnCube.xnb` |
 | Texture3DReader | 7 | 7 | `EffectTextures/ParticlesA.xnb` |
 | EffectReader | 52 | 52 | `Shaders/AdditiveEffect.xnb` |
-| ModelReader | 553 | 553 | `Models/AnimatedProps/Dungeons/dungeons_radio.xnb` (8 костей, 1 меш, EffectMaterial) |
-| SkinnedModelReader | 327 | 327 | `Models/AnimatedProps/toxic_spore_animations_0.xnb` (15 костей, 5 клипов) |
-| LevelModelReader | 132 | 132 | `Levels/Ruins/ru_s5.xnb` (13.7 МБ: 67 BiTree-корней, 2 части, 36 источников, лава, 12 триггеров, 42 локатора, навмеш 6818/12577), `Levels/BattleField/bf_s1.xnb` (вложенные анимированные части) |
-| CharacterTemplateReader | 338 | 338 | `Data/Characters/Beastman_brute.xnb` (24 анимации) |
-| ItemReader | 454 | 454 | `Data/items/NPC/acc_ammoBelt_0.xnb` (в т.ч. 1 несжатый файл) |
+| ModelReader | 553 | 553 | `Models/AnimatedProps/Dungeons/dungeons_radio.xnb` (8 bones, 1 mesh, EffectMaterial) |
+| SkinnedModelReader | 327 | 327 | `Models/AnimatedProps/toxic_spore_animations_0.xnb` (15 bones, 5 clips) |
+| LevelModelReader | 132 | 132 | `Levels/Ruins/ru_s5.xnb` (13.7 MB: 67 BiTree roots, 2 parts, 36 lights, lava, 12 triggers, 42 locators, navmesh 6818/12577), `Levels/BattleField/bf_s1.xnb` (nested animated parts) |
+| CharacterTemplateReader | 338 | 338 | `Data/Characters/Beastman_brute.xnb` (24 animations) |
+| ItemReader | 454 | 454 | `Data/items/NPC/acc_ammoBelt_0.xnb` (including 1 uncompressed file) |
 | PhysicsEntityTemplateReader | 69 | 69 | `Data/AnimatedProps/dungeons_radio.xnb` |
-| BitmapFontReader | 66 | 66 | `Languages/eng/Font/Maiandra14.xnb` (198 глифов) |
+| BitmapFontReader | 66 | 66 | `Languages/eng/Font/Maiandra14.xnb` (198 glyphs) |
 | ListReader<String> | 1 | 1 | `Audio/SoundList.xnb` |
 
-Вложенные reader'ы проверены транзитивно в составе этих файлов: VertexDeclaration/VertexBuffer/IndexBuffer,
+Nested readers were verified transitively as part of these files: VertexDeclaration/VertexBuffer/IndexBuffer,
 String, ExternalReference, List<Vector3>, Dictionary<String,Object>, Single/Boolean/Vector3/Matrix, BasicEffect (6),
-EffectMaterial (3), SkinnedModelBone, AnimationClip, SkinnedModelBasicEffect, SkinnedModelDeferredNormalMappedEffect (4 файла),
-RenderDeferredEffect, RenderDeferredLiquidEffect, AdditiveEffect, LavaEffect (4 уровня), BiTreeModel (132).
-Встречены: все подтипы AnimationAction, кроме SetItemAttach; все подтипы Ability, кроме ElementSteal и ZombieGrip;
+EffectMaterial (3), SkinnedModelBone, AnimationClip, SkinnedModelBasicEffect, SkinnedModelDeferredNormalMappedEffect (4 files),
+RenderDeferredEffect, RenderDeferredLiquidEffect, AdditiveEffect, LavaEffect (4 levels), BiTreeModel (132).
+Found: all AnimationAction subtypes except SetItemAttach; all Ability subtypes except ElementSteal and ZombieGrip;
 BuffType 0–8; AuraType 0–1; EventType 0–5, 8, 10–16.
 
-Итого: **4308 из 4308** файлов `.xnb` разобраны целиком без остатка.
+Total: **4308 of 4308** `.xnb` files parsed in full with no remainder.
 
-Не покрыто данными (макет только по коду): ForceField (во всех уровнях 0 штук), AuraType 2–4
-(Boost/LifeSteal/Love), EventType 6 (Decal) и 9 (Overkill, без полей), AnimationAction SetItemAttach,
-Ability ElementSteal/ZombieGrip, CollisionSkinReader, ветка PhysicsEntityTemplate без анимационной части.
+Not covered by data (layout from the code only): ForceField (0 in all levels), AuraType 2–4
+(Boost/LifeSteal/Love), EventType 6 (Decal) and 9 (Overkill, no fields), AnimationAction SetItemAttach,
+Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate branch without the animation part.
 
 ---
 
-## 8. Открытые вопросы
+## 8. Open questions
 
-1. **Семантика пар bool в MeshSettings** AnimatedLevelPart (предположительно visible / castShadows) — проверить по
-   использованию в рендере части.
-2. **Neighbour = 0xFFFF** в треугольниках навмеша — подтвердить, что это «нет соседа», и смысл Cost* (длина ребра
-   или стоимость перехода через ребро к соседу).
-3. **Соответствие слотов коллизии CollisionMaterials**: вывод сделан по индексу примитива в физике персонажа;
-   стоит подтвердить на уровнях со снегом/водой.
-4. **Порядок граней TextureCube** и мипов — принят стандартный (+X,−X,+Y,−Y,+Z,−Z); визуально не проверен.
-5. **Цветовые пространства и диапазоны** параметров материалов (EmissiveAmount, NormalPower, Sharpness и т.д.)
-   — нужны для шейдеров; это вопрос к рендеру, а не к формату.
-6. **Technique у SkinnedModelBasicEffect**: значения enum'а и их соответствие техникам в
+1. **Semantics of the bool pairs in MeshSettings** of AnimatedLevelPart (presumably visible / castShadows) — verify against
+   their usage in part rendering.
+2. **Neighbour = 0xFFFF** in navmesh triangles — confirm that it means "no neighbor", and the meaning of Cost* (edge length
+   or the cost of crossing the edge to the neighbor).
+3. **Mapping of collision slots to CollisionMaterials**: the conclusion is based on the primitive index in character physics;
+   it should be confirmed on levels with snow/water.
+4. **TextureCube face order** and mip order — the standard order is assumed (+X,−X,+Y,−Y,+Z,−Z); not verified visually.
+5. **Color spaces and ranges** of material parameters (EmissiveAmount, NormalPower, Sharpness, etc.)
+   — needed for shaders; this is a rendering question, not a format question.
+6. **Technique of SkinnedModelBasicEffect**: the enum values and their mapping to the techniques in
    `SkinnedModelBasicEffect.xnb`.
-7. **Поведение при отсутствии shared-эффекта** у частей Model, а также порядок fix-up ссылок
-   (кости ссылаются друг на друга через shared resources — нужен двухфазный резолв).
-8. **Полные enum'ы, которые хранятся как строки** (Animations — 231 значение с алиасами, StatusEffects, MagickType,
-   имена классов AnimationAction/Ability/SpecialAbility) — нужно выписать в отдельный справочник, чтобы ID
-   совпадали с оригиналом.
-9. **Factions, Order, ReactTo, CastType, Decal** — числовые значения enum'ов не выписаны здесь (хранятся как i32/u8).
-10. **Нужна ли бит-в-бит совместимость `GetHashCodeCustom`** для строк, содержащих не-ASCII символы (алгоритм
-    работает с UTF-16 code unit'ами — для ASCII результат совпадает с описанным).
-11. Совместимость байткода `Content/Shaders/*.xnb` (fx_2_0) с MojoShader/FNA — не проверялась.
+7. **Behavior when the shared effect is missing** for Model parts, and also the fix-up order of references
+   (bones reference each other through shared resources — a two-phase resolve is needed).
+8. **Full enums that are stored as strings** (Animations — 231 values with aliases, StatusEffects, MagickType,
+   class names of AnimationAction/Ability/SpecialAbility) — they need to be written out in a separate reference so that IDs
+   match the original.
+9. **Factions, Order, ReactTo, CastType, Decal** — the numeric enum values are not listed here (stored as i32/u8).
+10. **Is bit-exact compatibility of `GetHashCodeCustom` needed** for strings containing non-ASCII characters (the algorithm
+    works with UTF-16 code units — for ASCII the result matches the description).
+11. Compatibility of the `Content/Shaders/*.xnb` (fx_2_0) bytecode with MojoShader/FNA — not verified.

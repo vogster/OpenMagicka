@@ -1,558 +1,558 @@
-# Уровни, сцены и триггеры Magicka (формат и семантика)
+# Magicka levels, scenes and triggers (format and semantics)
 
-> Clean-room документ для OpenMagicka. Описывает **форматы данных** (`.lvl`, XML сцен, диалогов,
-> катсцен) и **наблюдаемое поведение** скриптовой системы оригинала (Magicka 1.10.4.2, XNA 3.1).
-> Декомпилированный код сюда не переносится — только схемы, таблицы и прозаическое описание.
-> Числа использования посчитаны скриптом по всем XML в `Content/Levels` Steam-версии
-> (142 сцены, 48 `.lvl`, 18 файлов диалогов).
+> Clean-room document for OpenMagicka. It describes the **data formats** (`.lvl`, scene XML, dialogs,
+> cutscenes) and the **observed behavior** of the original scripting system (Magicka 1.10.4.2, XNA 3.1).
+> No decompiled code is copied here. Only schemas, tables and prose descriptions.
+> Usage counts were computed by a script over all XML in `Content/Levels` of the Steam version
+> (142 scenes, 48 `.lvl`, 18 dialog files).
 
-Связанные документы: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md) (общий обзор движка).
+Related documents: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md) (general engine overview).
 
-## 1. Общая картина
+## 1. Overview
 
 ```
-Level (.lvl)                      — глава / челлендж / versus-карта
- ├─ DialogCollection              — Dialog_*.xml (+ всегда Dialog_Fairy.xml)
- ├─ счётчики (int) и таймеры (float) — ОБЩИЕ для всех сцен уровня
- └─ GameScene ×N (scene XML)      — одна «комната», id = имя файла
-     ├─ LevelModel (.xnb)         — геометрия + локаторы, триггер-зоны, анимированные части,
-     │                              свет, эффекты, физобъекты, навмеш
-     ├─ визуальные настройки      — fog/bloom/clouds/skymap/reverb…
-     ├─ Ruleset (опционально)     — Survival / TimedObjective / Versus (+ Wave для Survival)
+Level (.lvl)                      — chapter / challenge / versus map
+ ├─ DialogCollection              — Dialog_*.xml (+ always Dialog_Fairy.xml)
+ ├─ counters (int) and timers (float) — SHARED by all scenes of the level
+ └─ GameScene ×N (scene XML)      — one "room", id = file name
+     ├─ LevelModel (.xnb)         — geometry + locators, trigger areas, animated parts,
+     │                              lights, effects, physics objects, navmesh
+     ├─ visual settings           — fog/bloom/clouds/skymap/reverb…
+     ├─ Ruleset (optional)        — Survival / TimedObjective / Versus (+ Wave for Survival)
      ├─ Trigger ×M                — <trigger><if>…</if><then>…</then></trigger>
-     └─ Interactable ×K           — <OnInteract locator=…>действия</OnInteract>
+     └─ Interactable ×K           — <OnInteract locator=…>actions</OnInteract>
 ```
 
-Скрипт — **декларативный набор триггеров**: каждый кадр каждый триггер с `autorun=true`
-проверяет свои условия (`<if>`) и при выполнении ставит в очередь свои действия (`<then>`).
-Триггеры без autorun вызываются действием `executeTrigger`, из AI-событий (`trigger=` у move и
-т.п.), из `onDeath`/`onDamage`/`onPickup`/`onSkip` и т.д.
+The script is a **declarative set of triggers**. Every frame, each trigger with `autorun=true`
+checks its conditions (`<if>`). If they hold, it queues its actions (`<then>`).
+Triggers without autorun are called by the `executeTrigger` action, from AI events (`trigger=` on move
+etc.), from `onDeath`/`onDamage`/`onPickup`/`onSkip`, and so on.
 
-## 2. Идентификаторы, хэши и регистр
+## 2. Identifiers, hashes and case
 
-### 2.1 Хэш строк
+### 2.1 String hash
 
-Почти все ссылки по имени (сцены, локаторы, зоны, сущности, триггеры, счётчики, таймеры,
-диалоги, эффекты, звуки, шаблоны) внутри движка превращаются в `int` функцией
-«custom hash». Это **классический 32-битный хэш строки .NET Framework 2.0–3.5 (x86)**:
-два аккумулятора с начальным значением 352654597 (= 5381·2¹⁶+5381); строка UTF-16
-читается блоками по 2 символа как little-endian int32; на каждом шаге
-`acc = ((acc << 5) + acc + (acc >> 27)) ^ block` (сдвиг вправо арифметический), блоки
-попеременно идут в первый и второй аккумулятор; результат `acc1 + acc2 · 1566083941`
-(всё по модулю 2³²). Для нечётной длины последний блок содержит завершающий NUL-символ
-строки как старшую половину; цикл обрывается, когда осталось ≤ 2 символов.
+Almost all by-name references (scenes, locators, areas, entities, triggers, counters, timers,
+dialogs, effects, sounds, templates) are turned into an `int` inside the engine by a
+"custom hash" function. This is the **classic 32-bit string hash of .NET Framework 2.0–3.5 (x86)**:
+two accumulators with initial value 352654597 (= 5381·2¹⁶+5381); the UTF-16 string
+is read in blocks of 2 characters as a little-endian int32; on each step
+`acc = ((acc << 5) + acc + (acc >> 27)) ^ block` (arithmetic right shift); blocks
+alternate between the first and second accumulator; the result is `acc1 + acc2 · 1566083941`
+(all modulo 2³²). For an odd length, the last block holds the string's terminating NUL character
+as its upper half; the loop stops when ≤ 2 characters remain.
 
-Для OpenMagicka точное воспроизведение хэша нужно **только** для совместимости с бинарными
-сохранениями чекпоинтов и сетевым протоколом оригинала. Для собственной реализации проще
-использовать нормализованные (lower-case) строки как ключи.
+For OpenMagicka, exact reproduction of the hash is needed **only** for compatibility with the original's binary
+checkpoint saves and network protocol. For our own implementation it is simpler
+to use normalized (lower-case) strings as keys.
 
-### 2.2 Правила регистра
+### 2.2 Case rules
 
-| Где | Правило |
+| Where | Rule |
 |---|---|
-| Имена элементов (`Scene`, `trigger`, `If`, `Then`, `Random`, `Looped`, `OnInteract`, все визуальные теги) | регистронезависимо (Ordinal IgnoreCase) |
-| Тег действия/условия | регистронезависимое сравнение с **именем класса** (`spawn`, `Spawn`, `SPAWN`, `executetrigger`…). В игре встречаются все варианты: `spawnEffect` в 4 написаниях, `IDPresent` в 4 |
-| Имена атрибутов действий/условий | регистронезависимо, сопоставляются с публичными записываемыми свойствами класса |
-| Значения-строки у действий/условий | **приводятся к нижнему регистру** при чтении, затем хэшируются |
-| Enum-значения | регистронезависимо; допускается числовая форма (`roomType="10"`) и список флагов через запятую (`factions="evil,friendly"`, `reactto="proximity,attack"`) |
-| bool | `true`/`false` в любом регистре (.NET `bool.Parse`), иначе исключение |
-| float | инвариантная культура (точка), допускаются `.1`, `-12` |
-| Имена сцен | id сцены = имя файла сцены без расширения в нижнем регистре |
-| Триггер-зоны в LevelModel | имена приводятся к нижнему регистру перед хэшем |
-| Локаторы и свет в LevelModel | имена хэшируются **как есть** (без lower) → ссылки из XML (всегда lower) находят только локаторы с именами в нижнем регистре |
-| `area=` у `<Start>` в `.lvl` и `spawnPoint=` | к значению дописывается индекс игрока `0..3`, затем хэш **без** lower |
-| Исключения | атрибут `color` у `<SkyMap>` сравнивается чувствительно к регистру |
+| Element names (`Scene`, `trigger`, `If`, `Then`, `Random`, `Looped`, `OnInteract`, all visual tags) | case-insensitive (Ordinal IgnoreCase) |
+| Action/condition tag | case-insensitive comparison with the **class name** (`spawn`, `Spawn`, `SPAWN`, `executetrigger`…). The game uses all variants: `spawnEffect` in 4 spellings, `IDPresent` in 4 |
+| Action/condition attribute names | case-insensitive, matched to the class's public writable properties |
+| String values of actions/conditions | **converted to lower case** on read, then hashed |
+| Enum values | case-insensitive; numeric form is allowed (`roomType="10"`), as is a comma-separated list of flags (`factions="evil,friendly"`, `reactto="proximity,attack"`) |
+| bool | `true`/`false` in any case (.NET `bool.Parse`), otherwise an exception |
+| float | invariant culture (dot); `.1`, `-12` are allowed |
+| Scene names | scene id = scene file name without extension, in lower case |
+| Trigger areas in LevelModel | names are lowered before hashing |
+| Locators and lights in LevelModel | names are hashed **as is** (no lower) → references from XML (always lower) find only locators whose names are lower case |
+| `area=` on `<Start>` in `.lvl` and `spawnPoint=` | the player index `0..3` is appended to the value, then it is hashed **without** lower |
+| Exceptions | the `color` attribute of `<SkyMap>` is compared case-sensitively |
 
-### 2.3 Пространства имён
+### 2.3 Namespaces
 
-- **Локатор** (`Locator`: матрица + радиус) и **триггер-зона** (`TriggerArea`: ориентированный бокс)
-  приходят из `LevelModel` сцены. Локаторы ищутся сначала в модели, затем в иерархии
-  AnimatedLevelPart (с учётом их текущей трансформации). Когда действию нужна «точка» по имени
-  (`area=` у spawn/spawnPhys/setPosition…), сначала ищется локатор, затем триггер-зона —
-  тогда берётся **случайная точка внутри бокса** со случайным поворотом по Y.
-- Зона `any` — встроенная: «весь уровень» (все сущности EntityManager). В правилах
-  Survival/Versus `any` в роли точки спавна означает случайную зону из списка ruleset-а.
-- **Сущности** с уникальным `id` (атрибут `id` у spawn/spawnPhys/spawnItem…) ищутся глобально
-  (`Entity.GetByID`). Аватары адресуются через `player1`..`player4` там, где это явно
-  поддержано (setPosition, setFaction), либо через свой id.
-- **Тип персонажа** (`type=`) — имя шаблона из `Data/Characters/<type>`; хэш имени = Type ID.
-- **Триггеры** и **OnInteract** лежат в одном словаре сцены (`OnInteract` — по хэшу `locator`).
-- **Счётчики и таймеры** — словари уровня (`Level`), переживают смену сцен.
+- **Locator** (`Locator`: matrix + radius) and **trigger area** (`TriggerArea`: oriented box)
+  come from the scene's `LevelModel`. Locators are looked up first in the model, then in the
+  AnimatedLevelPart hierarchy (with their current transform applied). When an action needs a "point" by name
+  (`area=` on spawn/spawnPhys/setPosition…), a locator is searched first, then a trigger area.
+  In that case a **random point inside the box** with a random Y rotation is used.
+- Area `any` is built in: "the whole level" (all EntityManager entities). In
+  Survival/Versus rules, `any` as a spawn point means a random area from the ruleset's list.
+- **Entities** with a unique `id` (the `id` attribute on spawn/spawnPhys/spawnItem…) are looked up globally
+  (`Entity.GetByID`). Avatars are addressed via `player1`..`player4` where this is explicitly
+  supported (setPosition, setFaction), or via their id.
+- **Character type** (`type=`) is a template name from `Data/Characters/<type>`; the name hash = Type ID.
+- **Triggers** and **OnInteract** live in one scene dictionary (`OnInteract` is keyed by the hash of `locator`).
+- **Counters and timers** are level (`Level`) dictionaries; they survive scene changes.
 
-## 3. Файл уровня `.lvl`
+## 3. Level file `.lvl`
 
-XML, корень `<Level>`. Список глав кампании **захардкожен** (порядок Wizard_Castle,
+XML, root `<Level>`. The list of campaign chapters is **hardcoded** (order Wizard_Castle,
 Mountaindale, Highlands, Havindr, Battlefield, EndOfWorld, Wizard_Castle2, Mines, Swamp,
 Niflheim, Ruins, EndOfWorld2; Mythos: Tsar_WizardCastle, Tsar_Mountaindale, Tsar_Rlyeh;
-Dungeons: `Challenges/ch_dungeons_ch1/ch2`). Челленджи и versus — все `*.lvl` в
-`Levels/Challenges/` и `Levels/Versus/` (`ch_vietnam`, `ch_osotc`, `ch_dungeons_ch1/2` —
-«сюжетные челленджи»). Локализованные имена уровней тоже частично захардкожены
-(таблица имя файла → loc-ключ).
+Dungeons: `Challenges/ch_dungeons_ch1/ch2`). Challenges and versus are all `*.lvl` in
+`Levels/Challenges/` and `Levels/Versus/` (`ch_vietnam`, `ch_osotc`, `ch_dungeons_ch1/2` are
+"story challenges"). Localized level names are also partly hardcoded
+(a file name → loc key table).
 
-| Элемент | Исп. (из 48) | Содержимое / атрибуты | Семантика |
+| Element | Used (of 48) | Content / attributes | Semantics |
 |---|---|---|---|
-| `Name` | 48 | текст, loc-ключ (`#Chapter_04`) | обязателен; имя уровня |
-| `Description` | 48 | loc-ключ | обязателен |
-| `ShortDescription` | 2 | loc-ключ | по умолчанию = Description |
-| `Loading` | 48 | путь к картинке загрузки | обязателен |
-| `Start` | 48 | `scene` (имя сцены), `area` (префикс локаторов `area0..3`), `spawnPlayers` (bool, по умолч. true), `noItems` (bool — выдать всем `weapon_unarmed`), `forceCamera` (bool; по умолч. true в Campaign/Mythos), `spawnFairy` (bool, по умолч. true) | стартовая точка; игнорируется при загрузке из сохранения |
-| `Dialogs` | 26 | путь к Dialog XML относительно `.lvl` (`../Dialog_Tutorial.xml` допустим) | без него — только Dialog_Fairy |
-| `Scenes` / `Scene` | 48 / 141 | путь к XML сцены относительно `.lvl` | обязателен ≥1; иные дети `Scenes` → ошибка |
-| `PreferredAvatar` | 4 | имя аватара (по умолч. `wizard`) | меню выбора персонажа |
-| `AllowedAvatars` / `Avatar` | 2 / 8 | список имён | ограничение выбора |
-| `AdditionalItems` / `Item` | 3 / 3 | `item` (ассет предмета), `bone` | доп. предметы, вешаемые на аватары |
+| `Name` | 48 | text, loc key (`#Chapter_04`) | required; level name |
+| `Description` | 48 | loc key | required |
+| `ShortDescription` | 2 | loc key | defaults to Description |
+| `Loading` | 48 | path to the loading image | required |
+| `Start` | 48 | `scene` (scene name), `area` (locator prefix `area0..3`), `spawnPlayers` (bool, default true), `noItems` (bool — give everyone `weapon_unarmed`), `forceCamera` (bool; default true in Campaign/Mythos), `spawnFairy` (bool, default true) | start point; ignored when loading from a save |
+| `Dialogs` | 26 | path to Dialog XML relative to `.lvl` (`../Dialog_Tutorial.xml` is allowed) | without it — only Dialog_Fairy |
+| `Scenes` / `Scene` | 48 / 141 | path to scene XML relative to `.lvl` | required ≥1; other children of `Scenes` → error |
+| `PreferredAvatar` | 4 | avatar name (default `wizard`) | character selection menu |
+| `AllowedAvatars` / `Avatar` | 2 / 8 | list of names | restricts selection |
+| `AdditionalItems` / `Item` | 3 / 3 | `item` (item asset), `bone` | extra items attached to avatars |
 
-Особенности:
-- Меню читает `.lvl` потоковым парсером (только Name/Description/ShortDescription/Loading/
-  Scenes/PreferredAvatar/AllowedAvatars, плюс у каждой сцены `<model>` и `<ruleset type>`);
-  при запуске уровень читается целиком (DOM) — другой набор элементов (Start, Dialogs,
-  AdditionalItems). Неизвестные элементы обоими парсерами молча игнорируются.
-- Целостность контента: SHA-256 `.lvl`, всех XML сцен и их `.xnb` моделей XOR-ятся в «combined
-  hash» (лицензирование DLC/античит + сопоставление уровней в сети). Для OpenMagicka не нужно.
-- Ruleset главы определяется первой сценой с ненулевым `<ruleset type>`; `versus` в меню
-  трактуется как «нет».
-- Сцена `Havindr/havindr_s5HBF.xml` не подключена ни в один `.lvl` (и содержит недопустимый
-  атрибут — см. §12).
+Notes:
+- The menu reads `.lvl` with a streaming parser (only Name/Description/ShortDescription/Loading/
+  Scenes/PreferredAvatar/AllowedAvatars, plus `<model>` and `<ruleset type>` of each scene).
+  On launch the level is read in full (DOM), with a different set of elements (Start, Dialogs,
+  AdditionalItems). Both parsers silently ignore unknown elements.
+- Content integrity: the SHA-256 of the `.lvl`, all scene XML and their `.xnb` models are XORed into a "combined
+  hash" (DLC licensing/anti-cheat + level matching over the network). Not needed for OpenMagicka.
+- The chapter ruleset is taken from the first scene with a non-null `<ruleset type>`; in the menu `versus`
+  is treated as "none".
+- Scene `Havindr/havindr_s5HBF.xml` is not referenced by any `.lvl` (and contains an invalid
+  attribute — see §12).
 
-## 4. XML сцены
+## 4. Scene XML
 
-Корень `<Scene>` (атрибуты `forceNavMesh` ×29, `forceCamera` ×12 — bool). Дети читаются по
-порядку; **неизвестный элемент верхнего уровня → исключение** (комментарии пропускаются).
+Root `<Scene>` (attributes `forceNavMesh` ×29, `forceCamera` ×12 — bool). Children are read in
+order; **an unknown top-level element → exception** (comments are skipped).
 
-| Элемент | Исп. | Атрибуты / содержимое | Семантика |
+| Element | Used | Attributes / content | Semantics |
 |---|---|---|---|
-| `Model` | 142 | текст: имя модели | `LevelModel` = `<dir сцены>/<имя в lower>.xnb`; обязателен |
-| `Trigger` | 2519 | см. §5 | триггер |
-| `OnInteract` | 286 | см. §5.5 | интерактивная точка |
-| `Wave` | 316 | дети — блоки действий (§7.1); атрибут `value` (×36) игнорируется | волна Survival; допустима только **после** `<Ruleset type="survival">`, иначе — исключение «неизвестный элемент» |
-| `Reverb` | 116 | `roomType` (enum RoomType, допускается число), `mix` (float) | реверберация |
-| `Indoor` | 103 | текст bool | интерьер (влияет на погоду/свет) |
-| `Bloom` | 90 | `threshold`, `multiplier` (или опечатка `multiplyer`), `blur` | пост-эффект |
-| `Fog` | 49 | `start`, `end`, `color` = `r,g,b[,a]` (a по умолч. 1) | туман; наличие элемента включает его |
-| `Clouds` | 33 | `intensity`, `scale` (`s` или `sx,sy`), `movement` (`x,y`), `texture` (путь от сцены), `worldRelative` (bool) | проекция облаков на направленный свет |
-| `Ruleset` | 32 | `type` = survival / timedobjective / versus (+ свои атрибуты, §7) | правила режима |
-| `KillPlanePosition` | 21 | текст float (по умолч. −50) | горизонтальная плоскость: всё, что ниже, уничтожается |
-| `SkyMap` | 19 | текст: текстура (путь от сцены); `color` = `r,g,b` (регистрозависимо!) | небо |
-| `Filter` | 1 | `brightness`, `contrast`, `saturation` | цветокоррекция |
-| `Magnify` | 0 | текст float | начальный зум камеры |
+| `Model` | 142 | text: model name | `LevelModel` = `<scene dir>/<name in lower>.xnb`; required |
+| `Trigger` | 2519 | see §5 | trigger |
+| `OnInteract` | 286 | see §5.5 | interactable point |
+| `Wave` | 316 | children are action blocks (§7.1); attribute `value` (×36) is ignored | Survival wave; allowed only **after** `<Ruleset type="survival">`, otherwise an "unknown element" exception |
+| `Reverb` | 116 | `roomType` (enum RoomType, a number is allowed), `mix` (float) | reverb |
+| `Indoor` | 103 | bool text | interior (affects weather/lighting) |
+| `Bloom` | 90 | `threshold`, `multiplier` (or the typo `multiplyer`), `blur` | post-effect |
+| `Fog` | 49 | `start`, `end`, `color` = `r,g,b[,a]` (a defaults to 1) | fog; the element's presence enables it |
+| `Clouds` | 33 | `intensity`, `scale` (`s` or `sx,sy`), `movement` (`x,y`), `texture` (path from scene), `worldRelative` (bool) | cloud projection onto the directional light |
+| `Ruleset` | 32 | `type` = survival / timedobjective / versus (+ own attributes, §7) | mode rules |
+| `KillPlanePosition` | 21 | float text (default −50) | horizontal plane: everything below it is destroyed |
+| `SkyMap` | 19 | text: texture (path from scene); `color` = `r,g,b` (case-sensitive!) | sky |
+| `Filter` | 1 | `brightness`, `contrast`, `saturation` | color correction |
+| `Magnify` | 0 | float text | initial camera zoom |
 
-## 5. Модель триггеров
+## 5. Trigger model
 
-### 5.1 Элемент `<trigger>`
+### 5.1 The `<trigger>` element
 
-| Атрибут | Исп. | Тип | По умолч. | Семантика |
+| Attribute | Used | Type | Default | Semantics |
 |---|---|---|---|---|
-| `id` | 2518 | строка → lower → хэш | 0 | ключ триггера; один триггер без id в игре есть |
-| `autorun` | 1556 | bool | **true** | проверять условия каждый кадр |
-| `repeat` | 2444 | float **или** bool | `false` | `false` = −1 (однократно); `true` = 0 (каждый кадр, пока условия истинны); число N ≥ 0 = кулдаун N секунд |
+| `id` | 2518 | string → lower → hash | 0 | trigger key; the game has one trigger without an id |
+| `autorun` | 1556 | bool | **true** | check conditions every frame |
+| `repeat` | 2444 | float **or** bool | `false` | `false` = −1 (once); `true` = 0 (every frame while conditions hold); number N ≥ 0 = cooldown of N seconds |
 
-Любой другой атрибут у `<trigger>` → исключение. Значения в игре (у `<trigger>`): `repeat="false"` ×1643,
-`"true"` ×616, число (0.5–32 с) ×185; `autorun="false"` ×1208, `"true"` ×348.
+Any other attribute on `<trigger>` → exception. Values in the game (on `<trigger>`): `repeat="false"` ×1643,
+`"true"` ×616, number (0.5–32 s) ×185; `autorun="false"` ×1208, `"true"` ×348.
 
-Дети: `<if>` (0..n), `<then>` (1). Прочие дети молча игнорируются. Если `<then>` указан
-несколько раз, побеждает последний.
+Children: `<if>` (0..n), `<then>` (1). Other children are silently ignored. If `<then>` is given
+several times, the last one wins.
 
-### 5.2 Условия: `<if>`
+### 5.2 Conditions: `<if>`
 
-- Каждый `<if>` — **конъюнкция** (AND) своих детей-условий.
-- Несколько `<if>` — **дизъюнкция** (OR): триггер срабатывает, если выполнен хотя бы один блок.
-- Нет `<if>` или пустой `<if/>` → условие считается выполненным.
-- У каждого условия есть базовый атрибут `invert` (bool): результат XOR-ится с ним
-  (использован 353 раза). Исключение: `bossDead`/`bossHealth` при отсутствии босса
-  возвращают false **до** применения invert.
-- Сравнения: `compareMethod` ∈ `less | equal | greater` (= −1/0/1), смысл «значение в мире
-  *op* значение в атрибуте». Встречено: equal ×1007, greater ×820, less ×260.
+- Each `<if>` is a **conjunction** (AND) of its child conditions.
+- Several `<if>` form a **disjunction** (OR): the trigger fires if at least one block holds.
+- No `<if>` or an empty `<if/>` → the condition counts as satisfied.
+- Every condition has the base attribute `invert` (bool): the result is XORed with it
+  (used 353 times). Exception: `bossDead`/`bossHealth` with no boss present
+  return false **before** invert is applied.
+- Comparisons: `compareMethod` ∈ `less | equal | greater` (= −1/0/1), meaning "value in the world
+  *op* value in the attribute". Seen: equal ×1007, greater ×820, less ×260.
 
-### 5.3 Действия: `<then>`
+### 5.3 Actions: `<then>`
 
-- Дети `<then>` — действия, тег = имя класса (§9). Неизвестные атрибуты **молча игнорируются**
-  (в игре такой один: `spawn delayed=`).
-- Базовый атрибут каждого действия — `delay` (float, секунды; задан 8426 раз).
-- `<random>` (×245): группа альтернатив. Все `<random>`-группы одного `<then>` образуют
-  набор вариантов; при срабатывании выбирается **одна** группа равновероятно, и к ней
-  дописываются все обычные (не-random) действия `<then>`. Итоговый порядок: сначала
-  действия выбранной группы, затем обычные — независимо от положения в XML.
-- `<looped>` (×18): содержимое (действия и вложенные `<random>`) включается **только если
-  текущее сохранение кампании «looped»** (повторное прохождение); решается при загрузке сцены.
-- Комментарии допускаются внутри `<then>`/`<if>`/`<looped>`, но **не** внутри `<random>`
-  (там комментарий будет принят за тег действия → ошибка загрузки).
+- Children of `<then>` are actions; the tag = class name (§9). Unknown attributes are **silently ignored**
+  (the game has one such case: `spawn delayed=`).
+- The base attribute of every action is `delay` (float, seconds; set 8426 times).
+- `<random>` (×245): a group of alternatives. All `<random>` groups of one `<then>` form a
+  set of variants. On firing, **one** group is chosen with equal probability, and all regular
+  (non-random) actions of `<then>` are appended to it. Final order: first the
+  actions of the chosen group, then the regular ones — regardless of position in the XML.
+- `<looped>` (×18): its contents (actions and nested `<random>`) are included **only if
+  the current campaign save is "looped"** (a replay playthrough); decided when the scene loads.
+- Comments are allowed inside `<then>`/`<if>`/`<looped>`, but **not** inside `<random>`
+  (there a comment is taken as an action tag → load error).
 
-### 5.4 Когда и как исполняется
+### 5.4 When and how it runs
 
-Порядок кадра для текущей сцены (`GameScene.Update`):
-1. свет/звуки сцены;
-2. **все триггеры** сцены в порядке возрастания хэша id (не в порядке файла!), для каждого:
-   уменьшить таймер повтора → если `autorun` и мы не сетевой клиент — попытка `Execute`
-   → `Update` всех его действий (обработка delay-очередей);
-3. ruleset (`Update` или `LocalUpdate` на клиенте);
-4. модель уровня (анимированные части, вода и т.д.), эффекты;
-5. сброс содержимого всех триггер-зон; зона `any` тут же пересчитывается по всем сущностям.
-   Остальные зоны заново заполняются коллбеками физики до следующего кадра.
+Frame order for the current scene (`GameScene.Update`):
+1. scene lights/sounds;
+2. **all triggers** of the scene in ascending order of id hash (not file order!); for each one:
+   decrease the repeat timer → if `autorun` and we are not a network client, try `Execute`
+   → `Update` all its actions (process delay queues);
+3. ruleset (`Update`, or `LocalUpdate` on the client);
+4. level model (animated parts, water, etc.), effects;
+5. clear the contents of all trigger areas; area `any` is recomputed right away from all entities.
+   Other areas are refilled by physics callbacks before the next frame.
 
 `Execute(sender, ignoreConditions)`:
-- допускается, если `ignoreConditions`, или триггер ещё не срабатывал, или
-  (`repeat ≥ 0` и таймер повтора истёк);
-- проверяются условия (OR по `<if>`, AND внутри); при неуспехе — выход;
-- `hasTriggered = true`, таймер повтора = `repeat`;
-- выбирается вариант (`random`), на сервере рассылается сетевое сообщение с индексом варианта;
-- каждому действию варианта вызывается `OnTrigger(sender)`.
+- allowed if `ignoreConditions`, or the trigger has not fired yet, or
+  (`repeat ≥ 0` and the repeat timer has expired);
+- conditions are checked (OR over `<if>`, AND inside); on failure — return;
+- `hasTriggered = true`, repeat timer = `repeat`;
+- a variant (`random`) is chosen; on the server a network message with the variant index is broadcast;
+- `OnTrigger(sender)` is called on each action of the variant.
 
-Очередь действия: `OnTrigger` при пустой очереди ставит отсчёт = `delay`, иначе увеличивает
-счётчик ожидающих запусков. На каждом `Update` отсчёт уменьшается на dt; пока он ≤ 0 и есть
-ожидающие — выполняется `Execute`, к отсчёту прибавляется `delay` (повторные вызовы
-разносятся с шагом delay). Значит действие с `delay=0` выполняется **в том же кадре**, что и
-срабатывание. `clearDelayedActions` обнуляет очереди.
+Action queue: `OnTrigger` with an empty queue sets the countdown = `delay`; otherwise it increments
+the pending run counter. On each `Update` the countdown decreases by dt; while it is ≤ 0 and there are
+pending runs, `Execute` runs and `delay` is added to the countdown (repeated calls
+are spaced by delay). So an action with `delay=0` runs **in the same frame** as the
+firing. `clearDelayedActions` clears the queues.
 
-`sender` (инициатор): персонаж, вызвавший триггер (взаимодействие, AI-событие, `onDeath`…).
-Его используют `startDialog position="interactor"` (по умолчанию!) и условие `interactorIs`;
-`executeTrigger`/`startDialog` хранят FIFO отправителей на каждый ожидающий запуск.
+`sender` (initiator): the character that caused the trigger (interaction, AI event, `onDeath`…).
+It is used by `startDialog position="interactor"` (the default!) and the `interactorIs` condition.
+`executeTrigger`/`startDialog` keep a FIFO of senders for each pending run.
 
-`executeTrigger` вызывает цель **с проверкой условий** и правила repeat — однократный уже
-сработавший триггер повторно не выполнится. Типичный паттерн «функции» в скриптах:
-`autorun="false" repeat="true"` без `<if>`.
+`executeTrigger` calls the target **with condition checks** and the repeat rule: a one-shot trigger that
+already fired will not run again. A typical "function" pattern in scripts:
+`autorun="false" repeat="true"` with no `<if>`.
 
-Сетевой режим: на клиенте autorun не работает; клиент получает от сервера «trigger execute»
-(id сцены, id триггера, индекс варианта, handle отправителя) и выполняет те же действия
-локально. Действия, создающие сущности, на клиенте ничего не делают и ждут отдельных
-сообщений спавна.
+Network mode: autorun does not work on the client. The client receives "trigger execute" from the server
+(scene id, trigger id, variant index, sender handle) and runs the same actions
+locally. Actions that create entities do nothing on the client and wait for separate
+spawn messages.
 
 ### 5.5 `<OnInteract>` (Interactable)
 
-Атрибуты (строгие — неизвестный атрибут → исключение):
+Attributes (strict — an unknown attribute → exception):
 
-| Атрибут | Исп. | Семантика |
+| Attribute | Used | Semantics |
 |---|---|---|
-| `locator` | 286 | имя локатора-точки (lower); id взаимодействия = хэш |
-| `type` | 286 | InteractType: None, Pick_Up, Use, Next, Push, Pull, Boost, Examine, Talk, Interact, Activate, Attack, BreakFree — иконка/подпись |
-| `enabled` | 0 | bool, по умолч. true; переключается `enablePoi`/`disablePoi` |
-| `animHighlight` | 223 | список (через запятую) путей AnimatedLevelPart (`a/b/c`) для подсветки |
-| `physHighlight` | 6 | список id физобъектов для подсветки |
+| `locator` | 286 | name of the point locator (lower); interaction id = hash |
+| `type` | 286 | InteractType: None, Pick_Up, Use, Next, Push, Pull, Boost, Examine, Talk, Interact, Activate, Attack, BreakFree — icon/label |
+| `enabled` | 0 | bool, default true; toggled by `enablePoi`/`disablePoi` |
+| `animHighlight` | 223 | comma-separated list of AnimatedLevelPart paths (`a/b/c`) to highlight |
+| `physHighlight` | 6 | list of physics object ids to highlight |
 
-Дети — действия (тот же синтаксис, что внутри `<then>`, включая `random`/`looped`). Условий нет,
-autorun выключен. Срабатывает, когда игрок взаимодействует, а луч/отрезок курсора проходит
-в пределах `Locator.Radius` от точки локатора (выбирается ближайший). Взаимодействия типа
-Talk недоступны, пока играет «боевая» музыка (threat). Повтор не ограничен — блокировку
-делают через `disablePoi`.
+Children are actions (same syntax as inside `<then>`, including `random`/`looped`). There are no conditions;
+autorun is off. It fires when the player interacts and the cursor ray/segment passes
+within `Locator.Radius` of the locator point (the nearest one is chosen). Interactions of type
+Talk are unavailable while "combat" music (threat) plays. Repeats are unlimited — blocking
+is done via `disablePoi`.
 
-### 5.6 Счётчики и таймеры
+### 5.6 Counters and timers
 
-- Счётчик: `int`, по умолчанию 0, создаётся при первом обращении. Действие `counter`
-  (INC/DEC/SET), условие `counter`. 1020 изменений и 955 проверок в игре.
-- Таймер: `float`, создаётся действием `addTimer` (повторное создание игнорируется),
-  меняется действием `timer` (`value`, `paused`), проверяется условием `timer`. Два вида:
-  обычные (растут всегда, пока уровень обновляется) и «played» (`playedTimer=true`, не растут
-  в катсценах, на паузе и после конца игры). Таймер `TimedObjective` ruleset-а — обычный таймер.
-- Оба хранилища принадлежат уровню, сохраняются в чекпоинте.
+- Counter: `int`, default 0, created on first access. Action `counter`
+  (INC/DEC/SET), condition `counter`. 1020 changes and 955 checks in the game.
+- Timer: `float`, created by the `addTimer` action (re-creation is ignored),
+  changed by the `timer` action (`value`, `paused`), checked by the `timer` condition. Two kinds:
+  regular (always grow while the level updates) and "played" (`playedTimer=true`, do not grow
+  in cutscenes, on pause and after game end). The `TimedObjective` ruleset timer is a regular timer.
+- Both stores belong to the level and are saved in the checkpoint.
 
-### 5.7 AI-события (дети `spawn`, `giveOrder`, `spawnGenericBoss`, `spawnCloneWizards`, `activateDispenser`, `avatarMove/PlayerN`)
+### 5.7 AI events (children of `spawn`, `giveOrder`, `spawnGenericBoss`, `spawnCloneWizards`, `activateDispenser`, `avatarMove/PlayerN`)
 
-Тег — тип события (регистронезависимо): `move`, `animation`, `face`, `kill`, `loop`.
-Общие атрибуты: `delay`, `trigger` (триггер по завершении события, sender = персонаж).
+The tag is the event type (case-insensitive): `move`, `animation`, `face`, `kill`, `loop`.
+Common attributes: `delay`, `trigger` (trigger on event completion, sender = the character).
 
-| Событие | Атрибуты |
+| Event | Attributes |
 |---|---|
-| `move` | `position` (`x,y,z` или имя локатора/зоны — зона → случайная точка; локатор задаёт и направление), `facingDirection` (bool или вектор), `speed` (по умолч. 1) |
+| `move` | `position` (`x,y,z` or a locator/area name — area → random point; a locator also sets the direction), `facingDirection` (bool or vector), `speed` (default 1) |
 | `animation` | `animation`, `idleAnimation`, `blendTime` |
 | `face` | `target`, `speed` |
 | `kill` | `remove` |
-| `loop` | `type` = Loop / Reverse (зациклить список событий) |
+| `loop` | `type` = Loop / Reverse (loop the event list) |
 
-## 6. Смена сцен и чекпоинты
+## 6. Scene changes and checkpoints
 
-### 6.1 Переходы
+### 6.1 Transitions
 
-`changeScene`/`enterScene` (и `<Start>` уровня) задают **SpawnPoint**: id сцены + 4 локатора
-`<spawnPoint>0..3` + флаг `spawnPlayers`. Процесс:
-1. запустить переход рендера (`Fade`/`CrossFade`; `None` или время 0 → сразу);
-2. в конце перехода (в фоновой загрузке): сбросить босс-файт и generic-полосу; текущая сцена
-   «разрушается» — эффекты, физика, звуки (пауза при `saveNPCs`, иначе стоп); состояние
-   AnimatedLevelPart запоминается в сцене; сущности сохраняются в сцене при `saveNPCs`,
-   иначе удаляются; при смене на другую сцену — выгрузка её контента;
-3. загрузка LevelModel новой сцены и `Initialize`: инициализация триггеров (они **не
-   сбрасываются** — состояние сцен живёт до конца уровня), восстановление анимаций,
-   ruleset, параметры рендера, первое создание физобъектов модели (только при первом
-   входе), возврат сохранённых сущностей, сброс таймеров повтора триггеров, регистрация
-   триггер-зон;
-4. при `spawnPlayers`: игрок *i* ставится в локатор `<sp><i>`, если его нет — в ближайший
-   младший найденный со смещением 2 м по X на каждый пропуск; затем привязка к земле
-   лучом вниз; камера — в центр игроков; феи;
-5. выполнение «стартовых действий» (реплей, §6.2), колбэк (у enterScene — запуск движения
-   аватаров и `instantTrigger`), выход из перехода.
+`changeScene`/`enterScene` (and the level's `<Start>`) set a **SpawnPoint**: scene id + 4 locators
+`<spawnPoint>0..3` + a `spawnPlayers` flag. Process:
+1. start the render transition (`Fade`/`CrossFade`; `None` or time 0 → immediately);
+2. at the end of the transition (in background loading): reset the boss fight and the generic bar; the current scene
+   is "torn down" — effects, physics, sounds (paused with `saveNPCs`, otherwise stopped); the state of
+   AnimatedLevelPart is stored in the scene; entities are stored in the scene with `saveNPCs`,
+   otherwise removed; when changing to a different scene — its content is unloaded;
+3. load the new scene's LevelModel and `Initialize`: initialize triggers (they are **not
+   reset** — scene state lives until the end of the level), restore animations,
+   ruleset, render parameters, first creation of the model's physics objects (only on the first
+   entry), return of stored entities, reset of trigger repeat timers, registration of
+   trigger areas;
+4. with `spawnPlayers`: player *i* is placed at locator `<sp><i>`; if it does not exist — at the nearest
+   lower one found, offset by 2 m along X for each gap; then snapped to the ground
+   with a downward ray; camera — at the players' center; fairies;
+5. run the "start actions" (replay, §6.2), the callback (for enterScene — start avatar
+   movement and `instantTrigger`), exit the transition.
 
-Если стартовых действий > 300 — показывается экран загрузки с прогрессом.
+If there are > 300 start actions, a loading screen with progress is shown.
 
-### 6.2 Чекпоинт и реплей
+### 6.2 Checkpoint and replay
 
-`triggerCheckpoint` делает снимок **состояния уровня**: текущая сцена, таймеры, счётчики,
-и для каждой сцены: флаг первого входа, сохранённые сущности, глобальные и 3D-звуки,
-состояния анимаций, состояние каждого триггера (таймер повтора, hasTriggered, очереди
-действий) и **журнал выполненных действий** сцены. Плюс камера, диалоги (какие завершены,
-позиции), музыка, разблокированные магии, оружие игроков. В Campaign/Mythos снимок
-пишется в сейв (бинарно, с SHA-256 уровня и диалогов в заголовке).
+`triggerCheckpoint` takes a snapshot of the **level state**: current scene, timers, counters,
+and for each scene: the first-entry flag, stored entities, global and 3D sounds,
+animation states, the state of each trigger (repeat timer, hasTriggered, action
+queues) and the scene's **log of executed actions**. Plus camera, dialogs (which are finished,
+positions), music, unlocked magicks, player weapons. In Campaign/Mythos the snapshot
+is written to the save (binary, with SHA-256 of the level and dialogs in the header).
 
-Журнал: каждое выполненное действие добавляется в список сцены (повторное выполнение того
-же `spawn` переносит его в конец; `spawnPhys`/`spawnAnimProp` дополнительно в отдельный
-«world sync» список для сети). При загрузке чекпоинта журнал проигрывается как
-**QuickExecute** — «мгновенная» версия действия. Колонка «Реплей» в §9:
-`да` — QuickExecute = обычное выполнение; `особ.` — своя логика (spawn пересоздаёт
-только выживших NPC с их HP, катсцены без анимации полос, свет без перехода, эффекты —
-только непрерывные); `—` — при реплее ничего (эффект либо уже в сохранённом состоянии —
-счётчики, сущности, — либо временный: звук, камера, диалог, титры).
+Log: each executed action is appended to the scene's list (re-running the same
+`spawn` moves it to the end; `spawnPhys`/`spawnAnimProp` additionally go to a separate
+"world sync" list for the network). When a checkpoint is loaded, the log is replayed as
+**QuickExecute** — an "instant" version of the action. The "Replay" column in §9:
+`yes` — QuickExecute = normal execution; `spec.` — custom logic (spawn recreates
+only surviving NPCs with their HP, cutscenes without bar animation, lights without transition, effects —
+only continuous ones); `—` — nothing on replay (the effect is either already in the saved state —
+counters, entities — or temporary: sound, camera, dialog, titles).
 
-`<ignore trigger="id"/>` внутри `triggerCheckpoint`: при загрузке эти триггеры сбрасываются в
-исходное состояние (как будто не срабатывали), а их действия исключаются из реплея — так
-делаются повторяемые после смерти энкаунтеры.
+`<ignore trigger="id"/>` inside `triggerCheckpoint`: on load these triggers are reset to
+their initial state (as if they never fired), and their actions are excluded from the replay. This
+is how encounters that repeat after death are made.
 
 ## 7. Rulesets
 
-### 7.1 Survival (`<Ruleset type="survival" waves="N">`, 17 сцен — арены челленджей)
+### 7.1 Survival (`<Ruleset type="survival" waves="N">`, 17 scenes — challenge arenas)
 
-- `waves` — число волн (информативно; реальное = число `<Wave>`).
-- Дочерний `<spawnAreas>` со списком `<area>имя</area>` — зоны появления для `any`.
-- `<Wave>` (верхний уровень сцены, после `<Ruleset>`): **каждый** не-комментарий-ребёнок
-  считается блоком «WaveActions» вне зависимости от имени тега (в игре `waveActions` ×1727,
-  `waveAction` ×3, а также `GiveOrder` ×20, `playAnimation`, `playMusic`, `executeTrigger`
-  прямо под `<Wave>` — их атрибуты, кроме `area`/`delay`, теряются, а тела пусты, т.е.
-  они фактически **ничего не делают**).
-- Блок: `area` (имя зоны; `any`/нет — случайная из spawnAreas, выбирается при старте волны и
-  **принудительно подставляется** всем действиям блока, у которых есть свойство `Area`),
-  `delay` (задержка от начала волны). Дети — действия; `<random>` запрещён (исключение).
-- Волна закончена, когда все блоки отработали и в зоне `any` персонажей фракций
-  EVIL|WILD|DEMON не больше, чем «чемоданов» (luggage). Затем пауза 5 с и следующая
-  волна; после последней — победа. Полоса HP волны = суммарное HP заспавненных.
-- Каждые 30 с, если на карте нет «чемоданов», появляется чемодан с магией (первый) или
-  предметом (второй); максимум 2 за волну. Содержимое — из включённых Item/Magick-паков
-  (паки захардкожены, привязаны к DLC; Magicka.Levels.Packs).
-- Очки: множитель времени, урона, всплывающие числа (scrollScore) — детали в UI-коде.
+- `waves` — number of waves (informational; the real one = number of `<Wave>`).
+- Child `<spawnAreas>` with a list of `<area>name</area>` — spawn areas for `any`.
+- `<Wave>` (scene top level, after `<Ruleset>`): **every** non-comment child
+  is treated as a "WaveActions" block regardless of the tag name (in the game `waveActions` ×1727,
+  `waveAction` ×3, and also `GiveOrder` ×20, `playAnimation`, `playMusic`, `executeTrigger`
+  directly under `<Wave>` — their attributes other than `area`/`delay` are lost and their bodies are empty, i.e.
+  they effectively **do nothing**).
+- Block: `area` (area name; `any`/none — a random one from spawnAreas, chosen at wave start and
+  **forcibly substituted** into all actions of the block that have an `Area` property),
+  `delay` (delay from wave start). Children are actions; `<random>` is forbidden (exception).
+- A wave ends when all blocks have finished and in area `any` there are no more characters of factions
+  EVIL|WILD|DEMON than "luggage" items. Then a 5 s pause and the next
+  wave; after the last one — victory. The wave HP bar = total HP of spawned units.
+- Every 30 s, if there is no "luggage" on the map, a luggage with a magick (first) or an
+  item (second) appears; at most 2 per wave. Contents come from the enabled Item/Magick packs
+  (packs are hardcoded, tied to DLC; Magicka.Levels.Packs).
+- Score: time multiplier, damage, pop-up numbers (scrollScore) — details are in the UI code.
 
-### 7.2 TimedObjective (`type="timedobjective"`, 3 сцены — Vietnam)
+### 7.2 TimedObjective (`type="timedobjective"`, 3 scenes — Vietnam)
 
-Атрибуты: `texture` (рамка, по умолч. `UI/HUD/Dialog_Say`), `bordersize` (32), `timer`
-(id таймера уровня с прошедшим временем, по умолч. `timestorage`). Дети:
-- `<objective name="#loc" id="counter" max="N" score="S"/>` — строка HUD, значение берётся из
-  счётчика `id`;
-- `<timeBonus minTime maxTime minTimeBonus maxTimeBonus counter/>` — множитель очков, линейно
-  от maxTimeBonus к minTimeBonus по прошедшему времени.
-Ruleset только отображает; завершение уровня — триггером (`endGame`).
+Attributes: `texture` (frame, default `UI/HUD/Dialog_Say`), `bordersize` (32), `timer`
+(id of the level timer with elapsed time, default `timestorage`). Children:
+- `<objective name="#loc" id="counter" max="N" score="S"/>` — a HUD line; the value comes from
+  counter `id`;
+- `<timeBonus minTime maxTime minTimeBonus maxTimeBonus counter/>` — score multiplier, linear
+  from maxTimeBonus to minTimeBonus by elapsed time.
+The ruleset only displays; level completion is done by a trigger (`endGame`).
 
-### 7.3 Versus (`type="versus"`, 12 сцен)
+### 7.3 Versus (`type="versus"`, 12 scenes)
 
-Конкретный режим (DeathMatch, Brawl, Pyrite, Krietor, King) выбирается настройками лобби,
-не XML. Дети: `<Areas>` со списком `<area team="A|red|B|blue" tourney="true">имя</area>`
-(зоны спавна, командные; Krietor берёт только `tourney="true"`), у Krietor — `<Tournament>`
-со списком `<magick unlock="start|<сек>">MagickType</magick>`.
+The concrete mode (DeathMatch, Brawl, Pyrite, Krietor, King) is chosen by lobby settings,
+not XML. Children: `<Areas>` with a list of `<area team="A|red|B|blue" tourney="true">name</area>`
+(spawn areas, per team; Krietor takes only `tourney="true"`); Krietor also has `<Tournament>`
+with a list of `<magick unlock="start|<sec>">MagickType</magick>`.
 
-## 8. Катсцены
+## 8. Cutscenes
 
-Есть два разных механизма:
+There are two different mechanisms:
 
-1. **Катсцена в уровне** — действие `cutscene` … `endCutscene`: режим летербокса,
-   UI выключен, рядом удаляются магии/барьеры/мины/торнадо, камера управляется
-   `cameraMove`/`cameraRelease`, диалоги в нижней полосе. Пропуск доступен, только если
-   задан `onSkip`: при пропуске выполняется триггер onSkip (с проверкой условий), обычно
-   с `clearDelayedActions` и `endCutscene`.
-2. **Катсцены карты кампании** — `Levels/Cutscenes.xml`, `Levels/Tsar/Cutscenes.xml`,
-   `Challenges/Dungeons_Cutscenes.xml`, `Dungeons2_Cutscenes.xml`; показываются в меню между
-   главами (панорама по карте мира с озвучкой):
+1. **In-level cutscene** — the `cutscene` … `endCutscene` actions: letterbox mode,
+   UI off, nearby magicks/barriers/mines/tornadoes are removed, the camera is controlled by
+   `cameraMove`/`cameraRelease`, dialogs go to the bottom bar. Skipping is available only if
+   `onSkip` is set: on skip, the onSkip trigger runs (with condition checks), usually
+   with `clearDelayedActions` and `endCutscene`.
+2. **Campaign map cutscenes** — `Levels/Cutscenes.xml`, `Levels/Tsar/Cutscenes.xml`,
+   `Challenges/Dungeons_Cutscenes.xml`, `Dungeons2_Cutscenes.xml`; shown in the menu between
+   chapters (a pan over the world map with voice-over):
 
 ```
 <Cutscenes>
-  <Cutscene id="1,2">                 ← индексы глав (через запятую); у Dungeons id нет
+  <Cutscene id="1,2">                 ← chapter indices (comma-separated); Dungeons have no id
     <camera>
-      <zoom time="0.0">1.05</zoom>     ← ключи зума
-      <position time="8.0">1090,1400</position>  ← ключи позиции x,y на карте
+      <zoom time="0.0">1.05</zoom>     ← zoom keys
+      <position time="8.0">1090,1400</position>  ← x,y position keys on the map
     </camera>
-    <Dialog subtitles="#Cutscene_02">waveBank/CutS_cut02</Dialog>  ← [bank/]cue, банк по умолч. WaveBank
+    <Dialog subtitles="#Cutscene_02">waveBank/CutS_cut02</Dialog>  ← [bank/]cue, default bank WaveBank
   </Cutscene>
 </Cutscenes>
 ```
 
-Ключи сортируются по времени, интерполяция smoothstep между соседними; длительность =
-максимум времён последних ключей. Нужен минимум один ключ каждого вида.
+Keys are sorted by time, with smoothstep interpolation between neighbors; duration =
+the maximum of the last keys' times. At least one key of each kind is required.
 
-## 9. Каталог действий (113)
+## 9. Action catalogue (113)
 
-> В пространстве имён `Triggers.Actions` 116 файлов: абстрактная база `Action`, два enum-а
-> (`OperationAction` = Add/Remove/Set, `WizardAction` = StaffLightOn/Off) и **113** конкретных
-> действий. Аналогично `Triggers.Conditions`: база + **24** условия. Тег сопоставляется только
-> с прямыми наследниками базового класса.
+> The `Triggers.Actions` namespace has 116 files: the abstract base `Action`, two enums
+> (`OperationAction` = Add/Remove/Set, `WizardAction` = StaffLightOn/Off) and **113** concrete
+> actions. Likewise `Triggers.Conditions`: the base + **24** conditions. A tag is matched only
+> against direct subclasses of the base class.
 
-Тег — имя класса (регистр любой). Колонки: **Исп.** — число вхождений во всех сценах
-(включая волны и OnInteract), **Файлов** — в скольких сценах. Атрибуты: `имя`:тип[=умолчание].
-Тип `id` — строка, приводимая к lower и хэшируемая (ссылка по имени); `str` — строка (lower)
-без хэша; `vec3` — `"x,y,z"`; `rgba` — `"r,g,b,a"` (0..1). Умолчание не указано = нуль типа
-(0, false, пусто, член enum со значением 0 — для CompareMethod это `equal`). `⁰` — атрибут поддерживается, но в игре не встречается.
-Базовый атрибут `delay` (float) есть у всех. Значения enum: Order = None/Idle/Attack/Defend/
-Flee/Wander/Panic; ReactTo — флаги None/Attack/Proximity; Transitions = None/Fade/CrossFade;
-Factions — флаги EVIL, WILD, FRIENDLY, DEMON, UNDEAD, HUMAN, WIZARD, NEUTRAL(=все), PLAYER0..3,
+Tag = class name (any case). Columns: **Used** — number of occurrences across all scenes
+(including waves and OnInteract), **Files** — in how many scenes. Attributes: `name`:type[=default].
+Type `id` — a string lowered and hashed (by-name reference); `str` — a string (lower)
+without hashing; `vec3` — `"x,y,z"`; `rgba` — `"r,g,b,a"` (0..1). No default given = the type's zero
+(0, false, empty, the enum member with value 0 — for CompareMethod this is `equal`). `⁰` — the attribute is supported but never appears in the game.
+All actions have the base attribute `delay` (float). Enum values: Order = None/Idle/Attack/Defend/
+Flee/Wander/Panic; ReactTo — flags None/Attack/Proximity; Transitions = None/Fade/CrossFade;
+Factions — flags EVIL, WILD, FRIENDLY, DEMON, UNDEAD, HUMAN, WIZARD, NEUTRAL(=all), PLAYER0..3,
 TEAM_RED, TEAM_BLUE, PLAYERS; Banks = WaveBank/Music/Ambience/UI/Spells/Characters/Footsteps/
 Weapons/Misc/Additional/AdditionalMusic; EndGameCondition = Victory/LevelComplete/Defeat/
 VersusPlayer/VersusTeam/EightyeightMilesPerHour/ChallengeExit/EndOffGame/Disconnected/
 ToBeContinued; LightTransitionType = None/Linear/Flicker.
 
-Фильтр «по зоне» у kill/remove/overkill/releaseGrip/giveOrder: персонаж в зоне подходит,
-если `type="any"`, **или** совпал тип, **или** пересеклась фракция (OR!). У `damage` логика
-обратная: пропуск, только если не `any`, тип не совпал **и** фракция не пересеклась (то же
-множество). Если задан `id` — работает только по этой сущности, зона игнорируется.
+The "by area" filter of kill/remove/overkill/releaseGrip/giveOrder: a character in the area matches
+if `type="any"`, **or** the type matches, **or** the faction intersects (OR!). For `damage` the logic
+is inverted: skip only if not `any`, the type does not match **and** the faction does not intersect (the same
+set). If `id` is given, it works only on that entity and the area is ignored.
 
-| # | Тег | Исп. | Файлов | Атрибуты | Семантика | Реплей |
+| # | Tag | Used | Files | Attributes | Semantics | Replay |
 |---|---|---|---|---|---|---|
-| 1 | `spawn` | 5188 | 119 | `area`:id, `snapToNavMesh`:bool, `targetArea`:id, `speed`:float=1, `type`:id, `nr`:int=1, `health`:float=1, `id`:id, `dialog`:id, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack, `trigger`:id⁰, `neverRemove`:bool, `animation`:Animations, `idleAnimation`:Animations, `spawnAnimation`:Animations, `priorityTarget`:id, `priorityAbility`:int=-1⁰, `onDeath`:id, `onDamage`:id, `forceDraw`:bool, `meshId`:int=-1, `forceCamera`:bool, `forceNavMesh`:bool, `cannotDieWithoutExplicitKill`:bool⁰ | Создаёт `nr` NPC шаблона `Data/Characters/<type>` в локаторе/зоне `area` (зона → случайная точка), задаёт AI-приказ (`order`/`reactTo`/`reaction`), `id`, диалог, анимации появления/idle, `onDeath`/`onDamage`-триггеры; дочерние элементы — скрипт AIEvent. Реплей: пересоздаёт только выживших с сохранённым HP. | особ. |
-| 2 | `executeTrigger` | 1420 | 99 | `trigger`:id | Вызывает триггер `trigger` текущей сцены **с проверкой** его условий и repeat; передаёт инициатора (sender) дальше. | — |
-| 3 | `counter` | 1020 | 93 | `name`:id, `action`:CounterAction, `value`:int | Меняет счётчик уровня `name`: `action` = INC/DEC/SET на `value`. | — |
-| 4 | `giveOrder` | 978 | 96 | `order`:Order, `reactTo`:ReactTo, `trigger`:id, `reaction`:Order=Attack, `animation`:Animations, `idleAnimation`:Animations, `factions`:Factions, `id`:id, `type`:id, `area`:id, `targetArea`:id, `speed`:float=1, `priorityTarget`:id, `priorityAbility`:int=-1⁰, `explicit`:bool | Меняет AI-приказ NPC `id` либо всем NPC в зоне `area`, отобранным по `type` ИЛИ `factions` (`explicit` — точное равенство фракции); дочерние AIEvent; `animation`/`idleAnimation`. | особ. |
-| 5 | `playAnimation` | 889 | 92 | `name`:id, `speed`:float=1, `start`:float=-1, `end`:float=-1, `loop`:bool, `children`:bool=true, `resume`:bool | Проигрывает анимацию AnimatedLevelPart `name` (путь `parent/child`), диапазон `start`..`end` (−1 = весь клип), `speed`, `loop`, `children`, `resume`. | — |
-| 6 | `playSound` | 814 | 130 | `id`:id, `cue`:id, `area`:id, `volume`:float, `radius`:float, `apply3D`:bool | Играет XACT-cue `cue` (`bank/cue`, банк по умолчанию Ambience). С `id` — именованный звук сцены (stopSound/setVolume); с `area` — 3D-звук в локаторе (`radius`, `apply3D`). `volume` — переменная cue `Volume`. | — |
-| 7 | `startDialog` | 515 | 95 | `dialog`:id, `forceOnScreen`:bool, `position`:id="interactor" | Показывает следующий `<interact>` диалога `dialog`. `position`: `interactor` (по умолч., инициатор триггера), id сущности, имя локатора, `x,y` (экран) или `x,y,z` (мир). | — |
-| 8 | `spawnPhys` | 388 | 39 | `area`:id, `object`:str, `onDeath`:id, `onDamage`:id, `id`:id | Создаёт физобъект `Data/PhysicsEntities/<object>` в локаторе `area`; `onDeath`/`onDamage` — триггеры (для разрушаемых). Реплея нет — состояние хранится как сохранённые сущности. | — |
-| 9 | `avatarMove` | 361 | 106 | — | Задаёт аватарам AIEvent-скрипт. Дети: `<Player1>`..`<Player4>` (слот по последней цифре; занятый слот → следующий свободный) или `<PlayerID name="<id аватара>">` (резолвится при Initialize сцены); внутри — `move/animation/face/kill/loop`. Иные дети → исключение. | — |
-| 10 | `spawnEffect` | 310 | 28 | `effect`:id, `name`:id, `area`:id, `range`:float | Запускает эффект частиц `effect` в локаторе `area` под именем `name`; `range` > 0 — луч, укорачиваемый до препятствия/щита. | особ. |
-| 11 | `stopEffect` | 309 | 56 | `name`:id | Останавливает именованный эффект сцены `name` (из LevelModel или spawnEffect). | особ. |
-| 12 | `cutscene` | 285 | 83 | `skipBarMove`:bool, `killDialogs`:bool=true, `onSkip`:id | Режим катсцены: летербокс, UI выкл, магии/снаряды рядом очищаются. `onSkip` — триггер при пропуске (без него пропуск недоступен), `killDialogs`, `skipBarMove`. | особ. |
-| 13 | `disableInput` | 254 | 87 | — | Блокирует управление игроков (ControlManager.LimitInput). | да |
-| 14 | `setPosition` | 252 | 40 | `id`:id, `facingDirection`:bool, `area`:id | Телепортирует сущность `id` (или `player1`..`player4`) в локатор `area` с привязкой к земле; `facingDirection` — развернуть по локатору. | да |
-| 15 | `cameraMove` | 250 | 85 | `lockInput`:bool, `magnification`:float=-1, `time`:float=1, `target`:id, `offset`:vec3, `interpolation`:CameraInterpolation=Interpolated | Плавно ведёт камеру к локатору `target` (+`offset`) за `time`; `magnification` > 0 — зум; `lockInput`; `interpolation`. | — |
-| 16 | `enableInput` | 239 | 81 | — | Снимает блокировку управления. | да |
-| 17 | `endCutscene` | 230 | 80 | `skipBarMove`:bool | Выход из режима катсцены. | особ. |
-| 18 | `cameraRelease` | 222 | 79 | `time`:float=1 | Возвращает камеру к слежению за игроками за `time`. | — |
-| 19 | `startEffect` | 197 | 46 | `name`:id | Запускает именованный эффект сцены `name` (пустое имя → сгенерированный id). | да |
-| 20 | `fade` | 194 | 56 | `color`:rgba, `fadeIn`:bool, `override`:bool, `time`:float | Затемнение экрана: `fadeIn=true` — уход в `color` за `time`, `false` — выход; `override` отменяет fade смены сцены. | — |
-| 21 | `remove` | 191 | 60 | `factions`:Factions, `id`:id, `type`:id, `area`:id, `force`:bool | Убирает (kill + terminate) сущность `id` либо персонажей в зоне `area` по `type`/`factions`; `force` снимает «неубиваемость». | да |
-| 22 | `playMusic` | 136 | 103 | `cue`:id, `focusValue`:float | Включает музыку `cue` (`bank/cue`, банк по умолч. Music), `focusValue`. | — |
-| 23 | `triggerCheckpoint` | 123 | 81 | `spawnPoint`:id, `spawnFairy`:bool=true, `saveToDisk`:bool=true⁰, дети: `ignore`/`trigger` | Чекпоинт: снимок состояния уровня, точки респауна `spawnPoint0..3`, воскрешение/лечение игроков, фея (`spawnFairy`), запись на диск (`saveToDisk`). Дочерние `<ignore trigger="…"/>` — триггеры, сбрасываемые при загрузке. | — |
-| 24 | `disablePoi` | 111 | 46 | `id`:id | Выключает `<OnInteract locator="id">`. | особ. |
-| 25 | `clearDelayedActions` | 101 | 59 | `trigger`:id | Отменяет отложенные (ещё не выполненные по delay) действия триггера `trigger`, либо `all`/пусто — всех, `allbutthis` — всех, кроме текущего. | — |
-| 26 | `changeScene` | 94 | 77 | `scene`:id, `transition`:Transitions=Fade, `transitionTime`:float=1, `spawnPlayers`:bool, `spawnPoint`:id, `saveNPCs`:bool | Переход в сцену `scene` (имя файла сцены) к локаторам `spawnPoint0..3`; `transition`/`transitionTime`; `spawnPlayers`; `saveNPCs` — сохранить NPC уходящей сцены. | — |
-| 27 | `cameraShake` | 90 | 20 | `area`:id, `magnitude`:float, `time`:float | Тряска камеры `magnitude`/`time`, глобально или с затуханием от локатора `area`. | — |
-| 28 | `cameraMagnify` | 84 | 58 | `magnification`:float=1, `time`:float=1 | Зум камеры к `magnification` за `time`. | — |
-| 29 | `spawnItem` | 78 | 46 | `area`:id, `item`:id, `ignoreTractorPull`:bool, `attachTo`:id, `nr`:int=1, `physicsEnabled`:bool, `onPickup`:id, `id`:id | Создаёт предмет `Data/Items/Wizard/<item>` в `area`; `physicsEnabled`, `ignoreTractorPull`, `attachTo` (AnimatedLevelPart), `onPickup`-триггер, `id`. | — |
-| 30 | `stopSound` | 77 | 30 | `id`:id, `instant`:bool | Останавливает именованный звук `id` (`instant` — без хвоста). | — |
-| 31 | `kill` | 71 | 22 | `factions`:Factions, `id`:id, `type`:id, `area`:id | Убивает сущность `id` либо персонажей в зоне `area` по `type`/`factions` (снимает CannotDieWithoutExplicitKill). | да |
-| 32 | `disableLight` | 61 | 10 | `id`:id, `effect`:LightTransitionType, `time`:float | Выключает свет(а) LevelModel `id` (список через запятую), `effect` None/Linear/Flicker за `time`. | особ. |
-| 33 | `stopMusic` | 56 | 39 | — | Останавливает музыку. | — |
-| 34 | `spawnDispenser` | 52 | 1 | `area`:id, `model`:Dispensers, `types`:id, `amount`:str, `time`:float, `id`:id⁰, `active`:bool=true | Создаёт «раздатчик» `model` (SpiderHole/GoblinTent/SpiderEggs) в `area`, выпускающий `types` (список) в количестве `amount` (список) с периодом `time`; `active`. | да |
-| 35 | `setFaction` | 49 | 6 | `id`:id, `faction`:Factions, `area`:id, `action`:OperationAction, `type`:id | Меняет фракцию (`action` Add/Remove/Set, `faction`) у `id`/`player1..4` или у персонажей зоны `area` по `type`. | да |
-| 36 | `enableElement` | 48 | 6 | `element`:Elements | Туториал: разрешает элемент `element`. | да |
-| 37 | `unlockAchievement` | 42 | 28 | `achievement`:str | Выдаёт достижение `achievement`. | — |
-| 38 | `overkill` | 40 | 8 | `factions`:Factions, `id`:id, `type`:id, `area`:id | Overkill (разрыв на куски) для `id` или персонажей зоны по `type`/`factions`. | да |
-| 39 | `spawnMagick` | 38 | 28 | `area`:id, `immovable`:bool=true, `magick`:MagickType, `onPickup`:id, `id`:id, `timeOut`:float⁰ | Кладёт книгу магии `magick` в `area`; `immovable`, `timeOut`, `onPickup`, `id`. | — |
-| 40 | `setHint` | 35 | 9 | `appendController`:bool, `id`:str, `animation`:HintAnimations, `position`:Position=BottomRight | Туториальная подсказка: loc-ключ `id` (`appendController` → суффикс `_key`/`_pad`), `animation`, `position`. | — |
-| 41 | `removeHint` | 34 | 10 | — | Убирает туториальную подсказку. | да |
-| 42 | `spawnBoss` | 32 | 22 | `id`:id, `boss`:str, `prop`:bool, `generic`:bool, `template`:str⁰, `delayed`:bool, `area`:id, `healthAppearDelay`:float⁰, `freezeTime`:float⁰, `healthBarWidth`:float=0.8, `meshId`:int=-1, `onDeath`:id, `onDamage`:id | Создаёт босса `boss` (жёстко закодированный класс по имени; `prop` — PropBoss из PhysicsEntities; `generic` — GenericBoss из Characters) в `area`; `delayed` — не начинать бой; полоса HP (`healthBarWidth`, `healthAppearDelay`, `freezeTime`). | да |
-| 43 | `cameraLock` | 30 | 18 | `time`:float=1, `area`:id | Фиксирует камеру на боксе триггер-зоны `area` за `time`. | — |
-| 44 | `enablePoi` | 29 | 13 | `id`:id | Включает `<OnInteract locator="id">`. | особ. |
-| 45 | `printDebug` | 28 | 8 | `entityPos`:str, `break`:bool⁰, `counterName`:str=""⁰, `message`:str="" | Отладочный вывод; в релизе пустышка. | — |
-| 46 | `unlockMagick` | 26 | 15 | `magickType`:MagickType | Разблокирует магию `magickType` (в Versus — всем игрокам) + всплывающий текст. | да |
-| 47 | `enterScene` | 25 | 16 | `scene`:id, `transition`:Transitions=Fade, `transitionTime`:float=1, `spawnPoint`:id, `moveTarget`:id, `facingDirection`:bool, `instantTrigger`:id, `trigger`:id, `ignoreTriggers`:bool, `saveNPCs`:bool | Как changeScene, плюс после входа аватары идут к локаторам `moveTarget0..3` (`facingDirection`, `ignoreTriggers` на время пути), по прибытии — триггер `trigger`; `instantTrigger` выполняется сразу после входа. | — |
-| 48 | `spawnAnimProp` | 25 | 2 | `area`:id, `object`:str, `onDeath`:id⁰, `onDamage`:id⁰, `id`:id, `animation`:str="", `damageable`:str, `gravity`:str | Создаёт анимированный проп `Data/AnimatedProps/<object>` в `area`, стартовая `animation`, `damageable`/`gravity` (строки-bool), `id`. | — |
-| 49 | `timer` | 25 | 5 | `name`:id, `value`:float, `paused`:bool | Устанавливает значение (`value`) и/или паузу (`paused`) таймера `name`. | да |
-| 50 | `activateBoss` | 24 | 16 | — | Стартует бой с боссом, заспавненным с `delayed=true`. | да |
-| 51 | `enableLight` | 22 | 5 | `id`:id, `effect`:LightTransitionType, `time`:float | Включает свет(а) `id` с `effect`/`time`. | особ. |
-| 52 | `endGame` | 22 | 19 | `type`:EndGameCondition, `freezeGame`:bool=true, `phony`:bool | Завершает игру с исходом `type` (Victory/LevelComplete/Defeat/…); `freezeGame`, `phony`. | — |
-| 53 | `disableElement` | 21 | 9 | `element`:Elements | Туториал: запрещает элемент `element`. | да |
-| 54 | `resumeAnimation` | 21 | 13 | `name`:id, `speed`:float=1, `length`:float, `children`:bool=true, `loop`:bool | Продолжает анимацию AnimatedLevelPart `name` (`length`, `speed`, `loop`, `children`). | — |
-| 55 | `stopAnimation` | 21 | 9 | `name`:id, `children`:bool=true | Останавливает анимацию AnimatedLevelPart `name` (`children`). | — |
-| 56 | `damage` | 20 | 7 | `factions`:Factions, `id`:id, `type`:id, `area`:id, `source`:id, `ignoreShields`:bool=true, дети: `amount`/`attackProperty`/`damage`/`element`/`magnitude` | Наносит урон (дочерние `<damage attackProperty element amount magnitude/>`) сущности `id` или персонажам зоны по `type`/`factions`; `source` — локатор-источник (направление, проверка щитов), `ignoreShields`. | да |
-| 57 | `bossTitle` | 19 | 18 | `title`:id, `subTitle`:id, `displayTime`:float=-1, `fadeIn`:float=1, `fadeOut`:float=1 | Показывает титр босса: loc-ключи `title`/`subTitle`, `displayTime` (−1 → 2 с), `fadeIn`/`fadeOut`. | — |
-| 58 | `setDialog` | 19 | 7 | `dialog`:id, `id`:id | Назначает персонажу `id` диалог `dialog`. | да |
-| 59 | `disableCastType` | 18 | 4 | `type`:CastType | Туториал: запрещает тип каста `type`. | да |
-| 60 | `cameraBias` | 17 | 8 | `bias`:vec3, `time`:float=20 | Смещает точку камеры на `bias` за `time`. | — |
-| 61 | `foundSecretArea` | 17 | 15 | `id`:str | Профиль: найден секрет `id` (статистика/ачивки). | — |
-| 62 | `bossMessage` | 15 | 6 | `message`:str | Передаёт строку `message` в скриптовую логику текущего босса. | да |
-| 63 | `enableCastType` | 15 | 2 | `type`:CastType | Туториал: разрешает тип каста `type`. | да |
-| 64 | `killDialogs` | 14 | 9 | — | Закрывает все активные диалоги. | да |
-| 65 | `addTimer` | 13 | 8 | `name`:id, `value`:float, `playedTimer`:bool | Создаёт таймер `name` со значением `value` (если уже есть — игнор); `playedTimer` — «игровой» таймер (стоит на паузе в катсценах). | да |
-| 66 | `assignItem` | 13 | 3 | `id`:id, `player`:int, `area`:id, `animation`:Animations | Выдаёт предмет `Data/Items/Wizard/<id>` игроку `player` (1–4), аватару в зоне `area` или всем; `staff_default`/`weapon_default` — вернуть стандартные; `animation`. | особ. |
-| 67 | `endBossFight` | 13 | 8 | — | Сбрасывает бой с боссом (полосу HP). | да |
-| 68 | `foundMoose` | 13 | 13 | `id`:str | Профиль: найден лось `id`. | — |
-| 69 | `setDialogHint` | 12 | 3 | `trigger`:id, `scale`:float⁰, `size`:vec2⁰, `element`:Elements, `magick`:MagickType, `custom`:int⁰, `id`:id | Туториальная подсказка элемента/магии (`element`/`magick`/`custom`), текст — loc-ключ `id`, `trigger`, `scale`, `size`. | — |
-| 70 | `killedAPony` | 11 | 3 | `id`:str | Профиль: убит пони `id`. | — |
-| 71 | `telemetryTutorialStep` | 11 | 1 | `tutorialName`:str="", `stepName`:str="" | Телеметрия туториала (для OpenMagicka — no-op). | да |
-| 72 | `scrollScore` | 10 | 3 | `value`:str, `ttl`:float, `area`:id, `offset`:str | Всплывающее число `value` в зоне/локаторе `area` + `offset` (`x,y,z`), время `TTL`. | да |
-| 73 | `magick` | 8 | 5 | `magickType`:MagickType, `id`:id, `position`:vec3⁰ | Исполняет магию `magickType` от лица `id` (или в `position`). | да |
-| 74 | `activateDispenser` | 7 | 1 | `order`:Order⁰, `reactTo`:ReactTo⁰, `id`:id⁰, `type`:Dispensers, `area`:id | Активирует раздатчик `id` или раздатчики типа `type` в зоне `area`. | да |
-| 75 | `addCameraEffect` | 7 | 7 | `effect`:id | Включает визуальный эффект камеры `effect`. | да |
-| 76 | `displayTitleInLevel` | 7 | 5 | `noTranslation`:bool⁰, `title`:id, `subTitle`:id, `displayTime`:float=-1, `fadeIn`:float=1, `fadeOut`:float=1, `textAlignment`:str⁰ | Титр в уровне: `title`/`subTitle` (loc-ключи; `noTranslation` — сырой текст), `displayTime`, `fadeIn`/`fadeOut`, `textAlignment` L/C/R. | — |
-| 77 | `highlightAnim` | 6 | 1 | `name`:id, `time`:float=1 | Подсвечивает AnimatedLevelPart `name` на `time`. | — |
-| 78 | `setVolume` | 6 | 1 | `id`:id, `volume`:float | Меняет громкость именованного звука `id`. | — |
-| 79 | `conditionalUnlockAchievement` | 5 | 5 | `achievement`:str, `victim`:id | Достижение с условием, только 4 жёстко заданных: `thisismagicka`/`therecanbeonlyone` (последний атакер `victim` — локальный игрок), `drivenmad`/`breezedthrough` (никто не умирал на уровне). | — |
-| 80 | `highlightPhys` | 5 | 1 | `id`:id, `time`:float | Подсвечивает физобъект `id` на `time`. | — |
-| 81 | `setMusicFocus` | 5 | 4 | `id`:id, `radius`:float, `clearTo`:float=1 | Музыкальный «фокус» от расстояния до локатора `id` (`radius`, `clearTo`). | да |
-| 82 | `wizardControl` | 5 | 5 | `action`:WizardAction | Свет посоха: `action` StaffLightOn/StaffLightOff. | да |
-| 83 | `disableUI` | 4 | 4 | — | Скрывает HUD. | да |
-| 84 | `rollCredits` | 4 | 4 | `file`:id | Запускает титры из файла `file`. | да |
-| 85 | `cameraFollow` | 3 | 3 | `id`:id | Камера следует за сущностью `id`. | — |
-| 86 | `disablePush` | 3 | 3 | — | Туториал: запрещает push. | да |
-| 87 | `flash` | 3 | 3 | `duration`:float=0.5 | Белая вспышка экрана на `duration`. | да |
-| 88 | `spawnElemental` | 3 | 1 | `id`:id⁰, `area`:id, `snapToNavMesh`:bool, `nr`:int, `proximity`:float | Создаёт `nr` «яиц элементалей» в `area` (`proximity` — радиус пробуждения, `snapToNavMesh`). | особ. |
-| 89 | `spawnGenericBoss` | 3 | 3 | `area`:id, `targetArea`:id⁰, `speed`:float=1⁰, `type`:id, `health`:float=1⁰, `id`:id, `dialog`:id⁰, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack, `trigger`:id⁰, `neverRemove`:bool, `animation`:Animations, `idleAnimation`:Animations⁰, `spawnAnimation`:Animations⁰, `priorityTarget`:id⁰, `priorityAbility`:int=-1⁰, `onDeath`:id⁰, `onDamage`:id⁰, `forceDraw`:bool⁰, `meshId`:int=-1⁰, `forceCamera`:bool⁰, `forceNavMesh`:bool⁰, `delayed`:bool⁰, `healthAppearDelay`:float⁰, `freezeTime`:float⁰, `healthBarWidth`:float=0.8, `cannotDieWithoutExplicitKill`:bool | Spawn-подобный (те же атрибуты, что у spawn) + регистрация как босс с полосой HP. | — |
-| 90 | `enablePush` | 2 | 1 | — | Туториал: разрешает push. | да |
-| 91 | `endUnequipWeaponsSection` | 2 | 1 | `animation`:Animations | Конец секции «без оружия»; `animation` — анимация атаки аватаров. | — |
-| 92 | `removeItemFromAvatars` | 2 | 1 | `item`:id | Снимает предмет `item` с аватаров (возвращает предмет шаблона). | да |
-| 93 | `spawnCloneWizards` | 2 | 2 | `area`:id, `snapToNavMesh`:bool⁰, `targetArea`:id⁰, `speed`:float=1⁰, `nr`:int⁰, `health`:float=1⁰, `id`:id⁰, `dialog`:id⁰, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack⁰, `trigger`:id⁰, `neverRemove`:bool⁰, `animation`:Animations⁰, `spawnAnimation`:Animations⁰, `priorityTarget`:id⁰, `priorityAbility`:int=-1⁰, `onDeath`:id⁰, `onDamage`:id⁰ | Создаёт клонов каждого живого игрока (его шаблон/цвет) в локаторах `area0..3`, id `CloneWizard<i>`; AI-атрибуты как у spawn. | да |
-| 94 | `telemetryTutorialEnd` | 2 | 1 | — | Телеметрия (no-op). | да |
-| 95 | `activateHealthBar` | 1 | 1 | — | Показывает настроенную generic-полосу (HealthBar). | да |
-| 96 | `addItemToAvatars` | 1 | 1 | `item`:id, `bone`:str | Прикрепляет предмет `item` к кости `bone` всех аватаров. | да |
-| 97 | `beginDefaultAvatarSection` | 1 | 1 | — | Флаг PlayState.DefaultAvatarSection = true (секция со стандартным аватаром). | — |
-| 98 | `beginUnequipWeaponsSection` | 1 | 1 | — | Начало секции «без оружия». | — |
-| 99 | `cameraPosition` | 1 | 1 | `magnification`:float=-1, `target`:id, `offset`:vec3 | Мгновенно ставит камеру в локатор `target` (+`offset`), `magnification`. | — |
+| 1 | `spawn` | 5188 | 119 | `area`:id, `snapToNavMesh`:bool, `targetArea`:id, `speed`:float=1, `type`:id, `nr`:int=1, `health`:float=1, `id`:id, `dialog`:id, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack, `trigger`:id⁰, `neverRemove`:bool, `animation`:Animations, `idleAnimation`:Animations, `spawnAnimation`:Animations, `priorityTarget`:id, `priorityAbility`:int=-1⁰, `onDeath`:id, `onDamage`:id, `forceDraw`:bool, `meshId`:int=-1, `forceCamera`:bool, `forceNavMesh`:bool, `cannotDieWithoutExplicitKill`:bool⁰ | Creates `nr` NPCs of template `Data/Characters/<type>` at locator/area `area` (area → random point), sets the AI order (`order`/`reactTo`/`reaction`), `id`, dialog, spawn/idle animations, `onDeath`/`onDamage` triggers; child elements are an AIEvent script. Replay: recreates only survivors with saved HP. | spec. |
+| 2 | `executeTrigger` | 1420 | 99 | `trigger`:id | Calls trigger `trigger` of the current scene **with checks** of its conditions and repeat; passes the initiator (sender) on. | — |
+| 3 | `counter` | 1020 | 93 | `name`:id, `action`:CounterAction, `value`:int | Changes level counter `name`: `action` = INC/DEC/SET by `value`. | — |
+| 4 | `giveOrder` | 978 | 96 | `order`:Order, `reactTo`:ReactTo, `trigger`:id, `reaction`:Order=Attack, `animation`:Animations, `idleAnimation`:Animations, `factions`:Factions, `id`:id, `type`:id, `area`:id, `targetArea`:id, `speed`:float=1, `priorityTarget`:id, `priorityAbility`:int=-1⁰, `explicit`:bool | Changes the AI order of NPC `id` or of all NPCs in area `area` selected by `type` OR `factions` (`explicit` — exact faction equality); child AIEvents; `animation`/`idleAnimation`. | spec. |
+| 5 | `playAnimation` | 889 | 92 | `name`:id, `speed`:float=1, `start`:float=-1, `end`:float=-1, `loop`:bool, `children`:bool=true, `resume`:bool | Plays the animation of AnimatedLevelPart `name` (path `parent/child`), range `start`..`end` (−1 = whole clip), `speed`, `loop`, `children`, `resume`. | — |
+| 6 | `playSound` | 814 | 130 | `id`:id, `cue`:id, `area`:id, `volume`:float, `radius`:float, `apply3D`:bool | Plays XACT cue `cue` (`bank/cue`, default bank Ambience). With `id` — a named scene sound (stopSound/setVolume); with `area` — a 3D sound at the locator (`radius`, `apply3D`). `volume` — the cue variable `Volume`. | — |
+| 7 | `startDialog` | 515 | 95 | `dialog`:id, `forceOnScreen`:bool, `position`:id="interactor" | Shows the next `<interact>` of dialog `dialog`. `position`: `interactor` (default, the trigger initiator), an entity id, a locator name, `x,y` (screen) or `x,y,z` (world). | — |
+| 8 | `spawnPhys` | 388 | 39 | `area`:id, `object`:str, `onDeath`:id, `onDamage`:id, `id`:id | Creates physics object `Data/PhysicsEntities/<object>` at locator `area`; `onDeath`/`onDamage` are triggers (for destructibles). No replay — the state is stored as saved entities. | — |
+| 9 | `avatarMove` | 361 | 106 | — | Assigns an AIEvent script to avatars. Children: `<Player1>`..`<Player4>` (slot by the last digit; taken slot → next free one) or `<PlayerID name="<avatar id>">` (resolved at scene Initialize); inside — `move/animation/face/kill/loop`. Other children → exception. | — |
+| 10 | `spawnEffect` | 310 | 28 | `effect`:id, `name`:id, `area`:id, `range`:float | Starts particle effect `effect` at locator `area` under name `name`; `range` > 0 — a beam, shortened to an obstacle/shield. | spec. |
+| 11 | `stopEffect` | 309 | 56 | `name`:id | Stops the named scene effect `name` (from LevelModel or spawnEffect). | spec. |
+| 12 | `cutscene` | 285 | 83 | `skipBarMove`:bool, `killDialogs`:bool=true, `onSkip`:id | Cutscene mode: letterbox, UI off, nearby magicks/projectiles are cleared. `onSkip` — trigger on skip (without it skipping is unavailable), `killDialogs`, `skipBarMove`. | spec. |
+| 13 | `disableInput` | 254 | 87 | — | Blocks player controls (ControlManager.LimitInput). | yes |
+| 14 | `setPosition` | 252 | 40 | `id`:id, `facingDirection`:bool, `area`:id | Teleports entity `id` (or `player1`..`player4`) to locator `area` with ground snapping; `facingDirection` — turn along the locator. | yes |
+| 15 | `cameraMove` | 250 | 85 | `lockInput`:bool, `magnification`:float=-1, `time`:float=1, `target`:id, `offset`:vec3, `interpolation`:CameraInterpolation=Interpolated | Smoothly moves the camera to locator `target` (+`offset`) over `time`; `magnification` > 0 — zoom; `lockInput`; `interpolation`. | — |
+| 16 | `enableInput` | 239 | 81 | — | Removes the control block. | yes |
+| 17 | `endCutscene` | 230 | 80 | `skipBarMove`:bool | Exits cutscene mode. | spec. |
+| 18 | `cameraRelease` | 222 | 79 | `time`:float=1 | Returns the camera to following the players over `time`. | — |
+| 19 | `startEffect` | 197 | 46 | `name`:id | Starts the named scene effect `name` (empty name → generated id). | yes |
+| 20 | `fade` | 194 | 56 | `color`:rgba, `fadeIn`:bool, `override`:bool, `time`:float | Screen fade: `fadeIn=true` — fade to `color` over `time`, `false` — fade out; `override` cancels the scene-change fade. | — |
+| 21 | `remove` | 191 | 60 | `factions`:Factions, `id`:id, `type`:id, `area`:id, `force`:bool | Removes (kill + terminate) entity `id` or characters in area `area` by `type`/`factions`; `force` lifts "unkillability". | yes |
+| 22 | `playMusic` | 136 | 103 | `cue`:id, `focusValue`:float | Starts music `cue` (`bank/cue`, default bank Music), `focusValue`. | — |
+| 23 | `triggerCheckpoint` | 123 | 81 | `spawnPoint`:id, `spawnFairy`:bool=true, `saveToDisk`:bool=true⁰, children: `ignore`/`trigger` | Checkpoint: level state snapshot, respawn points `spawnPoint0..3`, resurrect/heal players, fairy (`spawnFairy`), write to disk (`saveToDisk`). Child `<ignore trigger="…"/>` — triggers reset on load. | — |
+| 24 | `disablePoi` | 111 | 46 | `id`:id | Disables `<OnInteract locator="id">`. | spec. |
+| 25 | `clearDelayedActions` | 101 | 59 | `trigger`:id | Cancels the delayed (not yet run by delay) actions of trigger `trigger`, or `all`/empty — of all triggers, `allbutthis` — of all except the current one. | — |
+| 26 | `changeScene` | 94 | 77 | `scene`:id, `transition`:Transitions=Fade, `transitionTime`:float=1, `spawnPlayers`:bool, `spawnPoint`:id, `saveNPCs`:bool | Transition to scene `scene` (scene file name) at locators `spawnPoint0..3`; `transition`/`transitionTime`; `spawnPlayers`; `saveNPCs` — keep the NPCs of the scene being left. | — |
+| 27 | `cameraShake` | 90 | 20 | `area`:id, `magnitude`:float, `time`:float | Camera shake `magnitude`/`time`, global or with falloff from locator `area`. | — |
+| 28 | `cameraMagnify` | 84 | 58 | `magnification`:float=1, `time`:float=1 | Camera zoom to `magnification` over `time`. | — |
+| 29 | `spawnItem` | 78 | 46 | `area`:id, `item`:id, `ignoreTractorPull`:bool, `attachTo`:id, `nr`:int=1, `physicsEnabled`:bool, `onPickup`:id, `id`:id | Creates item `Data/Items/Wizard/<item>` in `area`; `physicsEnabled`, `ignoreTractorPull`, `attachTo` (AnimatedLevelPart), `onPickup` trigger, `id`. | — |
+| 30 | `stopSound` | 77 | 30 | `id`:id, `instant`:bool | Stops the named sound `id` (`instant` — without a tail). | — |
+| 31 | `kill` | 71 | 22 | `factions`:Factions, `id`:id, `type`:id, `area`:id | Kills entity `id` or characters in area `area` by `type`/`factions` (clears CannotDieWithoutExplicitKill). | yes |
+| 32 | `disableLight` | 61 | 10 | `id`:id, `effect`:LightTransitionType, `time`:float | Turns off LevelModel light(s) `id` (comma-separated list), `effect` None/Linear/Flicker over `time`. | spec. |
+| 33 | `stopMusic` | 56 | 39 | — | Stops the music. | — |
+| 34 | `spawnDispenser` | 52 | 1 | `area`:id, `model`:Dispensers, `types`:id, `amount`:str, `time`:float, `id`:id⁰, `active`:bool=true | Creates a "dispenser" `model` (SpiderHole/GoblinTent/SpiderEggs) in `area` that releases `types` (list) in amounts `amount` (list) with period `time`; `active`. | yes |
+| 35 | `setFaction` | 49 | 6 | `id`:id, `faction`:Factions, `area`:id, `action`:OperationAction, `type`:id | Changes the faction (`action` Add/Remove/Set, `faction`) of `id`/`player1..4` or of characters in area `area` by `type`. | yes |
+| 36 | `enableElement` | 48 | 6 | `element`:Elements | Tutorial: allows element `element`. | yes |
+| 37 | `unlockAchievement` | 42 | 28 | `achievement`:str | Grants achievement `achievement`. | — |
+| 38 | `overkill` | 40 | 8 | `factions`:Factions, `id`:id, `type`:id, `area`:id | Overkill (gibbing) for `id` or characters in the area by `type`/`factions`. | yes |
+| 39 | `spawnMagick` | 38 | 28 | `area`:id, `immovable`:bool=true, `magick`:MagickType, `onPickup`:id, `id`:id, `timeOut`:float⁰ | Places magick book `magick` in `area`; `immovable`, `timeOut`, `onPickup`, `id`. | — |
+| 40 | `setHint` | 35 | 9 | `appendController`:bool, `id`:str, `animation`:HintAnimations, `position`:Position=BottomRight | Tutorial hint: loc key `id` (`appendController` → suffix `_key`/`_pad`), `animation`, `position`. | — |
+| 41 | `removeHint` | 34 | 10 | — | Removes the tutorial hint. | yes |
+| 42 | `spawnBoss` | 32 | 22 | `id`:id, `boss`:str, `prop`:bool, `generic`:bool, `template`:str⁰, `delayed`:bool, `area`:id, `healthAppearDelay`:float⁰, `freezeTime`:float⁰, `healthBarWidth`:float=0.8, `meshId`:int=-1, `onDeath`:id, `onDamage`:id | Creates boss `boss` (hardcoded class by name; `prop` — PropBoss from PhysicsEntities; `generic` — GenericBoss from Characters) in `area`; `delayed` — do not start the fight; HP bar (`healthBarWidth`, `healthAppearDelay`, `freezeTime`). | yes |
+| 43 | `cameraLock` | 30 | 18 | `time`:float=1, `area`:id | Locks the camera onto the box of trigger area `area` over `time`. | — |
+| 44 | `enablePoi` | 29 | 13 | `id`:id | Enables `<OnInteract locator="id">`. | spec. |
+| 45 | `printDebug` | 28 | 8 | `entityPos`:str, `break`:bool⁰, `counterName`:str=""⁰, `message`:str="" | Debug output; a no-op in release. | — |
+| 46 | `unlockMagick` | 26 | 15 | `magickType`:MagickType | Unlocks magick `magickType` (in Versus — for all players) + pop-up text. | yes |
+| 47 | `enterScene` | 25 | 16 | `scene`:id, `transition`:Transitions=Fade, `transitionTime`:float=1, `spawnPoint`:id, `moveTarget`:id, `facingDirection`:bool, `instantTrigger`:id, `trigger`:id, `ignoreTriggers`:bool, `saveNPCs`:bool | Like changeScene, plus after entry the avatars walk to locators `moveTarget0..3` (`facingDirection`, `ignoreTriggers` while walking); on arrival — trigger `trigger`; `instantTrigger` runs right after entry. | — |
+| 48 | `spawnAnimProp` | 25 | 2 | `area`:id, `object`:str, `onDeath`:id⁰, `onDamage`:id⁰, `id`:id, `animation`:str="", `damageable`:str, `gravity`:str | Creates animated prop `Data/AnimatedProps/<object>` in `area`, start `animation`, `damageable`/`gravity` (bool strings), `id`. | — |
+| 49 | `timer` | 25 | 5 | `name`:id, `value`:float, `paused`:bool | Sets the value (`value`) and/or pause (`paused`) of timer `name`. | yes |
+| 50 | `activateBoss` | 24 | 16 | — | Starts the fight with a boss spawned with `delayed=true`. | yes |
+| 51 | `enableLight` | 22 | 5 | `id`:id, `effect`:LightTransitionType, `time`:float | Turns on light(s) `id` with `effect`/`time`. | spec. |
+| 52 | `endGame` | 22 | 19 | `type`:EndGameCondition, `freezeGame`:bool=true, `phony`:bool | Ends the game with outcome `type` (Victory/LevelComplete/Defeat/…); `freezeGame`, `phony`. | — |
+| 53 | `disableElement` | 21 | 9 | `element`:Elements | Tutorial: forbids element `element`. | yes |
+| 54 | `resumeAnimation` | 21 | 13 | `name`:id, `speed`:float=1, `length`:float, `children`:bool=true, `loop`:bool | Resumes the animation of AnimatedLevelPart `name` (`length`, `speed`, `loop`, `children`). | — |
+| 55 | `stopAnimation` | 21 | 9 | `name`:id, `children`:bool=true | Stops the animation of AnimatedLevelPart `name` (`children`). | — |
+| 56 | `damage` | 20 | 7 | `factions`:Factions, `id`:id, `type`:id, `area`:id, `source`:id, `ignoreShields`:bool=true, children: `amount`/`attackProperty`/`damage`/`element`/`magnitude` | Deals damage (child `<damage attackProperty element amount magnitude/>`) to entity `id` or to characters in the area by `type`/`factions`; `source` — source locator (direction, shield check), `ignoreShields`. | yes |
+| 57 | `bossTitle` | 19 | 18 | `title`:id, `subTitle`:id, `displayTime`:float=-1, `fadeIn`:float=1, `fadeOut`:float=1 | Shows the boss title: loc keys `title`/`subTitle`, `displayTime` (−1 → 2 s), `fadeIn`/`fadeOut`. | — |
+| 58 | `setDialog` | 19 | 7 | `dialog`:id, `id`:id | Assigns dialog `dialog` to character `id`. | yes |
+| 59 | `disableCastType` | 18 | 4 | `type`:CastType | Tutorial: forbids cast type `type`. | yes |
+| 60 | `cameraBias` | 17 | 8 | `bias`:vec3, `time`:float=20 | Shifts the camera point by `bias` over `time`. | — |
+| 61 | `foundSecretArea` | 17 | 15 | `id`:str | Profile: secret `id` found (statistics/achievements). | — |
+| 62 | `bossMessage` | 15 | 6 | `message`:str | Passes string `message` to the script logic of the current boss. | yes |
+| 63 | `enableCastType` | 15 | 2 | `type`:CastType | Tutorial: allows cast type `type`. | yes |
+| 64 | `killDialogs` | 14 | 9 | — | Closes all active dialogs. | yes |
+| 65 | `addTimer` | 13 | 8 | `name`:id, `value`:float, `playedTimer`:bool | Creates timer `name` with value `value` (if it already exists — ignored); `playedTimer` — a "played" timer (paused in cutscenes). | yes |
+| 66 | `assignItem` | 13 | 3 | `id`:id, `player`:int, `area`:id, `animation`:Animations | Gives item `Data/Items/Wizard/<id>` to player `player` (1–4), to the avatar in area `area`, or to everyone; `staff_default`/`weapon_default` — restore the defaults; `animation`. | spec. |
+| 67 | `endBossFight` | 13 | 8 | — | Resets the boss fight (HP bar). | yes |
+| 68 | `foundMoose` | 13 | 13 | `id`:str | Profile: moose `id` found. | — |
+| 69 | `setDialogHint` | 12 | 3 | `trigger`:id, `scale`:float⁰, `size`:vec2⁰, `element`:Elements, `magick`:MagickType, `custom`:int⁰, `id`:id | Tutorial hint for an element/magick (`element`/`magick`/`custom`), text — loc key `id`, `trigger`, `scale`, `size`. | — |
+| 70 | `killedAPony` | 11 | 3 | `id`:str | Profile: pony `id` killed. | — |
+| 71 | `telemetryTutorialStep` | 11 | 1 | `tutorialName`:str="", `stepName`:str="" | Tutorial telemetry (a no-op for OpenMagicka). | yes |
+| 72 | `scrollScore` | 10 | 3 | `value`:str, `ttl`:float, `area`:id, `offset`:str | Pop-up number `value` at area/locator `area` + `offset` (`x,y,z`), lifetime `TTL`. | yes |
+| 73 | `magick` | 8 | 5 | `magickType`:MagickType, `id`:id, `position`:vec3⁰ | Casts magick `magickType` on behalf of `id` (or at `position`). | yes |
+| 74 | `activateDispenser` | 7 | 1 | `order`:Order⁰, `reactTo`:ReactTo⁰, `id`:id⁰, `type`:Dispensers, `area`:id | Activates dispenser `id` or dispensers of type `type` in area `area`. | yes |
+| 75 | `addCameraEffect` | 7 | 7 | `effect`:id | Enables camera visual effect `effect`. | yes |
+| 76 | `displayTitleInLevel` | 7 | 5 | `noTranslation`:bool⁰, `title`:id, `subTitle`:id, `displayTime`:float=-1, `fadeIn`:float=1, `fadeOut`:float=1, `textAlignment`:str⁰ | In-level title: `title`/`subTitle` (loc keys; `noTranslation` — raw text), `displayTime`, `fadeIn`/`fadeOut`, `textAlignment` L/C/R. | — |
+| 77 | `highlightAnim` | 6 | 1 | `name`:id, `time`:float=1 | Highlights AnimatedLevelPart `name` for `time`. | — |
+| 78 | `setVolume` | 6 | 1 | `id`:id, `volume`:float | Changes the volume of named sound `id`. | — |
+| 79 | `conditionalUnlockAchievement` | 5 | 5 | `achievement`:str, `victim`:id | Conditional achievement, only 4 hardcoded ones: `thisismagicka`/`therecanbeonlyone` (the last attacker of `victim` is a local player), `drivenmad`/`breezedthrough` (nobody died on the level). | — |
+| 80 | `highlightPhys` | 5 | 1 | `id`:id, `time`:float | Highlights physics object `id` for `time`. | — |
+| 81 | `setMusicFocus` | 5 | 4 | `id`:id, `radius`:float, `clearTo`:float=1 | Music "focus" from the distance to locator `id` (`radius`, `clearTo`). | yes |
+| 82 | `wizardControl` | 5 | 5 | `action`:WizardAction | Staff light: `action` StaffLightOn/StaffLightOff. | yes |
+| 83 | `disableUI` | 4 | 4 | — | Hides the HUD. | yes |
+| 84 | `rollCredits` | 4 | 4 | `file`:id | Starts the credits from file `file`. | yes |
+| 85 | `cameraFollow` | 3 | 3 | `id`:id | The camera follows entity `id`. | — |
+| 86 | `disablePush` | 3 | 3 | — | Tutorial: forbids push. | yes |
+| 87 | `flash` | 3 | 3 | `duration`:float=0.5 | White screen flash for `duration`. | yes |
+| 88 | `spawnElemental` | 3 | 1 | `id`:id⁰, `area`:id, `snapToNavMesh`:bool, `nr`:int, `proximity`:float | Creates `nr` "elemental eggs" in `area` (`proximity` — wake-up radius, `snapToNavMesh`). | spec. |
+| 89 | `spawnGenericBoss` | 3 | 3 | `area`:id, `targetArea`:id⁰, `speed`:float=1⁰, `type`:id, `health`:float=1⁰, `id`:id, `dialog`:id⁰, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack, `trigger`:id⁰, `neverRemove`:bool, `animation`:Animations, `idleAnimation`:Animations⁰, `spawnAnimation`:Animations⁰, `priorityTarget`:id⁰, `priorityAbility`:int=-1⁰, `onDeath`:id⁰, `onDamage`:id⁰, `forceDraw`:bool⁰, `meshId`:int=-1⁰, `forceCamera`:bool⁰, `forceNavMesh`:bool⁰, `delayed`:bool⁰, `healthAppearDelay`:float⁰, `freezeTime`:float⁰, `healthBarWidth`:float=0.8, `cannotDieWithoutExplicitKill`:bool | Spawn-like (the same attributes as spawn) + registration as a boss with an HP bar. | — |
+| 90 | `enablePush` | 2 | 1 | — | Tutorial: allows push. | yes |
+| 91 | `endUnequipWeaponsSection` | 2 | 1 | `animation`:Animations | End of the "no weapons" section; `animation` — the avatars' attack animation. | — |
+| 92 | `removeItemFromAvatars` | 2 | 1 | `item`:id | Removes item `item` from avatars (restores the template item). | yes |
+| 93 | `spawnCloneWizards` | 2 | 2 | `area`:id, `snapToNavMesh`:bool⁰, `targetArea`:id⁰, `speed`:float=1⁰, `nr`:int⁰, `health`:float=1⁰, `id`:id⁰, `dialog`:id⁰, `order`:Order=Attack, `reactTo`:ReactTo=Attack,Proximity, `reaction`:Order=Attack⁰, `trigger`:id⁰, `neverRemove`:bool⁰, `animation`:Animations⁰, `spawnAnimation`:Animations⁰, `priorityTarget`:id⁰, `priorityAbility`:int=-1⁰, `onDeath`:id⁰, `onDamage`:id⁰ | Creates clones of each living player (their template/color) at locators `area0..3`, id `CloneWizard<i>`; AI attributes as in spawn. | yes |
+| 94 | `telemetryTutorialEnd` | 2 | 1 | — | Telemetry (no-op). | yes |
+| 95 | `activateHealthBar` | 1 | 1 | — | Shows the configured generic bar (HealthBar). | yes |
+| 96 | `addItemToAvatars` | 1 | 1 | `item`:id, `bone`:str | Attaches item `item` to bone `bone` of all avatars. | yes |
+| 97 | `beginDefaultAvatarSection` | 1 | 1 | — | Flag PlayState.DefaultAvatarSection = true (a section with the default avatar). | — |
+| 98 | `beginUnequipWeaponsSection` | 1 | 1 | — | Start of the "no weapons" section. | — |
+| 99 | `cameraPosition` | 1 | 1 | `magnification`:float=-1, `target`:id, `offset`:vec3 | Instantly places the camera at locator `target` (+`offset`), `magnification`. | — |
 | 100 | `endDefaultAvatarSection` | 1 | 1 | — | DefaultAvatarSection = false. | — |
-| 101 | `healthBar` | 1 | 1 | `displayName`:id⁰, `normalizedHealth`:float=1⁰, `displayHealth`:float⁰, `time`:float, `type`:GenericHealthBarTypes, `power`:float=1.1⁰, `alpha`:float⁰, `count`:float⁰, `graphicsType`:GenericHealthBarGraphics, `initialTimerDelay`:float, `isScaled`:bool, `isColoredRed`:bool⁰, `showDisplayName`:bool⁰, `hasAnimatedSprite`:bool, `animationOffsetPositionY`:float=16⁰, `fadeTime`:float, `onEndTrigger`:id | Настраивает generic-полосу: `type` HP/TimerIncreasing/TimerDecreasing/Counter, `time`/`count`, графика, `onEndTrigger` и др. | да |
-| 102 | `removeAllStatusEffects` | 1 | 1 | — | Снимает все статусы/ауры/щиты/левитацию/заклинания со всех персонажей. | да |
-| 103 | `removeDialogHint` | 1 | 1 | — | Убирает dialog-hint туториала. | да |
-| 104 | `removeHealthBar` | 1 | 1 | — | Скрывает generic-полосу. | да |
-| 105 | `telemetryTutorialBegin` | 1 | 1 | `tutorialName`:str="", `stepName`:str="" | Телеметрия (no-op). | да |
-| 106 | `telemetryTutorialSkip` | 1 | 1 | — | Телеметрия (no-op). | да |
-| 107 | `teleport` | 1 | 1 | `effect`:id, `sound`:id, `id`:id, `target`:id | Телепортирует сущность `id` в локатор `target` с эффектом `effect` и звуком `sound`. | да |
-| 108 | `disableDark` | 0 | 0 | — | Туториал: выключает затемнение. | да |
-| 109 | `enableDark` | 0 | 0 | — | Туториал: включает затемнение экрана. | да |
-| 110 | `enableUI` | 0 | 0 | — | Показывает HUD. | да |
-| 111 | `physAnimation` | 0 | 0 | `id`:id⁰, `name`:id⁰, `speed`:float=1⁰, `start`:float⁰, `end`:float⁰, `children`:bool=true⁰ | Привязывает анимацию AnimatedLevelPart `name` к разрушаемому физобъекту `id`. | да |
-| 112 | `releaseGrip` | 0 | 0 | `factions`:Factions⁰, `id`:id⁰, `area`:id⁰, `type`:id⁰ | Освобождает персонажей, схваченных NPC `id` или NPC зоны. | да |
-| 113 | `removeCameraEffect` | 0 | 0 | `effect`:id⁰ | Снимает эффект камеры `effect` (пусто — все). | да |
+| 101 | `healthBar` | 1 | 1 | `displayName`:id⁰, `normalizedHealth`:float=1⁰, `displayHealth`:float⁰, `time`:float, `type`:GenericHealthBarTypes, `power`:float=1.1⁰, `alpha`:float⁰, `count`:float⁰, `graphicsType`:GenericHealthBarGraphics, `initialTimerDelay`:float, `isScaled`:bool, `isColoredRed`:bool⁰, `showDisplayName`:bool⁰, `hasAnimatedSprite`:bool, `animationOffsetPositionY`:float=16⁰, `fadeTime`:float, `onEndTrigger`:id | Configures the generic bar: `type` HP/TimerIncreasing/TimerDecreasing/Counter, `time`/`count`, graphics, `onEndTrigger`, etc. | yes |
+| 102 | `removeAllStatusEffects` | 1 | 1 | — | Removes all status effects/auras/shields/levitation/spells from all characters. | yes |
+| 103 | `removeDialogHint` | 1 | 1 | — | Removes the tutorial dialog hint. | yes |
+| 104 | `removeHealthBar` | 1 | 1 | — | Hides the generic bar. | yes |
+| 105 | `telemetryTutorialBegin` | 1 | 1 | `tutorialName`:str="", `stepName`:str="" | Telemetry (no-op). | yes |
+| 106 | `telemetryTutorialSkip` | 1 | 1 | — | Telemetry (no-op). | yes |
+| 107 | `teleport` | 1 | 1 | `effect`:id, `sound`:id, `id`:id, `target`:id | Teleports entity `id` to locator `target` with effect `effect` and sound `sound`. | yes |
+| 108 | `disableDark` | 0 | 0 | — | Tutorial: turns off darkening. | yes |
+| 109 | `enableDark` | 0 | 0 | — | Tutorial: turns on screen darkening. | yes |
+| 110 | `enableUI` | 0 | 0 | — | Shows the HUD. | yes |
+| 111 | `physAnimation` | 0 | 0 | `id`:id⁰, `name`:id⁰, `speed`:float=1⁰, `start`:float⁰, `end`:float⁰, `children`:bool=true⁰ | Binds the animation of AnimatedLevelPart `name` to destructible physics object `id`. | yes |
+| 112 | `releaseGrip` | 0 | 0 | `factions`:Factions⁰, `id`:id⁰, `area`:id⁰, `type`:id⁰ | Releases characters grabbed by NPC `id` or by NPCs in the area. | yes |
+| 113 | `removeCameraEffect` | 0 | 0 | `effect`:id⁰ | Removes camera effect `effect` (empty — all). | yes |
 
-## 10. Каталог условий (24)
+## 10. Condition catalogue (24)
 
-Базовый атрибут `invert` (bool) есть у всех.
+All conditions have the base attribute `invert` (bool).
 
-| # | Тег | Исп. | Файлов | Атрибуты | Семантика |
+| # | Tag | Used | Files | Attributes | Semantics |
 |---|---|---|---|---|---|
-| 1 | `counter` | 955 | 95 | `name`:id, `compareMethod`:CompareMethod, `value`:int | Сравнивает счётчик уровня `name` с `value` (`compareMethod`; LESS = счётчик < value). |
-| 2 | `present` | 887 | 111 | `includeInvisible`:bool=true, `area`:id, `type`:id, `nr`:int, `compareMethod`:CompareMethod | Число живых персонажей шаблона `type` (`any` — всех) в зоне `area` сравнивается с `nr`; `includeInvisible=false` вычитает невидимых. |
-| 3 | `dialogDone` | 259 | 72 | `dialog`:id, `interactIndex`:int=-1 | Диалог `dialog` завершён хотя бы раз и сыграно > `interactIndex` interact-ов (−1 = любое). |
-| 4 | `idPresent` | 253 | 34 | `area`:id="any", `id`:id | Сущность с уникальным `id` присутствует и жива в зоне `area` (по умолч. `any`). |
-| 5 | `triggered` | 203 | 51 | `trigger`:id | Триггер `trigger` уже срабатывал (HasTriggered). |
-| 6 | `factionPresent` | 111 | 34 | `includeInvisible`:bool=true, `area`:id, `factions`:Factions, `nr`:int, `compareMethod`:CompareMethod | Число живых персонажей с фракцией из `factions` (флаги) в зоне `area` сравнивается с `nr`. |
-| 7 | `characterHealth` | 35 | 8 | `id`:id, `compareMethod`:CompareMethod, `health`:float | Доля HP (0..1; мёртв/нет → 0) персонажа `id` сравнивается с `health`. |
-| 8 | `interactorIs` | 24 | 3 | `id`:id | Инициатор триггера (sender) имеет уникальный id `id`. |
-| 9 | `robeInUse` | 24 | 3 | `name`:id, `player`:int | Игрок `player` (1–4; 0 = любой) играет робой-шаблоном `name`. |
-| 10 | `timer` | 13 | 7 | `name`:id, `compareMethod`:CompareMethod, `value`:float | Таймер уровня `name` сравнивается с `value` (EQUAL — точное float-равенство). |
-| 11 | `bossHealth` | 10 | 8 | `compareMethod`:CompareMethod, `value`:float | Нормированное HP босса сравнивается с `value` (нет босса → false, даже с invert). |
-| 12 | `noCutsceneActive` | 9 | 4 | — | Нет активной катсцены. |
-| 13 | `hasAchievement` | 6 | 1 | `name`:str | У игрока есть достижение `name`. |
-| 14 | `anyPlayerHasDied` | 4 | 2 | — | Кто-то из игроков умирал на этом уровне. |
-| 15 | `characterCasting` | 4 | 1 | `id`:id="", `castType`:CastType, `element`:Elements | Персонаж `id` сейчас кастует заклинание типа `castType`, содержащее элемент `element`. |
-| 16 | `bossDead` | 3 | 3 | — | Босс мёртв (нет босса → false). |
-| 17 | `dialogActive` | 3 | 1 | `dialog`:id | Диалог `dialog` сейчас показывается (`any`/пусто — любой message box). |
-| 18 | `hasDLC` | 3 | 1 | `type`:DLC | Установлен DLC `type` (WizardHat/Vietnam). |
-| 19 | `playerCount` | 2 | 2 | `compareMethod`:CompareMethod, `nr`:int | Число игроков сравнивается с `nr`. |
-| 20 | `playersHaveStatusEffect` | 2 | 1 | `statusEffect`:StatusEffects | Хоть один игрок имеет **любой** статус-эффект (атрибут `statusEffect` фактически игнорируется). |
-| 21 | `playerHasElement` | 1 | 1 | `element`:Elements | Хоть у одного игрока в очереди заклинания есть элемент `element`. |
-| 22 | `dialogHintDone` | 0 | 0 | — | Туториальный dialog-hint закрыт. |
-| 23 | `isCampaignLooped` | 0 | 0 | — | Кампания пройдена повторно (NG+); вне Campaign — исключение. |
-| 24 | `physicsPresent` | 0 | 0 | `onlyDamagable`:bool⁰, `area`:id="any"⁰, `nr`:int⁰, `compareMethod`:CompareMethod⁰ | Число физобъектов (`onlyDamagable` — только разрушаемых) в зоне `area` сравнивается с `nr`. |
+| 1 | `counter` | 955 | 95 | `name`:id, `compareMethod`:CompareMethod, `value`:int | Compares level counter `name` with `value` (`compareMethod`; LESS = counter < value). |
+| 2 | `present` | 887 | 111 | `includeInvisible`:bool=true, `area`:id, `type`:id, `nr`:int, `compareMethod`:CompareMethod | The number of living characters of template `type` (`any` — all) in area `area` is compared with `nr`; `includeInvisible=false` subtracts invisible ones. |
+| 3 | `dialogDone` | 259 | 72 | `dialog`:id, `interactIndex`:int=-1 | Dialog `dialog` has finished at least once and > `interactIndex` interacts were played (−1 = any). |
+| 4 | `idPresent` | 253 | 34 | `area`:id="any", `id`:id | The entity with unique `id` is present and alive in area `area` (default `any`). |
+| 5 | `triggered` | 203 | 51 | `trigger`:id | Trigger `trigger` has already fired (HasTriggered). |
+| 6 | `factionPresent` | 111 | 34 | `includeInvisible`:bool=true, `area`:id, `factions`:Factions, `nr`:int, `compareMethod`:CompareMethod | The number of living characters with a faction from `factions` (flags) in area `area` is compared with `nr`. |
+| 7 | `characterHealth` | 35 | 8 | `id`:id, `compareMethod`:CompareMethod, `health`:float | The HP fraction (0..1; dead/missing → 0) of character `id` is compared with `health`. |
+| 8 | `interactorIs` | 24 | 3 | `id`:id | The trigger initiator (sender) has unique id `id`. |
+| 9 | `robeInUse` | 24 | 3 | `name`:id, `player`:int | Player `player` (1–4; 0 = any) plays with robe template `name`. |
+| 10 | `timer` | 13 | 7 | `name`:id, `compareMethod`:CompareMethod, `value`:float | Level timer `name` is compared with `value` (EQUAL — exact float equality). |
+| 11 | `bossHealth` | 10 | 8 | `compareMethod`:CompareMethod, `value`:float | The boss's normalized HP is compared with `value` (no boss → false, even with invert). |
+| 12 | `noCutsceneActive` | 9 | 4 | — | No cutscene is active. |
+| 13 | `hasAchievement` | 6 | 1 | `name`:str | The player has achievement `name`. |
+| 14 | `anyPlayerHasDied` | 4 | 2 | — | One of the players has died on this level. |
+| 15 | `characterCasting` | 4 | 1 | `id`:id="", `castType`:CastType, `element`:Elements | Character `id` is currently casting a spell of type `castType` that contains element `element`. |
+| 16 | `bossDead` | 3 | 3 | — | The boss is dead (no boss → false). |
+| 17 | `dialogActive` | 3 | 1 | `dialog`:id | Dialog `dialog` is currently shown (`any`/empty — any message box). |
+| 18 | `hasDLC` | 3 | 1 | `type`:DLC | DLC `type` is installed (WizardHat/Vietnam). |
+| 19 | `playerCount` | 2 | 2 | `compareMethod`:CompareMethod, `nr`:int | The number of players is compared with `nr`. |
+| 20 | `playersHaveStatusEffect` | 2 | 1 | `statusEffect`:StatusEffects | At least one player has **any** status effect (the `statusEffect` attribute is effectively ignored). |
+| 21 | `playerHasElement` | 1 | 1 | `element`:Elements | At least one player has element `element` in the spell queue. |
+| 22 | `dialogHintDone` | 0 | 0 | — | The tutorial dialog hint is closed. |
+| 23 | `isCampaignLooped` | 0 | 0 | — | The campaign has been completed again (NG+); outside Campaign — exception. |
+| 24 | `physicsPresent` | 0 | 0 | `onlyDamagable`:bool⁰, `area`:id="any"⁰, `nr`:int⁰, `compareMethod`:CompareMethod⁰ | The number of physics objects (`onlyDamagable` — only destructible ones) in area `area` is compared with `nr`. |
 
-## 11. Диалоги (`Levels/Dialog_*.xml`)
+## 11. Dialogs (`Levels/Dialog_*.xml`)
 
-Подключаются через `<Dialogs>` в `.lvl`; `Levels/Dialog_Fairy.xml` догружается **всегда**
-(общий словарь — коллизия id приводит к ошибке). Схема строгая: неизвестные элементы и
-атрибуты на уровнях Dialog/Interact/Message → исключение.
+They are included via `<Dialogs>` in `.lvl`; `Levels/Dialog_Fairy.xml` is **always** loaded as well
+(a shared dictionary — an id collision causes an error). The schema is strict: unknown elements and
+attributes at the Dialog/Interact/Message levels → exception.
 
 ```
 <Dialogs>
-  <Dialog id="horse" iconText="EXAMINE" repeatFrom="0">      ← 615 шт.
-    <interact lock="false" focusOwner="false">              ← 728; один «показ»
-      <message character="owner" type="say" facing="false"> ← 759; одна реплика-окно
+  <Dialog id="horse" iconText="EXAMINE" repeatFrom="0">      ← 615 total
+    <interact lock="false" focusOwner="false">              ← 728; one "showing"
+      <message character="owner" type="say" facing="false"> ← 759; one line window
         <text sound="wavebank/POI_generic" anim="none" TTL="2">#PoI_Horse1</text>  ← 907
       </message>
     </interact>
@@ -560,88 +560,88 @@ ToBeContinued; LightTransitionType = None/Linear/Flicker.
 </Dialogs>
 ```
 
-| Уровень | Атрибут | По умолч. | Семантика |
+| Level | Attribute | Default | Semantics |
 |---|---|---|---|
-| Dialog | `id` | — | lower → хэш; ссылаются `startDialog`, `spawn dialog=`, `setDialog`, `dialogDone`, `dialogActive` |
-| Dialog | `iconText` | Talk | InteractType для иконки при наведении на NPC |
-| Dialog | `repeatFrom` | **0** | после последнего interact перейти к этому индексу (и сбросить счётчики повторов). Отрицательное — диалог «кончается» |
-| Interact | `lock` | false | заморозить физику и ввод на время показа |
-| Interact | `focusOwner` | true | камера/фокус на говорящем |
-| Interact | `count` | 1 | сколько раз показывать этот interact перед переходом к следующему; ≤0 — бесконечно (в игре не используется) |
-| Message | `character` | — | id говорящего; `owner` — владелец диалога (NPC/инициатор) |
-| Message | `type` | Say | единственное значение MessageType |
-| Message | `facing` | true | говорящий поворачивается к собеседнику |
-| Message | `forceOnScreen` | true | держать окно в пределах экрана |
-| Message | `width` | 600 | ширина переноса строк, px |
-| text | `sound` | — | `[bank/]cue`, банк по умолч. Characters |
-| text | `anim` | talk_casual0 | анимация говорящего (enum Animations) |
-| text | `TTL` | −1 | автопродолжение через N с; −1 — ждать ввода |
-| text | (текст) | — | `#locKey[,arg1,arg2…]` — loc-ключ; в переводе плейсхолдеры `#N;` подставляют loc-строку аргумента N, `#key;` — loc-строку key (выделяются цветом) |
+| Dialog | `id` | — | lower → hash; referenced by `startDialog`, `spawn dialog=`, `setDialog`, `dialogDone`, `dialogActive` |
+| Dialog | `iconText` | Talk | InteractType for the icon when hovering over the NPC |
+| Dialog | `repeatFrom` | **0** | after the last interact, jump to this index (and reset repeat counters). Negative — the dialog "ends" |
+| Interact | `lock` | false | freeze physics and input while shown |
+| Interact | `focusOwner` | true | camera/focus on the speaker |
+| Interact | `count` | 1 | how many times to show this interact before moving to the next one; ≤0 — forever (not used in the game) |
+| Message | `character` | — | speaker id; `owner` — the dialog owner (NPC/initiator) |
+| Message | `type` | Say | the only MessageType value |
+| Message | `facing` | true | the speaker turns to face the listener |
+| Message | `forceOnScreen` | true | keep the window within the screen |
+| Message | `width` | 600 | line wrap width, px |
+| text | `sound` | — | `[bank/]cue`, default bank Characters |
+| text | `anim` | talk_casual0 | speaker animation (enum Animations) |
+| text | `TTL` | −1 | auto-continue after N s; −1 — wait for input |
+| text | (text) | — | `#locKey[,arg1,arg2…]` — loc key; in the translation, placeholders `#N;` insert the loc string of argument N, `#key;` — the loc string of key (highlighted in color) |
 
-Семантика показа: каждый `startDialog` (или клик по NPC с диалогом) берёт **следующий**
-interact (`Pop`) и проигрывает его сообщения по очереди (ввод игрока или TTL). Диалог
-помечается «завершённым», когда доигран любой его interact. Если диалог уже показывается —
-повторный старт игнорируется. Одновременно до 8 окон; в катсцене текст идёт в нижнюю полосу.
-`dialogDone interactIndex=k` истинно, если диалог завершён и сыграно больше k interact-ов.
-Состояние диалогов (позиция, завершённость) входит в чекпоинт.
+Showing semantics: each `startDialog` (or a click on an NPC with a dialog) takes the **next**
+interact (`Pop`) and plays its messages in turn (player input or TTL). A dialog
+is marked "finished" when any of its interacts has played to the end. If the dialog is already shown,
+a repeated start is ignored. Up to 8 windows at once; in a cutscene the text goes to the bottom bar.
+`dialogDone interactIndex=k` is true if the dialog is finished and more than k interacts were played.
+Dialog state (position, finished flag) is part of the checkpoint.
 
-Причуды: у `<message>` дети перебираются без пропуска комментариев (комментарий внутри
-message → ошибка), имя тега `<text>` не проверяется (любой элемент = реплика).
+Quirks: the children of `<message>` are iterated without skipping comments (a comment inside
+message → error); the `<text>` tag name is not checked (any element = a line).
 
-## 12. Причуды и ловушки парсинга (для совместимости)
+## 12. Parsing quirks and pitfalls (for compatibility)
 
-1. Порядок обработки триггеров — по возрастанию хэша id, а не по порядку в файле. Скрипты,
-   полагающиеся на порядок внутри одного кадра, редки, но возможны.
-2. Неизвестный тег действия/условия или текстовый узел внутри `<then>`/`<if>` → падение загрузки.
-   Неизвестный **атрибут** действия/условия → молча игнорируется; у `<trigger>`, `<OnInteract>`,
-   `<Dialog>`, `<interact>`, `<message>` и в `.lvl/<Scenes>` — исключение. Пример: `havindr_s5HBF.xml`
-   с атрибутом `repeatitions` у OnInteract не загрузился бы (сцена не подключена).
-3. Под `<Wave>` любой тег трактуется как блок волны (см. §7.1) — `GiveOrder` прямо в волне
-   не выполняется.
-4. `startDialog position="x,y,z"` — из-за ошибки третья компонента записывается в Y, Z остаётся 0.
-5. `activateDispenser` с зоной ищет раздатчик по своему `id`, а не перебирает сущности зоны
-   (фактически работает только при заданном id).
-6. `playersHaveStatusEffect` игнорирует атрибут `statusEffect` — проверяет любой из 9 статусов.
-7. Условие `timer` с `equal` сравнивает float точно — на практике почти никогда не истинно.
-8. Хэширование: строки атрибутов приводятся к lower, но имена локаторов в LevelModel — нет;
-   `area` в `.lvl` Start не приводится к lower.
-9. `repeat` принимает и bool, и число; любые другие значения — лог/ассерт и −1.
-10. Survival-блок волны насильно перезаписывает свойство `Area` у всех своих действий
-    (через рефлексию по имени свойства `Area`).
-11. Tutorial/телеметрия/профиль/ачивки (`telemetry*`, `foundMoose`, `killedAPony`,
-    `foundSecretArea`, `unlockAchievement`, `printDebug`) не влияют на геймплей — можно
-    реализовать заглушками.
-12. На сетевом клиенте действия спавна возвращаются сразу; авторитет — сервер.
-13. Максимум 65535 действий на уровень (сквозная нумерация handle для сети/сейвов).
+1. Triggers are processed in ascending order of id hash, not file order. Scripts
+   that rely on order within one frame are rare but possible.
+2. An unknown action/condition tag or a text node inside `<then>`/`<if>` → load failure.
+   An unknown **attribute** of an action/condition → silently ignored; on `<trigger>`, `<OnInteract>`,
+   `<Dialog>`, `<interact>`, `<message>` and in `.lvl/<Scenes>` — exception. Example: `havindr_s5HBF.xml`
+   with the `repeatitions` attribute on OnInteract would not load (the scene is not referenced).
+3. Under `<Wave>` any tag is treated as a wave block (see §7.1) — `GiveOrder` directly in a wave
+   is not executed.
+4. `startDialog position="x,y,z"` — due to a bug the third component is written into Y, and Z stays 0.
+5. `activateDispenser` with an area looks up the dispenser by its own `id` instead of iterating the area's entities
+   (it effectively works only when an id is given).
+6. `playersHaveStatusEffect` ignores the `statusEffect` attribute — it checks any of 9 statuses.
+7. The `timer` condition with `equal` compares floats exactly — in practice almost never true.
+8. Hashing: attribute strings are lowered, but locator names in LevelModel are not;
+   `area` in `.lvl` Start is not lowered.
+9. `repeat` accepts both bool and a number; any other value — log/assert and −1.
+10. A Survival wave block forcibly overwrites the `Area` property of all its actions
+    (via reflection on the property name `Area`).
+11. Tutorial/telemetry/profile/achievements (`telemetry*`, `foundMoose`, `killedAPony`,
+    `foundSecretArea`, `unlockAchievement`, `printDebug`) do not affect gameplay — they can be
+    implemented as stubs.
+12. On a network client, spawn actions return immediately; the server is authoritative.
+13. At most 65535 actions per level (global handle numbering for network/saves).
 
-## 13. Рекомендации для OpenMagicka
+## 13. Recommendations for OpenMagicka
 
-- Парсер: XML DOM, сравнение имён без учёта регистра, таблица «тег → фабрика действия»
-  со схемой атрибутов (из §9/§10), неизвестные атрибуты — warning, а не ошибка.
-- Хранить строковые ключи (lower) вместо хэшей; хэш §2.1 понадобится только при импорте
-  оригинальных сейвов.
-- Сохранить семантику: OR между `<if>`, repeat (−1/0/N), очередь delay, sender, random+обычные,
-  реплей журнала при чекпоинте с `ignore`-списком, общие счётчики/таймеры уровня, состояние
-  сцен на весь уровень.
-- Детерминированный порядок триггеров: для совместимости — по хэшу; для простоты — по файлу
-  (риск минимален, но стоит проверить на кампании).
+- Parser: XML DOM, case-insensitive name comparison, a "tag → action factory" table
+  with an attribute schema (from §9/§10); unknown attributes — a warning, not an error.
+- Store string keys (lower) instead of hashes; the §2.1 hash is needed only for importing
+  original saves.
+- Preserve the semantics: OR between `<if>`, repeat (−1/0/N), the delay queue, sender, random+regular,
+  log replay on checkpoint with an `ignore` list, shared level counters/timers, scene state
+  for the whole level.
+- Deterministic trigger order: for compatibility — by hash; for simplicity — by file
+  (the risk is minimal, but it is worth checking on the campaign).
 
-## 14. Открытые вопросы
+## 14. Open questions
 
-1. Какие сущности попадают в «сохранённые сущности» чекпоинта (`EntityStateStorage`) и как это
-   сочетается с реплеем `spawn` (живые NPC пересоздаются из журнала) — нет ли дублей с
-   NPC, сохранёнными через `saveNPCs`.
-2. Регистр имён локаторов внутри `LevelModel` `.xnb` — все ли в lower (иначе часть ссылок в
-   оригинале «не работает» и это надо воспроизвести). Нужна проверка декодером xnb.
-3. Точная семантика `forceCamera`/`forceNavMesh` у сцены и NPC, `IsInvisible` в условиях
-   `present`/`factionPresent`.
-4. Детали `cameraMove`/`cameraLock`/`cameraBias` (функции интерполяции, приоритеты) — в
-   `MagickCamera`, вне этого документа.
-5. Логика конкретных боссов (`spawnBoss boss=<имя>`, `bossMessage`) — жёстко закодирована в
-   `Magicka.GameLogic.Entities.Bosses`; нужен отдельный документ со списком имён и сообщений.
-6. Формула очков Survival/TimedObjective и таблицы лидеров — описать отдельно вместе с HUD.
-7. `TutorialManager`: семантика `enableDark`, dialog-hints, ограничений элементов/кастов.
-8. Бинарный формат чекпоинта в сейве (порядок полей выше описан, но не побайтно); нужен ли
-   OpenMagicka импорт оригинальных сохранений.
-9. Поведение `Trigger` без `id` (id = 0): возможна коллизия ключей при нескольких таких.
-10. Версии Survival/Versus в сетевой игре: какие действия выполняются через `LocalUpdate`.
+1. Which entities go into the checkpoint's "saved entities" (`EntityStateStorage`) and how this
+   combines with `spawn` replay (living NPCs are recreated from the log) — are there duplicates with
+   NPCs saved via `saveNPCs`.
+2. The case of locator names inside `LevelModel` `.xnb` — are they all lower (otherwise some references in the
+   original "do not work" and this must be reproduced). Needs checking with an xnb decoder.
+3. Exact semantics of `forceCamera`/`forceNavMesh` on the scene and NPCs, `IsInvisible` in the
+   `present`/`factionPresent` conditions.
+4. Details of `cameraMove`/`cameraLock`/`cameraBias` (interpolation functions, priorities) — in
+   `MagickCamera`, outside this document.
+5. Logic of specific bosses (`spawnBoss boss=<name>`, `bossMessage`) — hardcoded in
+   `Magicka.GameLogic.Entities.Bosses`; a separate document with the list of names and messages is needed.
+6. The Survival/TimedObjective score formula and leaderboards — describe separately together with the HUD.
+7. `TutorialManager`: semantics of `enableDark`, dialog hints, element/cast restrictions.
+8. Binary checkpoint format in the save (the field order is described above, but not byte by byte); whether
+   OpenMagicka needs import of original saves.
+9. Behavior of a `Trigger` without `id` (id = 0): key collisions are possible with several such triggers.
+10. Survival/Versus in network play: which actions run via `LocalUpdate`.
