@@ -40,11 +40,16 @@ public sealed class GpuLevel : IDisposable
     {
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(gpu);
-        if (loader.LoadUncached(modelAsset).Root is not LevelModelContent level)
+        var file = loader.LoadUncached(modelAsset);
+        if (file.Root is not LevelModelContent level)
         {
             throw new InvalidDataException($"{modelAsset} is not a level model");
         }
-        var content = level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry);
+        IReadOnlyList<LevelBatch> content =
+        [
+            .. level.Geometry is null ? [] : LevelGeometry.Batches(level.Geometry),
+            .. LevelParts.Batches(level.AnimatedParts, file.SharedResources),
+        ];
         var paths = content.Select(b => b.DiffuseTexture is null ? null : loader.ResolveReference(modelAsset, b.DiffuseTexture)).ToArray();
         var warnings = new List<string>();
         var images = new Dictionary<string, Texture2DContent>(StringComparer.OrdinalIgnoreCase);
@@ -143,7 +148,7 @@ public sealed class GpuLevel : IDisposable
             indices.SetData(batch.IndexData, 0, count * indexSize);
             // Only what drawing needs is kept: the CPU vertex and index data can be collected.
             return new DrawBatch(vertices, indices, batch.HasUv ? texture : null, batch.VertexCount, batch.StartIndex,
-                batch.PrimitiveCount, batch.Bounds, batch.DiffuseColor, batch.Additive, batch.HasNormal);
+                batch.PrimitiveCount, batch.Bounds, batch.DiffuseColor, batch.Additive, batch.HasNormal, batch.World);
         }
         catch
         {
@@ -159,7 +164,6 @@ public sealed class GpuLevel : IDisposable
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(effect);
         frustum.Matrix = view * projection;
-        effect.World = Matrix.Identity;
         effect.View = view;
         effect.Projection = projection;
         device.RasterizerState = RasterizerState.CullNone;
@@ -177,6 +181,7 @@ public sealed class GpuLevel : IDisposable
             {
                 continue;
             }
+            effect.World = batch.World;
             effect.TextureEnabled = batch.Texture is not null;
             effect.Texture = batch.Texture;
             effect.DiffuseColor = batch.Texture is null ? batch.DiffuseColor : Vector3.One;
@@ -205,7 +210,7 @@ public sealed class GpuLevel : IDisposable
     /// <summary>A batch on the GPU; the texture is owned by the level, shared between batches.</summary>
     private sealed record DrawBatch(
         VertexBuffer Vertices, IndexBuffer Indices, Texture2D? Texture, int VertexCount, int StartIndex, int PrimitiveCount,
-        BoundingBox Bounds, Vector3 DiffuseColor, bool Additive, bool Lit) : IDisposable
+        BoundingBox Bounds, Vector3 DiffuseColor, bool Additive, bool Lit, Matrix World) : IDisposable
     {
         public void Dispose()
         {

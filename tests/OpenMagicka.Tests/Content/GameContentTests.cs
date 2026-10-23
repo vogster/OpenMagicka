@@ -352,6 +352,30 @@ public class GameContentTests(ITestOutputHelper output)
         ], shared.Keys);
     }
 
+    [GameContentFact]
+    public void EveryLevelModel_TurnsIntoDrawableBatches()
+    {
+        var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        int levels = 0, statics = 0, parts = 0;
+        foreach (var path in loader.Files.ListFiles("Levels", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            var file = loader.LoadUncached(path[..^4]);
+            if (file.Root is not OpenMagicka.Content.Magicka.LevelModelContent level)
+            {
+                continue;
+            }
+            levels++;
+            var levelBatches = (level.Geometry is null ? [] : OpenMagicka.Engine.Rendering.LevelGeometry.Batches(level.Geometry)).ToList();
+            statics += levelBatches.Count;
+            var partBatches = OpenMagicka.Engine.Rendering.LevelParts.Batches(level.AnimatedParts, file.SharedResources);
+            parts += partBatches.Count;
+            Assert.All(levelBatches.Concat(partBatches), b => Assert.True(float.IsFinite(b.Bounds.Min.X + b.Bounds.Max.X), $"{path}: bounds {b.Bounds}"));
+        }
+        output.WriteLine($"{levels} levels: {statics} static batches, {parts} animated part batches");
+        Assert.Equal(132, levels);
+        Assert.Equal((9500, 1512), (statics, parts));     // 6 energy rings of ch_end_of_world have a NaN rest pose
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {

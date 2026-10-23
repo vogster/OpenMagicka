@@ -109,8 +109,9 @@ public static class TextureFormats
 }
 
 /// <summary>
-/// One drawable batch of a level's static geometry (a BiTree root): raw vertex and index data,
-/// the whole index range (the root node's), and the material's diffuse texture as referenced.
+/// One drawable batch of a level: a BiTree root of the static geometry or a mesh part of an
+/// animated part. Raw vertex and index data, the index range to draw, world-space bounds, and the
+/// material's diffuse texture as referenced.
 /// </summary>
 public sealed record LevelBatch(
     byte[] VertexData,
@@ -126,7 +127,11 @@ public sealed record LevelBatch(
     Vector3 DiffuseColor,
     bool Additive,
     bool HasNormal,
-    bool HasUv);
+    bool HasUv)
+{
+    /// <summary>Where the batch is drawn: identity for static geometry, the part's transform for animated parts.</summary>
+    public Matrix World { get; init; } = Matrix.Identity;
+}
 
 /// <summary>Turns a level model's BiTree into batches (no GPU work).</summary>
 public static class LevelGeometry
