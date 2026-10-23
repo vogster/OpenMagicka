@@ -920,13 +920,14 @@ The spell color is the average of the colors (Fire and Lightning weighted by mag
 1. **Spray range**: the formula `R·(0.1·R·f)` gives ≈ `R²/10` (1×Fire ≈ 3.6, 5 elements ≈ 10).
    Is this intentional or an artifact? Needs checking against the game; for 1:1 we reproduce it as is.
 2. **Wet and Greased do not expire** on their own (magnitude does not decay). Confirmed in the status code
-   (§9): only other statuses remove them. Level water is not checked yet.
-3. **Steamed**: no source applying it was found in vanilla code (only handling); a full search for its
-   creation found none. Treated as a dead status that still works if something applies it.
+   (§9): only other statuses remove them. Whether level water removes them is checked with the liquids
+   (OM-29). Questions 6 and 11 are checked in play under OM-72.
+3. **Steamed** (closed): nothing in vanilla code creates it. It is kept as a working status in case
+   something applies it.
 4. `const` constants from `Defines` (SPELL_TIME_*, SELF_*_MODIFIER, STATUS_*_TIME …): which are actually
    used (inlined in IL) needs a search for literals in IL, not by name.
-5. Life is counted twice in ice projectile damage (Force, Ice only), a bug in the original; decide
-   whether to keep it (default: keep for compatibility).
+5. Life is counted twice in ice projectile damage (Force, Ice only), a bug in the original (closed:
+   kept, as the game's balance grew with it; a later "fixes to the original" option could change it).
 6. In `(Projectile, Area)`, fire/cold are included in the amount but not in the entry's element mask (the damage
    is resisted as Earth/others). Confirmed in the damage code; not yet seen in play.
 7. `Electrocute` in `Character` is empty: "water + lightning" in sprays/blasts does not shock Wet targets
