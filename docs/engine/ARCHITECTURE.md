@@ -280,6 +280,30 @@ normal and spec/emissive are encoded) can only be recovered by disassembling the
 (§4.4). Judging by the material parameter names, it holds diffuse, spec amount and power,
 emissive amount, normal power and reflectiveness.
 
+Since OpenMagicka runs the original shaders for every pass, the channel layout stays inside
+them; what the engine must reproduce is how each pass is fed (from the original's render code):
+
+| Pass | Effect, technique | Inputs |
+|---|---|---|
+| Depth clear | `ClearEffect` fullscreen into Depth | — |
+| Depth prepass | `RenderDeferredEffect` technique 4 (`Depth`) per opaque object | World and material, globals |
+| G-buffer init | `RestoreDepthEffect` fullscreen into Main+Normal | `SourceTexture0` = Depth; `Color0` = (background RGB, 0); `Color1` = (0.5, 0.75, 0.5, 0.5); it also writes the depth back |
+| G-buffer | `RenderDeferredEffect` technique by material: `ReflectionMap` set → `SingleLayerReflection` (2) or, with a second diffuse texture, `DualLayerReflection` (3); otherwise `SingleLayer` (0) or `DualLayer` (1). Depth test LessEqual | material (below) |
+| Light | into Secondary cleared to 0, blend One / InvSrcColor. `DirectionalLightEffect` technique 0 with shadows, 1 without, on the fullscreen quad | `SourceTexture0` = Normal, `SourceTexture1` = Depth, `SourceTexture3` = shadow map; `LightDirection`, `DiffuseColor`/`AmbientColor`/`SpecularAmount` × intensity |
+| Composition | `DeferredShadingEffect` fullscreen into Main | `SourceTexture0` = Main, `1` = Normal, `2` = Depth, `4` = Secondary (light); `FogEnable`/`FogStart`/`FogEnd`/`FogColor` |
+
+- Material parameters of `RenderDeferredEffect`: `World`, `Alpha`, `Sharpness`, `VertexColorEnabled`,
+  `UseMaterialTextureForReflectiveness`, `ReflectionMap`, and per layer *n* = 0, 1: `DiffuseColorn`,
+  `SpecAmountn`, `SpecPowern`, `EmissiveAmountn`, `NormalPowern`, `Reflectivenessn`,
+  `DiffuseTexturenAlphaDisabled`, `AlphaMasknEnabled`, `DiffuseTexturen`, `MaterialTexturen`,
+  `NormalTexturen`. Setting a texture also sets its flag (`DiffuseTexturenEnabled`,
+  `MaterialTexturenEnabled`, `NormalMapnEnabled`) to whether it is non-null.
+- Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
+  texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1), and `DestinationDimensions` = target size.
+- A level's directional light comes from its light list (intensity 1 unless it varies); the
+  original composes into Main while reading it; OpenMagicka renders the composition into a separate
+  target, since sampling and writing one texture is undefined on modern APIs.
+
 ### 3.3 `RenderManager.RenderScene` pass order
 
 ```mermaid

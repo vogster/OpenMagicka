@@ -25,6 +25,14 @@ public interface IEffectParameters
     void SetValue(string name, Vector3 value);
 
     void SetValue(string name, float value);
+
+    void SetValue(string name, bool value);
+
+    void SetValue(string name, Vector2 value);
+
+    void SetValue(string name, Vector4 value);
+
+    void SetValue(string name, Texture? value);
 }
 
 /// <summary>
@@ -91,6 +99,14 @@ public sealed class FnaEffectParameters(Effect effect) : IEffectParameters
     public void SetValue(string name, Vector3 value) => Required(name).SetValue(value);
 
     public void SetValue(string name, float value) => Required(name).SetValue(value);
+
+    public void SetValue(string name, bool value) => Required(name).SetValue(value);
+
+    public void SetValue(string name, Vector2 value) => Required(name).SetValue(value);
+
+    public void SetValue(string name, Vector4 value) => Required(name).SetValue(value);
+
+    public void SetValue(string name, Texture? value) => Required(name).SetValue(value);
 
     private EffectParameter? Find(string name)
     {

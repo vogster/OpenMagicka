@@ -8,7 +8,7 @@ namespace OpenMagicka.Game.Viewer;
 /// Something the viewer can show: a scene (its level's file name, the scene name, its level
 /// model asset) or a model (its folder, file name and asset).
 /// </summary>
-public sealed record ViewerScene(string Level, string Scene, string Model);
+public sealed record ViewerScene(string Level, string Scene, string Model, SceneSettings? Settings = null);
 
 /// <summary>
 /// Every scene of every level, in level then file order, followed by every model under Models/
@@ -93,7 +93,7 @@ public sealed class SceneCatalog
                 try
                 {
                     var scene = SceneReader.Read(new MemoryStream(files.ReadAllBytes(scenePath)), scenePath);
-                    scenes.Add(new ViewerScene(levelName, scene.Name, scene.Model));
+                    scenes.Add(new ViewerScene(levelName, scene.Name, scene.Model, scene.Settings));
                 }
                 catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
                 {

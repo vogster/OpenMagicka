@@ -131,6 +131,9 @@ public sealed record LevelBatch(
 {
     /// <summary>Where the batch is drawn: identity for static geometry, the part's transform for animated parts.</summary>
     public Matrix World { get; init; } = Matrix.Identity;
+
+    /// <summary>The material as read (RenderDeferredEffectContent, AdditiveEffectContent, ...), for the original effects.</summary>
+    public object? Material { get; init; }
 }
 
 /// <summary>Turns a level model's BiTree into batches (no GPU work).</summary>
@@ -163,7 +166,10 @@ public static class LevelGeometry
                 root.IndexBuffer.Data, root.IndexBuffer.Is16Bit, root.Tree.StartIndex, root.Tree.PrimitiveCount, root.Tree.Bounds,
                 texture, color, additive,
                 basic.Any(e => e.VertexElementUsage == VertexElementUsage.Normal),
-                basic.Any(e => e.VertexElementUsage == VertexElementUsage.TextureCoordinate)));
+                basic.Any(e => e.VertexElementUsage == VertexElementUsage.TextureCoordinate))
+            {
+                Material = root.Effect,
+            });
         }
         return batches;
     }

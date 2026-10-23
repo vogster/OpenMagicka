@@ -144,6 +144,7 @@ public static class ModelMeshes
                 basic.Any(e => e.VertexElementUsage == Microsoft.Xna.Framework.Graphics.VertexElementUsage.TextureCoordinate))
             {
                 World = world,
+                Material = effect,
             });
         }
         return batches;

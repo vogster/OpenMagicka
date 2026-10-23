@@ -25,6 +25,12 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
     private readonly string? screenshot;
     private ViewerSimulation? simulation;
     private BasicEffect? effect;
+    private ShaderLibrary? shaders;
+    private Task<DeferredRenderer>? deferredLoading;
+    private DeferredRenderer? deferred;
+    private bool useDeferred = true;
+    private bool rWasDown;
+    private readonly System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
     private GpuLevel? level;
     private int shownScene = -1;
     private int loadingScene = -1;
@@ -70,6 +76,9 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         base.LoadContent();
         effect = new BasicEffect(GraphicsDevice);
         effect.EnableDefaultLighting();
+        shaders = new ShaderLibrary(new ShaderSource(loader), GpuWork);
+        var library = shaders;
+        deferredLoading = Task.Run(() => DeferredRenderer.Create(library, GpuWork));
         if (catalog.Items.Count == 0)
         {
             Fail("no scenes or models found in the content");
@@ -84,6 +93,12 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             finished.Result.Dispose();   // loaded but never shown
         }
         effect?.Dispose();
+        deferred?.Dispose();
+        if (deferred is null && deferredLoading is { IsCompletedSuccessfully: true } built)
+        {
+            built.Result.Dispose();
+        }
+        shaders?.Dispose();
         base.UnloadContent();
     }
 
@@ -102,21 +117,57 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
             var aspect = Math.Max(GraphicsDevice.Viewport.AspectRatio, 0.1f);
             var far = Math.Max((level.Bounds.Max - level.Bounds.Min).Length() * 3, 1000);
             var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(60), aspect, Math.Max(far / 20000, 0.5f), far);
-            drawn = level.Draw(GraphicsDevice, effect, camera.View, projection);
+            drawn = Deferred() is { } renderer && useDeferred
+                ? renderer.Render(GraphicsDevice, level, Frame(camera, projection))
+                : level.Draw(GraphicsDevice, effect, camera.View, projection);
         }
         if (shownScene >= 0)
         {
             var scene = catalog.Items[shownScene];
             SetTitle($"OpenMagicka viewer - {scene.Level} / {scene.Scene} ({shownScene + 1} of {catalog.Items.Count})"
+                + (deferred is not null && useDeferred ? " [original shaders]" : " [simple view]")
                 + (level is null ? "" : $", {drawn} of {level.BatchCount} batches") + status);
         }
         // A few frames in, the camera has framed the scene: the shot shows it.
-        if (screenshot is not null && level is not null && ++framesShown == ScreenshotAfterFrames)
+        if (screenshot is not null && level is not null && deferredLoading is null && ++framesShown == ScreenshotAfterFrames)
         {
             SaveScreenshot(screenshot);
             Console.WriteLine($"{title}; saved {screenshot}");
             RequestExit();
         }
+    }
+
+    /// <summary>The original pipeline once its effects are on the GPU; R toggles it with the simple view.</summary>
+    private DeferredRenderer? Deferred()
+    {
+        var rDown = Input.Value.IsActive && Input.Value.Keyboard.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.R);
+        if (rDown && !rWasDown)
+        {
+            useDeferred = !useDeferred;
+        }
+        rWasDown = rDown;
+        if (deferred is null && deferredLoading is { IsCompleted: true } done)
+        {
+            if (done.IsCompletedSuccessfully)
+            {
+                deferred = done.Result;
+            }
+            else
+            {
+                Console.Error.WriteLine($"OpenMagicka: the deferred pipeline is not available: {done.Exception?.GetBaseException().Message ?? "cancelled"}");
+                useDeferred = false;
+            }
+            deferredLoading = null;
+        }
+        return deferred;
+    }
+
+    private DeferredFrame Frame(FreeCamera camera, Matrix projection)
+    {
+        var scene = catalog.Items[shownScene];
+        var time = (float)(clock.Elapsed.TotalSeconds % 1);
+        var globals = new GlobalEffectValues(camera.View, projection, camera.Position, camera.Position, time);
+        return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f);
     }
 
     /// <summary>Starts loading the wanted scene, and shows it once it is on the GPU (render thread).</summary>

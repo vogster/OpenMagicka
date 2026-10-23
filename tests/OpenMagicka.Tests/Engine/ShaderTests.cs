@@ -75,6 +75,14 @@ public sealed class ShaderTests : IDisposable
         public void SetValue(string name, Vector3 value) => Set[name] = value;
 
         public void SetValue(string name, float value) => Set[name] = value;
+
+        public void SetValue(string name, bool value) => Set[name] = value;
+
+        public void SetValue(string name, Vector2 value) => Set[name] = value;
+
+        public void SetValue(string name, Vector4 value) => Set[name] = value;
+
+        public void SetValue(string name, Microsoft.Xna.Framework.Graphics.Texture? value) => Set[name] = value!;
     }
 
     [Fact]
