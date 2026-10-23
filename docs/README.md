@@ -35,7 +35,7 @@ an abstraction (UDP + our own lobby/relay server, Steam optional). Details:
 - [Spells and combat](gameplay/SPELLS.md): elements, combinations, magicks, damage, statuses
 - [Engine architecture](engine/ARCHITECTURE.md): main loop, rendering, physics, audio, input, saves
 - [Entities, AI and network](engine/ENTITIES_AI.md)
-- Decisions: [ADR-0001 Stack](adr/0001-stack.md), [ADR-0002 Network play](adr/0002-network.md)
+- Decisions: [ADR-0001 Stack](adr/0001-stack.md), [ADR-0002 Network play](adr/0002-network.md), [ADR-0003 Physics](adr/0003-physics.md) (proposed)
 - [Backlog](TASKS.md): milestones and critical path; the tasks live in ChillaDesk, project OM
 
 These files are mirrored into the ChillaDesk wiki of project OM with `python tools/wiki_sync.py`;

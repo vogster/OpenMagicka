@@ -26,6 +26,7 @@ PAGES = {
     "docs/engine/RISK_CHECKS.md": "Stack risk checks",
     "docs/adr/0001-stack.md": "ADR-0001 Stack",
     "docs/adr/0002-network.md": "ADR-0002 Network play",
+    "docs/adr/0003-physics.md": "ADR-0003 Physics",
 }
 MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+\.md)\)")
 
