@@ -224,6 +224,20 @@ public class GameContentTests(ITestOutputHelper output)
             scenes.Count(s => s.Ruleset?.Type == OpenMagicka.Content.Levels.RulesetType.TimedObjective),
             scenes.Count(s => s.Ruleset?.Type == OpenMagicka.Content.Levels.RulesetType.Versus)));
 
+        var dialogs = levels.Select(l => OpenMagicka.Content.Levels.DialogCollection.Load(files, l.Dialogs)).ToArray();
+        var fairy = OpenMagicka.Content.Levels.DialogCollection.Load(files, null).Count;
+        var dialogFiles = files.ListFiles("Levels", recursive: true).Where(p => Path.GetFileName(p).StartsWith("Dialog_", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var allDialogs = dialogFiles.Select(p => OpenMagicka.Content.Levels.DialogReader.Read(new MemoryStream(files.ReadAllBytes(p)))).ToArray();
+        var interacts = allDialogs.SelectMany(d => d).SelectMany(d => d.Interacts).ToArray();
+        var messages = interacts.SelectMany(i => i.Messages).ToArray();
+        Assert.Equal((18, 615, 728, 759, 907),
+            (dialogFiles.Length, allDialogs.Sum(d => d.Count), interacts.Length, messages.Length, messages.Sum(m => m.Lines.Count)));
+        foreach (var (level, collection) in levels.Zip(dialogs))
+        {
+            var own = level.Dialogs is null ? 0 : OpenMagicka.Content.Levels.DialogReader.Read(new MemoryStream(files.ReadAllBytes(level.Dialogs))).Count;
+            Assert.Equal(fairy + own, collection.Count);
+        }
+
         // The one scene no level uses has an attribute the original rejects.
         var orphan = "Levels/Havindr/havindr_s5HBF.xml";
         Assert.Throws<InvalidDataException>(() => OpenMagicka.Content.Levels.SceneReader.Read(new MemoryStream(files.ReadAllBytes(orphan)), orphan));

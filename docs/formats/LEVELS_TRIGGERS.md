@@ -613,8 +613,23 @@ a repeated start is ignored. Up to 8 windows at once; in a cutscene the text goe
 `dialogDone interactIndex=k` is true if the dialog is finished and more than k interacts were played.
 Dialog state (position, finished flag) is part of the checkpoint.
 
-Quirks: the children of `<message>` are iterated without skipping comments (a comment inside
-message → error); the `<text>` tag name is not checked (any element = a line).
+Parsing details (18 files, 615 dialogs, 728 interacts, 759 messages, 907 lines in the game):
+- The file needs a top-level `<Dialogs>`. Inside `<Dialogs>`, `<Dialog>` and `<interact>` every
+  node except comments must be the expected element (`Dialog`, `Interact`, `message`; names
+  ignoring case), otherwise loading fails; a text node fails too.
+- The children of `<message>` are iterated without skipping comments (a comment or text inside
+  a message → error); the `<text>` tag name is not checked (any element = a line).
+- Dialog `id` is lowered and hashed; without one the key is 0 (`id=""` is the hash of the empty
+  string). The level's file and `Dialog_Fairy.xml` fill one dictionary: two dialogs with the
+  same key, in one file or across both, → error. `repeatFrom` and `count` are ints,
+  `lock`/`focusOwner` bools (`bool.Parse`, a bad value fails), `iconText` an InteractType.
+- Message flags are lenient: `facing` and `forceOnScreen` use `bool.TryParse`, so a bad value
+  means **false**; a bad `width` keeps 600. `character` is lowered. `type` must parse as
+  MessageType, whose only name is `Say` (as with every enum, a number is accepted too).
+- Line: `TTL` float (default −1); `anim` an Animations name ([ENUMS](ENUMS.md)); `sound` is
+  lowered and split at `/`: one part = cue in the Characters bank, two = bank (Banks enum) and
+  cue, more → error. Other line attributes are ignored. The text is lowered and split at `,`
+  (no trimming): the first part is the loc key, the others the argument keys.
 
 ## 12. Parsing quirks and pitfalls (for compatibility)
 

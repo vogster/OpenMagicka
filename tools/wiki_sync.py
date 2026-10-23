@@ -19,6 +19,7 @@ PAGES = {
     "docs/TASKS.md": "Backlog",
     "docs/formats/XNB_READERS.md": "XNB formats",
     "docs/formats/LEVELS_TRIGGERS.md": "Levels and triggers",
+    "docs/formats/ENUMS.md": "Enumerations",
     "docs/gameplay/SPELLS.md": "Spells and combat",
     "docs/engine/ARCHITECTURE.md": "Engine architecture",
     "docs/engine/ENTITIES_AI.md": "Entities, AI and network",
