@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Physics behind our own facade (docs/adr/0003-physics.md). No FNA dependency; System.Numerics at the boundary. -->
+
+  <ItemGroup>
+    <!-- Compile assets stay private: projects above see only our facade, the DLL still ships. -->
+    <PackageReference Include="Jitter2" Version="2.13.0" PrivateAssets="compile" />
+  </ItemGroup>
+
+</Project>

@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\OpenMagicka.Tools\OpenMagicka.Tools.csproj" />
     <ProjectReference Include="..\..\src\OpenMagicka.Game\OpenMagicka.Game.csproj" />
     <ProjectReference Include="..\..\src\OpenMagicka.Gameplay\OpenMagicka.Gameplay.csproj" />
+    <ProjectReference Include="..\..\src\OpenMagicka.Physics\OpenMagicka.Physics.csproj" />
   </ItemGroup>
 
   <ItemGroup>

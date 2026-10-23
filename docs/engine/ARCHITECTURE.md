@@ -43,9 +43,8 @@ Previous overview: [`../ENGINE_ANALYSIS.md`](../ENGINE_ANALYSIS.md).
    MS-ADPCM and **xWMA** (`Wave Bank.xwb`, `Loc.xwb`). FAudio/FACT compatibility with v45 and
    xWMA must be checked first.
 7. **Licenses.** XNAnimation is distributed under Ms-PL (according to GitHub forks), so
-   the upstream sources can be ported. The JigLibX license is not confirmed: upstream JigLib
-   is distributed under zlib, and JigLibX is presumably MIT or Ms-PL. The
-   "port vs rewrite" decision is described in §13.
+   the upstream sources can be ported. The JigLibX license could not be confirmed (upstream
+   JigLib is zlib), so OpenMagicka does not port it: see §13 and ADR-0003.
 
 ---
 
@@ -1090,7 +1089,7 @@ by a lock on the list itself. Render runs under `lock(GraphicsDevice)`.
 | Library | Version in the game | Upstream license | Verification status |
 |---|---|---|---|
 | **XNAnimation** (Bruno Evangelista, CodePlex) | 0.7.0.0 (copyright 2008) | **Ms-PL** | Confirmed via GitHub forks (echads/XNAnimation — port of 0.7 BETA3 to XNA 4.0; bosoni/XNAnimationMG — MonoGame) |
-| **JigLibX** (CodePlex) | 0.0.2.0 (copyright 2008) | Not confirmed. The original JigLib (Danny Chapman) is **zlib**. The derivative JigLibSDX is Ms-PL | Need to find the CodePlex archive and `License.txt` in the distribution |
+| **JigLibX** (CodePlex) | 0.0.2.0 (copyright 2008) | Not confirmed. The original JigLib (Danny Chapman) is **zlib**. The derivative JigLibSDX is Ms-PL | Not found (2026-10-24): CodePlex is gone, the surviving copies of the source have no license file, the DLL names none, second-hand lists disagree |
 
 Recommendation:
 
@@ -1098,16 +1097,11 @@ Recommendation:
   license; the notice must be kept). Take the sources from upstream or the XNA 4.0 fork,
   **not from decompilation**. The scope is small: skinning, `AnimationClip`, controllers and
   `SkinnedModel*` readers. The SkinnedModel v0.7 XNB format must be checked against the upstream reader.
-- **JigLibX:**
-  - if the license is confirmed as MIT, zlib or Ms-PL — **port upstream** (there are ports
-    to XNA 4.0/MonoGame). The Magicka build is probably modified: virtual triangle
-    queries for `IceMesh`/`WaterMesh`, registration of custom detectors,
-    a primitive with ID = NumTypes. These places must be found by **comparing behavior**, not by copying;
-  - if the license is not found — rewrite a minimal subset from scratch. Required: a character
-    capsule against a static mesh and a plane, spheres and boxes for physics objects, a hollow
-    sphere, raycast/segment, SAP broadphase, a simple impulse solver with sleeping. Or take
-    BepuPhysics v2 (Apache-2.0) and tune the parameters to the feel of the original. An exact
-    physics match is not critical for Magicka gameplay, except for the feel of character movement.
+- **JigLibX: not ported.** Its license could not be confirmed. OpenMagicka uses Jitter2 (MIT)
+  behind its own facade, `OpenMagicka.Physics`; the Magicka-specific parts (character body,
+  material meshes, ice and water, the shield shell) are our own code. Decision and spike results:
+  [ADR-0003](../adr/0003-physics.md). An exact physics match is not critical for Magicka
+  gameplay, except for the feel of character movement.
 
 ---
 

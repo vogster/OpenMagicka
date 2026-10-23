@@ -32,6 +32,9 @@ for our own FNA3D build for Windows x64: FNA3D with a few MojoShader fixes, kept
 maintainers do not accept AI-generated contributions: they stay in our fork and are never sent
 upstream. Please respect that when reporting issues upstream.
 
+Physics uses [Jitter2](https://github.com/notgiven688/jitterphysics2) (MIT) from NuGet, behind our
+own facade in `OpenMagicka.Physics` ([ADR-0003](docs/adr/0003-physics.md)).
+
 ## Building
 
 Requirements: .NET 10 SDK, Git, GitHub CLI (to fetch the native FNA libraries).

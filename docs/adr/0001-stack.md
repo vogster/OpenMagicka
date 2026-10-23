@@ -31,7 +31,7 @@ Linux, macOS and Steam Deck.
 | Shaders | original fx_2_0 from `Content/Shaders` through MojoShader; our own HLSL as fallback |
 | Audio | FAudio / FACT behind an `IAudioBackend` abstraction (XACT v45 and xWMA risk, OM-18) |
 | Window, input | SDL3: any gamepad, hotplug, HiDPI, any resolution |
-| Physics | port of JigLibX once its license is confirmed (OM-7), otherwise BepuPhysics v2 |
+| Physics | Jitter2 behind our own facade ([ADR-0003](0003-physics.md)); the JigLibX license could not be confirmed |
 | Animation | port of upstream XNAnimation (Ms-PL) |
 
 Architecture rules that fix the problems of the original:

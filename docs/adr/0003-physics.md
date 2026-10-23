@@ -1,6 +1,6 @@
-# ADR-0003. Physics: an existing engine behind our own facade, not a JigLibX port
+# ADR-0003. Physics: Jitter2 behind our own facade, not a JigLibX port
 
-- **Status:** proposed
+- **Status:** accepted (2026-10-24, after the spike below)
 - **Date:** 2026-10-24
 - **Tasks:** OM-7, OM-29
 
@@ -61,7 +61,7 @@ our own code in every option.
 | Ray and segment queries | yes | yes | to write: a BVH over level meshes |
 | Risks | smaller community | API churn in the beta; struct-heavy code throughout gameplay | months of solver and stacking work for props |
 
-## Decision (proposed)
+## Decision
 
 1. **Jitter2 behind our own facade.** A new `OpenMagicka.Physics` project, with no FNA, owns the
    engine. Gameplay sees only our types: bodies, shapes, materials, queries and contact events, in
@@ -81,8 +81,36 @@ our own code in every option.
 ## Consequences
 
 - OM-7 is closed for JigLibX: no upstream port. XNAnimation keeps its plan (Ms-PL, upstream).
-- ADR-0001's physics row changes to this ADR once it is accepted.
+- ADR-0001's physics row points to this ADR.
 - The character controller and the push rules have to be tuned against the original by playing
   it side by side; that tuning is part of OM-32.
 - `OpenMagicka.Physics` gets its own tests: queries, materials, ice and water, and the shield
   shell.
+
+## Spike results (2026-10-24)
+
+`OpenMagicka.Physics` (Jitter2 2.13.0) with `LevelCollision` on the game's files; the test is
+`PhysicsSpikeTests`. Release build, one thread, Windows x64.
+
+| Check | Result |
+|---|---|
+| All 132 level models: their material meshes loaded | 226,343 triangles in 312 meshes; no Water or Lava meshes (liquids have their own collision) |
+| 2,828 capsules, spheres and boxes dropped from 2 m onto nav-mesh points, 3 s at 60 Hz | none fell through; 59 rolled off an edge |
+| Largest level (`ew_s1`, 8,568 triangles), 64 bodies, a physics step | mean 0.15 ms, p99 1.2 ms |
+| The same, 1,000 segments a tick between random nav-mesh points | mean 1.6 ms, p99 4.9 ms |
+| A 0.225 m sphere at 110 m/s (a boulder) against a single-triangle wall | stopped, with CCD |
+
+Jitter2 passes. What the spike found:
+
+- **Triangles are one-sided**, for collision and for rays: solid from the side the right-hand
+  normal (B − A) × (C − A) points to. The reader's index order gives exactly that for the level
+  meshes (area facing up 2.84 M, facing down 0.17 M), so no reordering is needed. The shield shell
+  needs both windings.
+- **The engine's ray test misses rays through a shared edge** (for example, a vertical ray at
+  x = z over a quad split along its diagonal). Our segment cast adds its own triangle test with a
+  small edge tolerance inside the engine's tree walk.
+- Long segments cost about 1.6 µs each. 1,000 a tick is far more than the game needs, but
+  queries should stay short where they can.
+
+Not covered yet: animated level parts (moving collision), friction per material, ice and water,
+characters and the shield.

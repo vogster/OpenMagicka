@@ -12,14 +12,17 @@ loads the assets from that installation.
 - **No asset redistribution.** The repository contains no game files. The launcher finds the
   Steam installation and checks it.
 - **No services of the original** (Steam/Paradox/GameSparks, DRM, telemetry, monetization).
-- **FNA, FNA3D, FAudio and MojoShader are used unmodified:** their maintainers do not accept
-  AI-written code. All workarounds live on our side.
+- **FNA, FNA3D, FAudio and MojoShader are not changed upstream:** their maintainers do not accept
+  AI-written code. Our fixes to FNA3D and MojoShader live in our own fork, as patches in
+  [native/](../native/README.md), and are never sent upstream.
 
 ## Stack
 
 C# / .NET 10 LTS + FNA (SDL3, FNA3D: Vulkan / D3D12 / Metal), 64-bit, fixed simulation tick.
 Layers: `OpenMagicka.Content` → `OpenMagicka.Engine` → `OpenMagicka.Game` → `OpenMagicka.Launcher`;
-network: `OpenMagicka.Net` and `OpenMagicka.Server`. Details: [ADR-0001](adr/0001-stack.md).
+game rules: `OpenMagicka.Gameplay`; physics: `OpenMagicka.Physics` (Jitter2 behind our facade,
+[ADR-0003](adr/0003-physics.md)); network: `OpenMagicka.Net` and `OpenMagicka.Server`. Details:
+[ADR-0001](adr/0001-stack.md).
 
 Network play: our own protocol, host authority, star topology through the host, transport behind
 an abstraction (UDP + our own lobby/relay server, Steam optional). Details:
@@ -35,7 +38,7 @@ an abstraction (UDP + our own lobby/relay server, Steam optional). Details:
 - [Spells and combat](gameplay/SPELLS.md): elements, combinations, magicks, damage, statuses
 - [Engine architecture](engine/ARCHITECTURE.md): main loop, rendering, physics, audio, input, saves
 - [Entities, AI and network](engine/ENTITIES_AI.md)
-- Decisions: [ADR-0001 Stack](adr/0001-stack.md), [ADR-0002 Network play](adr/0002-network.md), [ADR-0003 Physics](adr/0003-physics.md) (proposed)
+- Decisions: [ADR-0001 Stack](adr/0001-stack.md), [ADR-0002 Network play](adr/0002-network.md), [ADR-0003 Physics](adr/0003-physics.md)
 - [Backlog](TASKS.md): milestones and critical path; the tasks live in ChillaDesk, project OM
 
 These files are mirrored into the ChillaDesk wiki of project OM with `python tools/wiki_sync.py`;

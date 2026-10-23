@@ -10,6 +10,7 @@
     <Project Path="src/OpenMagicka.Gameplay/OpenMagicka.Gameplay.csproj" />
     <Project Path="src/OpenMagicka.Launcher/OpenMagicka.Launcher.csproj" />
     <Project Path="src/OpenMagicka.Net/OpenMagicka.Net.csproj" />
+    <Project Path="src/OpenMagicka.Physics/OpenMagicka.Physics.csproj" />
     <Project Path="src/OpenMagicka.Server/OpenMagicka.Server.csproj" />
     <Project Path="src/OpenMagicka.Tools/OpenMagicka.Tools.csproj" />
   </Folder>
