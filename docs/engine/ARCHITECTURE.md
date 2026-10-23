@@ -345,15 +345,23 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   | `SkinnedModelDeferredEffect` | Position, Normal, TextureCoordinate, BlendIndices, BlendWeight |
   | light and fullscreen effects | Position (and TextureCoordinate for the quad); their meshes are OpenMagicka's own, so they are not padded or pinned by a test |
 
-- Graphics driver: MojoShader translates the effects for each FNA3D driver, and two translations
-  get some wrong. For SDL_GPU (Vulkan), the additive shafts come out in the wrong colours: in a
-  test with the texture off, a tint of (2, 0, 0) gave red and green, (0, 2, 0) gave black,
-  (0, 0, 2) gave blue, so the green output takes the red value. For D3D11, the generated HLSL of
-  `SkinnedModelDeferredEffect` does not compile (X3000 syntax error), which only shows at the
-  first draw. The OpenGL translation draws all of them right, so the launcher sets the SDL hint
-  `FNA3D_FORCE_DRIVER=OpenGL` unless the user chose a driver (on macOS that means Apple's
-  deprecated OpenGL instead of Metal until the translations are fixed). Both faults are MojoShader's; they
-  are for a human to report upstream.
+- Graphics driver: MojoShader translates the effects for each FNA3D driver, and in the stock
+  FNA3D two translations get some wrong (OM-63; fixed in OM-65):
+  - SDL_GPU (Vulkan): the additive shafts come out in the wrong colours. MojoShader's SPIR-V is
+    valid; AMD's Vulkan compiler (LLPC) miscompiles `AdditiveEffect`'s three masked `exp`s, each
+    taken as Exp2 of a whole vec4: the green channel ends up with an unrelated value.
+  - D3D11: the HLSL of the skinned effects does not compile (X3000), because a uniform that is
+    part of an array variable (the bone palette) is `#define`d with a trailing semicolon. It only
+    shows at the first draw.
+
+  OpenMagicka ships its own FNA3D for Windows x64 with both fixed in MojoShader (native/README.md):
+  `exp` is emitted as one scalar Exp2 per written component, and the semicolon is gone. With it the
+  launcher leaves the driver to FNA3D (Vulkan first) or the user. Elsewhere the stock FNA3D is used
+  and the launcher sets the SDL hint `FNA3D_FORCE_DRIVER=OpenGL` unless the user chose a driver,
+  as the OpenGL translation draws all of them right (on macOS that means Apple's deprecated OpenGL
+  instead of Metal until our FNA3D is built there too). With our FNA3D, screenshots of five scenes
+  on Vulkan and D3D11 match OpenGL in all but up to 0.3 % of their pixels (particles; D3D11 draws
+  some differently, with the stock FNA3D too). A human may report the faults upstream (OM-64).
 - Sky: when the scene has a `SkyMap` (its texture and a colour; 19 scenes of the levels), `SkyMapEffect` is drawn
   over Main right after the composition, before the additive objects: the fullscreen quad at the
   far plane, depth test LessEqual against Main's depth without writing it (the effect's own states),

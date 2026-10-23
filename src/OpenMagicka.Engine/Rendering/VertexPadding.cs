@@ -38,6 +38,17 @@ public static class EffectInputs
         In(VertexElementUsageXna31.Color, 1),
     ];
 
+    /// <summary>Every input the vertex shaders of an fx_2_0 effect read, all techniques together, without repeats.</summary>
+    public static IReadOnlyList<ShaderInput> Read(byte[] effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        return Fx2Effect.Parse(effect).Resources
+            .Where(r => ShaderBytecode.IsVertexShader(r.Code))
+            .SelectMany(r => ShaderBytecode.VertexInputs(r.Code))
+            .Distinct()
+            .ToArray();
+    }
+
     /// <summary>The inputs of the effect a batch is drawn with: additive, a character's, a liquid's, or RenderDeferred (its own material or a stand-in).</summary>
     public static IReadOnlyList<ShaderInput> For(LevelBatch batch)
     {
@@ -72,6 +83,21 @@ public static class VertexPadding
             return batch;
         }
         return AppendAll(batch, [.. missing.Select(input => (input, Default(input.Usage)))]);
+    }
+
+    /// <summary>One vertex with each of the inputs (once) at its neutral value, for a test draw.</summary>
+    public static (VertexDeclarationContent Declaration, byte[] Vertex) Probe(IReadOnlyList<ShaderInput> inputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        var elements = new List<VertexElementContent>();
+        var vertex = new List<byte>();
+        foreach (var input in inputs.Distinct())
+        {
+            var (format, value) = Default(input.Usage);
+            elements.Add(new VertexElementContent(0, vertex.Count, format, 0, input.Usage, input.Index));
+            vertex.AddRange(value);
+        }
+        return (new VertexDeclarationContent(elements), vertex.ToArray());
     }
 
     /// <summary>Appends one element with the given value to every vertex.</summary>

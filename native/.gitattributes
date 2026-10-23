@@ -1,0 +1,3 @@
+# The fork patches must keep their line endings to apply.
+*.patch text eol=lf
+*.dll binary

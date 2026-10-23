@@ -1,0 +1,9 @@
+OpenMagicka build of FNA3D (altered source: see native/README.md).
+FNA3D 62a41708e975867e4fa7914aca55fdb13c36a0a1
+MojoShader ad5dff84830c2863c841f4b1f4e3df78c705b383
+SDL3 headers 3.4.18
+Compiler: Microsoft (R) C/C++ Optimizing Compiler Version 19.51.36260 for x64, static C runtime
+Patches:
+  MojoShader/0001-hlsl-uniform-array-define.patch sha256 b7e21f5df0cf5559579329c5f7a8b68ed01545803689a83f5729f0494d31bdbe
+  MojoShader/0002-spirv-scalar-exp.patch sha256 64b1063a55336d3d92a0cdfe1b89fe9aba8e655cab088ee40f2e50611818c5c9
+FNA3D.dll sha256 70f2cf95eabbf4230ea54724069f084bb58e2f808358799ca5030bd9364227f4

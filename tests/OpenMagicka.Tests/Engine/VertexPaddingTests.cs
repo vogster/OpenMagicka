@@ -87,6 +87,25 @@ public class VertexPaddingTests
     }
 
     [Fact]
+    public void AProbeVertex_HasEveryInputOnce_WithItsDefault()
+    {
+        ShaderInput[] inputs =
+        [
+            new(VertexElementUsageXna31.Position, 0), new(VertexElementUsageXna31.Color, 0),
+            new(VertexElementUsageXna31.BlendIndices, 0), new(VertexElementUsageXna31.Color, 0),
+        ];
+
+        var (declaration, vertex) = VertexPadding.Probe(inputs);
+
+        Assert.Equal(
+            [(VertexElementUsageXna31.Position, 0, 0, VertexElementFormatXna31.Vector4), (VertexElementUsageXna31.Color, 0, 16, VertexElementFormatXna31.Color),
+             (VertexElementUsageXna31.BlendIndices, 0, 20, VertexElementFormatXna31.Byte4)],
+            declaration.Elements.Select(e => (e.Usage, e.UsageIndex, e.Offset, e.Format)));
+        Assert.Equal(24, declaration.Stride);
+        Assert.Equal(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0 }, vertex);
+    }
+
+    [Fact]
     public void EachMaterial_IsDrawnWithItsEffectsInputs()
     {
         var none = default(ContentRef<Texture2DContent>);
@@ -110,10 +129,7 @@ public class EffectInputsGameTests
     {
         var source = new ShaderSource(new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(OpenMagicka.Tests.Content.GameContent.ContentDirectory!),
             OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka));
-        var read = Fx2Effect.Parse(source.Bytecode(effect)).Resources
-            .Where(r => ShaderBytecode.IsVertexShader(r.Code))
-            .SelectMany(r => ShaderBytecode.VertexInputs(r.Code))
-            .ToHashSet();
+        var read = EffectInputs.Read(source.Bytecode(effect)).ToHashSet();
         var listed = effect switch
         {
             "AdditiveEffect" => EffectInputs.Additive,

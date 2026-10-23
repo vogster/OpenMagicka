@@ -1,0 +1,56 @@
+OpenMagicka fork of MojoShader (altered source, see native/README.md).
+
+SPIR-V profile: emit EXP as one scalar Exp2 per written component.
+
+EXP was emitted as GLSL.std.450 Exp2 of the whole (replicate-swizzled) source vec4, merged into
+the destination by the write mask. AMD's Vulkan driver (LLPC, 26.8.1 on an RX 9070 XT) compiles
+a sequence of such masked EXPs wrongly: in AdditiveEffect's pixel shader
+(`exp r0.x, -r0.x` / `exp r0.y, -r0.y` / `exp r0.z, -r0.z`) the y component written by the
+second EXP comes out with an unrelated value once the third EXP is merged in. The SPIR-V is valid;
+taking Exp2 of each written component as a scalar computes the same values and avoids it. The
+GLSL profile likewise computes exp2 of the written components only (a scalar when one is
+written, as here).
+
+diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
+--- a/profiles/mojoshader_profile_spirv.c
++++ b/profiles/mojoshader_profile_spirv.c
+@@ -3274,9 +3274,38 @@ void emit_SPIRV_RSQ(Context *ctx)
+ 
+ void emit_SPIRV_EXP(Context *ctx)
+ {
++    // OpenMagicka fork: exp2 is taken of each written component as a scalar and the results
++    // are put back together. AMD's Vulkan driver (LLPC) miscompiles Exp2 of a whole vec4 in
++    // some shaders (a component written by a later masked instruction picks up a wrong value).
+     SpirvResult dst, src;
++    const DestArgInfo *arg = &ctx->dest_arg;
++    const int written[4] = { arg->writemask0, arg->writemask1, arg->writemask2, arg->writemask3 };
++    uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
++    uint32 ext = spv_getext(ctx);
++    uint32 id_exp[4] = { 0, 0, 0, 0 };
++    uint32 id_first = 0;
++    int i;
++
+     spv_emit_begin_ds(ctx, &dst, &src);
+-    spv_emit(ctx, 5 + 1, SpvOpExtInst, dst.tid, dst.id, spv_getext(ctx), GLSLstd450Exp2, src.id);
++    for (i = 0; i < 4; i++)
++    {
++        // With no component written one is still computed, so the composite has operands.
++        if (written[i] || (i == 3 && id_first == 0))
++        {
++            uint32 id_scalar = spv_bumpid(ctx);
++            id_exp[i] = spv_bumpid(ctx);
++            spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_scalar, src.id, i);
++            spv_emit(ctx, 5 + 1, SpvOpExtInst, tid_float, id_exp[i], ext, GLSLstd450Exp2, id_scalar);
++            if (id_first == 0)
++                id_first = id_exp[i];
++        } // if
++    } // for
++    for (i = 0; i < 4; i++)
++    {
++        if (id_exp[i] == 0)
++            id_exp[i] = id_first;  // not written: any value will do
++    } // for
++    spv_emit(ctx, 3 + 4, SpvOpCompositeConstruct, dst.tid, dst.id, id_exp[0], id_exp[1], id_exp[2], id_exp[3]);
+     spv_emit_end(ctx, dst);
+ } // emit_SPIRV_EXP
+ 

@@ -26,9 +26,11 @@ The original executable is studied only to understand file formats and behaviour
 code never enters this repository, its wiki or its issues: specifications are written in our own
 words, tables and constants. See [docs/](docs/ENGINE_ANALYSIS.md).
 
-Third-party libraries in `lib/` (FNA, FNA3D, FAudio, MojoShader) are used unmodified. Their
-maintainers do not accept AI-generated contributions; please respect that when reporting
-issues upstream.
+Third-party libraries in `lib/` (FNA, FNA3D, FAudio, MojoShader) are used as they are, except
+for our own FNA3D build for Windows x64: FNA3D with a few MojoShader fixes, kept as patches in
+[native/](native/README.md). Those fixes were written with AI help, and the libraries'
+maintainers do not accept AI-generated contributions: they stay in our fork and are never sent
+upstream. Please respect that when reporting issues upstream.
 
 ## Building
 
@@ -44,7 +46,9 @@ dotnet run --project src/OpenMagicka.Launcher
 ```
 
 On Windows run the shell scripts from Git Bash. `tools/linux_check.sh` builds, tests and
-smoke-runs the game on Linux inside Docker.
+smoke-runs the game on Linux inside Docker. On Windows x64 the launcher uses our FNA3D from
+`native/win-x64` instead of the fetched one; `pwsh tools/build_fna3d.ps1` rebuilds it (Visual
+Studio's C++ tools and CMake needed).
 
 Tests that need the game files run when `MAGICKA_DIR` points at a Magicka installation.
 

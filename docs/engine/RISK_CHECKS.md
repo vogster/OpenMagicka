@@ -152,10 +152,17 @@ our own HLSL for it.
   (`FNA3D_FORCE_DRIVER=D3D11`); `ArcaneEffect` is skipped (§1.5).
 - Drawing with real content (OM-63) showed that "loads and applies" is not "draws right" on every
   driver: on SDL_GPU (Vulkan) MojoShader's SPIR-V for `AdditiveEffect` gives wrong colours, and on
-  D3D11 its HLSL for `SkinnedModelDeferredEffect` fails to compile at the first draw (shaders
-  are compiled when first linked, after `--check-effects` has passed). OpenGL draws them right
-  (50 of 51 effects ready there too), so it is the launcher's default; details in
-  ARCHITECTURE.md §3.2.
+  D3D11 its HLSL for the skinned effects fails to compile at the first draw (shaders are compiled
+  when first linked). Both are fixed in our own FNA3D (OM-65, native/README.md; details in
+  ARCHITECTURE.md §3.2), which is the default for Windows x64; elsewhere OpenGL stays the default.
+- Since OM-65 `--check-effects` draws a degenerate triangle with every pass (a vertex holding every
+  input the effect's vertex shaders read, into a 1×1 target), so compile and link faults show up:
+  with the stock FNA3D on D3D11 it fails `SkinnedModelDeferredEffect` and
+  `SkinnedModelDeferredNormalMappedEffect`; with ours it passes on Vulkan, D3D11 and OpenGL. A
+  shader that compiles but computes the wrong values (the Vulkan fault) is not caught; screenshots
+  are. `ChasmEffect` still fails to link on D3D11 (its pixel shader reads COLOR0, which the vertex
+  shader of the pass does not write, and MojoShader's D3D11 linker cannot match that), but the
+  game never draws it (§1.1), so the check reports it as skipped.
 - The spike draws without textures and with zero parameters: "draws" means "the pipeline was
   built and drawing did not crash", not "the picture matches the original". Visual comparison
   is the job of the viewer (OM-22).

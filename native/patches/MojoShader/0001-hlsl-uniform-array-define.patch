@@ -1,0 +1,22 @@
+OpenMagicka fork of MojoShader (altered source, see native/README.md).
+
+HLSL profile: no semicolon after the #define of a uniform that belongs to an array variable.
+
+A uniform register that is part of a variable (registers addressed relatively, such as a bone
+palette) was defined as `#define c1 uniforms_float4[1];`. A use like `-c1.w` then expands to
+`-uniforms_float4[1];.w`, which fxc rejects (X3000: unexpected token '.'), so the D3D11 driver
+cannot link SkinnedModelDeferredEffect. Registers outside variables never had the semicolon.
+
+diff --git a/profiles/mojoshader_profile_hlsl.c b/profiles/mojoshader_profile_hlsl.c
+--- a/profiles/mojoshader_profile_hlsl.c
++++ b/profiles/mojoshader_profile_hlsl.c
+@@ -736,7 +736,8 @@ void emit_HLSL_uniform(Context *ctx, RegisterType regtype, int regnum,
+             index = (regnum - arraybase) + var->emit_position;
+         } // else
+ 
+-        output_line(ctx, "#define %s %s[%d];", varname, name, index);
++        // OpenMagicka fork: no semicolon here, it broke expressions using the register.
++        output_line(ctx, "#define %s %s[%d]", varname, name, index);
+         push_output(ctx, &ctx->mainline);
+         ctx->indent++;
+         output_line(ctx, "#undef %s", varname);  // !!! FIXME: gross.
