@@ -7,7 +7,7 @@ Date: 2026-10-23. Machine: Windows 11, AMD RX 9070 XT, FNA master `00498b0`, fna
 
 | Risk | Result |
 |---|---|
-| Original fx_2_0 shaders on FNA (OM-20) | **46 of 51** effects load and draw after patching the bytecode; 5 crash inside MojoShader, cause not found yet |
+| Original fx_2_0 shaders on FNA (OM-20, OM-60) | **50 of 51** effects load and draw after patching the bytecode; `ArcaneEffect` still corrupts the heap inside MojoShader (OM-62) |
 | XACT on FAudio (OM-18) | content version 45 is supported; **1000 cues** from 9 banks play; **xWMA does not work** (Windows: crash, Linux/macOS: no decoder) |
 | Linux (OM-2) | build, 21 tests and the window work in Docker (`tools/linux_check.sh`, Xvfb + Mesa llvmpipe) |
 
@@ -48,7 +48,7 @@ XNA has no `BORDER` / `MIRRORONCE` addressing and no border colour. `BloomEffect
 structure does not change. Difference from the original: at texture edges the edge pixel is
 repeated instead of transparent black.
 
-### 1.3 Unresolved: 5 effects crash in MojoShader
+### 1.3 Five effects crash in MojoShader (first look)
 
 | Effect | Crash |
 |---|---|
@@ -72,7 +72,62 @@ Options (in order):
 2. Our own HLSL for these 5 effects with the same parameter and G-buffer layout, compiled to
    fx_2_0 with `fxc` from the Windows SDK; FNA already accepts such bytecode.
 
-### 1.4 Other notes
+### 1.4 Root cause of four crashes: preshader temp registers (OM-60)
+
+Found with a local Debug build of FNA3D + MojoShader (FNA3D `fd1b246`, built only for
+diagnosis, not modified) and `SDL_ASSERT=abort`. `RenderDeferredEffectWOVT/WVT`, `CapsuleLight`
+and `Maya/SkinnedModelEffect_0` all stop at the same assertion in `run_preshader`
+(`mojoshader_effects.c:201`):
+
+```
+'preshader->temp_count >= operand->index + (elemsbytes / sizeof (double))'
+```
+
+A preshader is CPU-side bytecode (an `FXLC` block inside a shader's `PRES` comment) that
+computes constants. MojoShader sizes its temp register file from the highest index at which a
+temp operand **starts**, plus one, rounded up to a multiple of 4. It ignores how many elements
+an instruction writes. Every failing preshader contains a dot product such as
+
+```
+DOT x3: src temp0, src temp0 -> dst temp7
+```
+
+The element count 3 is the width of the inputs; a dot product writes one scalar. MojoShader's
+`DOT` writes the scalar into all 3 elements (`temp7..temp9`, the code carries a
+`FIXME: is this right?`), while it allocated 8 temps. In a Release build the write lands past
+the end of the buffer (or into `NULL` when no temp buffer exists), which is the
+`memcpy`-to-NULL crash seen in §1.3.
+
+`tools/research/fx_preshaders.py` recomputes both numbers for every preshader. Across the 51
+effects exactly these 6 preshaders (in the 4 failing effects) overflow — no working effect does.
+Of the 7 `DOT`s that write to a temp, none overwrites a temp that is still live, so the
+working effects are not silently computing wrong constants.
+
+**Workaround (data only):** append one instruction `MOV temp[need-1] <- temp[need-1]` to each
+overflowing preshader. It changes no result, but MojoShader now allocates
+`round_up_4(need)` temps. The patch grows the `FXLC` and `PRES` comment blocks and the shader
+resource size; resources are read sequentially, so nothing else moves. Implemented in
+`fx_preshaders.widen_temps`, applied by `fx_states.py --strip`.
+
+**Result:** 50 of 51 effects load and draw every pass, on the release fnalibs and on the
+Debug FNA3D with assertions enabled (no assertion fires).
+
+This looks like a MojoShader bug worth reporting upstream (dot product output width and temp
+allocation). Per the maintainers' policy, a human has to write and verify that report.
+
+### 1.5 Still open: `ArcaneEffect` (OM-62)
+
+`ArcaneEffect` fails differently: `0xC0000374` (heap corruption) while the effect is
+**created**. Stack: `FNA3D_CreateEffect` → `MOJOSHADER_compileEffect` → `readlargeobjects` →
+`MOJOSHADER_parse` → `destroy_context`, so parsing one of its four shader model 2.0 shaders
+corrupts the heap and the corruption is detected when the parse context is freed. No
+assertion fires. It is the only SM 2.0 effect with a non-empty preshader (34 instructions,
+40 literals, a `PRSI` output map). Finding the exact write needs a memory checker
+(AddressSanitizer build in the Linux container); page heap is not used because it changes
+system settings. It is one spell effect, so it does not block rendering levels; the fallback is
+our own HLSL for it.
+
+### 1.6 Other notes
 
 - D3D12 (`FNA3D_FORCE_DRIVER=SDLGPU`, `SDL_GPU_DRIVER=direct3d12`) printed nothing even for a
   working effect — not investigated. FNA3D picks Vulkan by default.

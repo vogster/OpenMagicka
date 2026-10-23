@@ -2,8 +2,9 @@
 
 Usage: python fx_states.py <dir with .fxb> [--unsupported] [--strip <out dir>]
 --unsupported prints only states FNA's Effect.Apply does not handle (it throws on them).
---strip writes copies of the effects with those state entries removed and Border/MirrorOnce
-        sampler addressing replaced by Clamp (research only).
+--strip writes copies of the effects with those state entries removed, Border/MirrorOnce
+        sampler addressing replaced by Clamp and preshader temp overflows worked around
+        (see fx_preshaders.py; research only).
 
 fx_2_0 layout (as documented by Wine's d3dx9 effect parser): u32 tag 0xFEFF0901, u32 offset;
 the data blob starts at byte 8 and the structure part at 8 + offset:
@@ -166,7 +167,8 @@ def strip(data):
                 remap[(ti, pi, si)] = kept
                 kept += 1
         struct.pack_into("<I", blob, count_at, kept)
-    for at in resources(fx):
+    headers = list(resources(fx))
+    for at in headers:
         ti, pi, _element, si = struct.unpack_from("<IIII", blob, at)
         if ti == 0xFFFFFFFF:
             continue  # bound to a parameter (sampler state), not to a pass
@@ -186,9 +188,25 @@ def strip(data):
             struct.pack_into("<I", blob, at, SAMP_ADDRESS_U)
             struct.pack_into("<I", blob, sval, ADDRESS_CLAMP)
             cuts_extra.append(at)
+    # Shaders whose preshader overflows MojoShader's temp registers get one extra
+    # instruction, so the resource table after the techniques is rebuilt with new sizes.
+    # Resources are read sequentially and nothing points into them.
+    import fx_preshaders  # local import: fx_preshaders imports this module
+    widened = 0
+    if headers:
+        tail = bytearray()
+        for at in headers:
+            ti, pi, el, si, usage, size = struct.unpack_from("<6I", blob, at)
+            code = bytes(blob[at + 24:at + 24 + size])
+            if ti != 0xFFFFFFFF:
+                code, n = fx_preshaders.widen_temps(code)
+                widened += n
+            tail += struct.pack("<6I", ti, pi, el, si, usage, len(code))
+            tail += code + bytes(-len(code) % 4)
+        blob[headers[0]:] = tail
     for at in sorted(cuts, reverse=True):
         del blob[at:at + 16]
-    return data[:8] + bytes(blob), len(cuts) + len(cuts_extra)
+    return data[:8] + bytes(blob), len(cuts) + len(cuts_extra) + widened
 
 
 def main():

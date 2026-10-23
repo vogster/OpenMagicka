@@ -128,7 +128,7 @@ Layers: `OpenMagicka.Content` (XNB v4 + readers + XML parsers) → `OpenMagicka.
 ## 6. Key risks
 
 - XACT v45 works on FAudio except xWMA, which has to be transcoded on install ([RISK_CHECKS](engine/RISK_CHECKS.md) §2).
-- Original shaders: 46/51 work after patching the bytecode; 5, including the main level material `RenderDeferredEffect`, crash inside MojoShader ([RISK_CHECKS](engine/RISK_CHECKS.md) §1).
+- Original shaders: 50/51 work after patching the bytecode, including the main level material `RenderDeferredEffect`; `ArcaneEffect` still crashes inside MojoShader ([RISK_CHECKS](engine/RISK_CHECKS.md) §1).
 - FNA does not support `EffectPool`: shared parameters (View/Projection/Time) must be set on every effect.
 - The JigLibX license is not confirmed (XNAnimation is Ms-PL).
 - Localization/sound/effect keys are the .NET 2.0–3.5 x86 `String.GetHashCode` hash; we need our own implementation.
