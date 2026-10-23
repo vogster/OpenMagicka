@@ -48,6 +48,19 @@ smoke-runs the game on Linux inside Docker.
 
 Tests that need the game files run when `MAGICKA_DIR` points at a Magicka installation.
 
+## Level viewer
+
+With the game's content, the launcher opens the level viewer (the game itself comes later):
+
+```bash
+dotnet run --project src/OpenMagicka.Launcher -- --content "<Magicka folder>" --scene wc_s1
+```
+
+WASD move, Q/E (or C/Space) go down/up, Shift is faster, the right mouse button looks around,
+PageUp/PageDown switch between all scenes, F frames the scene, Escape quits. The geometry is drawn
+with a simple forward shader for now; `--screenshot <file.png>` saves the first frame and exits.
+`--check-effects` loads every original effect on the GPU and reports the result.
+
 ## Content tool
 
 `omx` reads the game's content with OpenMagicka's readers:

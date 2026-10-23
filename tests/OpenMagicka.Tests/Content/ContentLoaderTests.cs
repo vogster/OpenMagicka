@@ -89,4 +89,18 @@ public sealed class ContentLoaderTests : IDisposable
         var error = Assert.Throws<InvalidDataException>(() => Loader().Load("Models/Items/broken"));
         Assert.Contains("Models/Items/broken", error.Message);
     }
+
+    [Fact]
+    public void LoadUncached_ReadsAFreshCopyEachTime_AndLeavesTheCacheAlone()
+    {
+        var loader = Loader();
+
+        var first = loader.LoadUncached("Models/Items/Staff_0");
+        var second = loader.LoadUncached("models/items/staff_0");
+
+        Assert.Equal("staff model", first.Root);
+        Assert.NotSame(first, second);
+        Assert.Same(loader.Load("Models/Items/Staff_0"), loader.Load("Models/Items/Staff_0"));
+        Assert.Throws<FileNotFoundException>(() => loader.LoadUncached("Models/missing"));
+    }
 }

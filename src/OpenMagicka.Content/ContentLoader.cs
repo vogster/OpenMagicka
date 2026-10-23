@@ -39,6 +39,16 @@ public sealed class ContentLoader(ContentFileSystem files, XnbReaderRegistry reg
         }
     }
 
+    /// <summary>
+    /// Reads an asset without caching it: for large assets used once, such as the viewer's level
+    /// models and their textures, which would otherwise stay in memory for the whole session.
+    /// </summary>
+    public XnbContent LoadUncached(string assetPath)
+    {
+        ArgumentNullException.ThrowIfNull(assetPath);
+        return Read(ContentFileSystem.Normalize(assetPath) ?? throw new FileNotFoundException($"invalid asset path '{assetPath}'", assetPath));
+    }
+
     /// <summary>Asset path of an external reference found in <paramref name="referringAsset"/>, or null if it leaves Content.</summary>
     public string? ResolveReference(string referringAsset, ExternalReference reference) =>
         ContentFileSystem.Combine(referringAsset, reference.Path);
