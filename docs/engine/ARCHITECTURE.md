@@ -298,6 +298,14 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   `DiffuseTexturenAlphaDisabled`, `AlphaMasknEnabled`, `DiffuseTexturen`, `MaterialTexturen`,
   `NormalTexturen`. Setting a texture also sets its flag (`DiffuseTexturenEnabled`,
   `MaterialTexturenEnabled`, `NormalMapnEnabled`) to whether it is non-null.
+- Characters (models with a `SkinnedModelBasicEffect` material) are drawn with `SkinnedModelDeferredEffect`,
+  technique 0 (`Default`) in the G-buffer and 3 (`Depth`) in the prepass. The model's material is copied
+  over as the game does: `EmissiveAmount`, `SpecularAmount`, `SpecularPower`, `UseSoftLightBlend`,
+  `OverlayAlpha` = the material's `Diffuse1Alpha`, `DiffuseMap0` (details) and `DiffuseMap1` (base) with
+  their flags, the specular map as `MaterialMap` (flag `SpecularMapEnabled`), `NormalMap`. A character is
+  then drawn with `DiffuseColor` = 1, `FresnelPower` = 4, `Colorize` = 0 (non-zero only while frozen),
+  no damage maps, and `Bones` = the skin transforms (identity in the bind pose); there is no `World`.
+  Using only one of the diffuse maps leaves holes: the detail map is transparent where the base shows.
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
   texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1), and `DestinationDimensions` = target size.
 - A level's directional light comes from its light list (intensity 1 unless it varies); the

@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.Xna;
-using OpenMagicka.Content.XnAnimation;
 
 namespace OpenMagicka.Engine.Rendering;
 
@@ -46,13 +45,11 @@ public static class RenderDeferredMaterial
 
     /// <summary>
     /// A single-layer material for a batch whose own effect the G-buffer pass does not have yet
-    /// (skinned and plain models): its diffuse texture and colour, with the specular and emissive
-    /// amounts of a skinned material.
+    /// (plain models): its diffuse texture and colour.
     /// </summary>
-    public static RenderDeferredEffectContent StandIn(object? material, ExternalReference? diffuse, Vector3 diffuseColor)
+    public static RenderDeferredEffectContent StandIn(ExternalReference? diffuse, Vector3 diffuseColor)
     {
-        var (spec, power, emissive) = material is SkinnedModelBasicEffectContent s ? (s.SpecularAmount, s.SpecularPower, s.EmissiveAmount) : (0f, 0f, 0f);
-        var layer = new RenderDeferredLayer(false, false, diffuseColor, spec, power, emissive, 0, 0, diffuse, null, null);
+        var layer = new RenderDeferredLayer(false, false, diffuseColor, 0, 0, 0, 0, 0, diffuse, null, null);
         return new RenderDeferredEffectContent(1, 0, false, false, null, layer, null);
     }
 

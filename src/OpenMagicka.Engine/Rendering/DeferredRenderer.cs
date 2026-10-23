@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content.PolygonHead;
+using OpenMagicka.Content.XnAnimation;
 
 namespace OpenMagicka.Engine.Rendering;
 
@@ -19,7 +20,10 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 public sealed class DeferredRenderer : IDisposable
 {
     public static readonly string[] EffectNames =
-        ["RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect"];
+        [
+            "RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect",
+            "SkinnedModelDeferredEffect",
+        ];
 
     private const int WithoutShadows = 1;
     private static readonly Vector4 NormalClear = new(0.5f, 0.75f, 0.5f, 0.5f);
@@ -44,6 +48,8 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect sun;
     private readonly GameEffect shading;
     private readonly GameEffect additive;
+    private readonly GameEffect skinned;
+    private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
     private readonly BoundingFrustum frustum = new(Matrix.Identity);
@@ -55,9 +61,12 @@ public sealed class DeferredRenderer : IDisposable
 
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
-        (deferred, clear, restoreDepth, sun, shading, additive) = (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5]);
+        (deferred, clear, restoreDepth, sun, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6]);
+        // Characters are shown in their bind pose: every skin transform is the identity.
+        bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
-        if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || sun.Effect.Techniques.Count <= WithoutShadows)
+        if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || sun.Effect.Techniques.Count <= WithoutShadows
+            || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Depth || bindPose.Length == 0)
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
         }
@@ -91,7 +100,7 @@ public sealed class DeferredRenderer : IDisposable
         EnsureTargets(device);
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
-        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive })
+        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned })
         {
             effect.Globals.Apply(globals);
         }
@@ -159,10 +168,24 @@ public sealed class DeferredRenderer : IDisposable
         device.BlendState = BlendState.Opaque;
         device.DepthStencilState = DepthStencilState.Default;
         var parameters = new FnaEffectParameters(deferred.Effect);
+        var characters = new FnaEffectParameters(skinned.Effect);
+        skinned.Effect.Parameters["Bones"].SetValue(bindPose);
+        skinned.Effect.CurrentTechnique = skinned.Effect.Techniques[depthPass ? SkinnedDeferredMaterial.Depth : SkinnedDeferredMaterial.Default];
         var drawn = 0;
         foreach (var batch in level.Batches)
         {
-            if (batch.Deferred is not { } material || !frustum.Intersects(batch.Bounds))
+            if (!frustum.Intersects(batch.Bounds))
+            {
+                continue;
+            }
+            if (batch.Material is SkinnedModelBasicEffectContent character && !batch.Additive)
+            {
+                SkinnedDeferredMaterial.Apply(characters, character, level.TextureFor);
+                Draw(device, skinned.Effect, batch);
+                drawn++;
+                continue;
+            }
+            if (batch.Deferred is not { } material)
             {
                 continue;
             }

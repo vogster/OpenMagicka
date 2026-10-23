@@ -11,8 +11,8 @@ namespace OpenMagicka.Engine.Rendering;
 
 /// <summary>
 /// A batch on the GPU: buffers with the full vertex layout, its material, the material the G-buffer
-/// pass draws it with (its own, or <see cref="RenderDeferredMaterial.StandIn"/>; null for additive
-/// batches) and its diffuse texture.
+/// pass draws it with RenderDeferredEffect (its own, or <see cref="RenderDeferredMaterial.StandIn"/>;
+/// null for additive batches and characters, whose material has its own effect) and its diffuse texture.
 /// </summary>
 public sealed record GpuBatch(
     VertexBuffer Vertices, IndexBuffer Indices, int VertexCount, int StartIndex, int PrimitiveCount, BoundingBox Bounds,
@@ -145,7 +145,11 @@ public sealed class GpuLevel : IDisposable
     private static IEnumerable<ExternalReference> References(LevelBatch batch)
     {
         var all = new List<ExternalReference?> { batch.DiffuseTexture };
-        if (batch.Material is RenderDeferredEffectContent m)
+        if (batch.Material is SkinnedModelBasicEffectContent skinned)
+        {
+            all.AddRange(SkinnedDeferredMaterial.References(skinned));
+        }
+        if (DeferredMaterial(batch) is { } m)
         {
             all.Add(m.ReflectionMap);
             foreach (var layer in new[] { m.Layer0, m.Layer1 })
@@ -155,6 +159,11 @@ public sealed class GpuLevel : IDisposable
         }
         return all.OfType<ExternalReference>();
     }
+
+    /// <summary>The RenderDeferredEffect material a batch is drawn with; none for additive batches and characters.</summary>
+    private static RenderDeferredEffectContent? DeferredMaterial(LevelBatch batch) => batch.Additive || batch.Material is SkinnedModelBasicEffectContent ? null
+        : batch.Material as RenderDeferredEffectContent
+          ?? RenderDeferredMaterial.StandIn(batch.HasUv ? batch.DiffuseTexture : null, batch.DiffuseColor);
 
     /// <summary>Disposes, on the render thread, what was created before a load failed (nothing if the queue is closed: the device is going away).</summary>
     private static void Release<T>(RenderQueue<GraphicsDevice> gpu, IEnumerable<Task<T>> tasks)
@@ -236,9 +245,7 @@ public sealed class GpuLevel : IDisposable
                 count, BufferUsage.WriteOnly);
             indices.SetData(batch.IndexData, 0, count * indexSize);
             // Only what drawing needs is kept: the CPU vertex and index data can be collected.
-            var deferred = batch.Additive ? null
-                : batch.Material as RenderDeferredEffectContent
-                  ?? RenderDeferredMaterial.StandIn(batch.Material, batch.HasUv ? batch.DiffuseTexture : null, batch.DiffuseColor);
+            var deferred = DeferredMaterial(batch);
             return new GpuBatch(vertices, indices, batch.VertexCount, batch.StartIndex, batch.PrimitiveCount, batch.Bounds, batch.World,
                 batch.Material, deferred, batch.HasUv ? diffuse : null, batch.DiffuseColor, batch.Additive, batch.HasNormal);
         }

@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.Xna;
-using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Engine.Rendering;
 
 namespace OpenMagicka.Tests.Engine;
@@ -83,27 +82,13 @@ public class MaterialTests
     }
 
     [Fact]
-    public void AStandIn_KeepsTheBatchsDiffuse_AndTheSkinnedMaterialsSpecularAndEmissive()
+    public void AStandIn_IsJustTheBatchsDiffuse()
     {
-        var none = default(ContentRef<Texture2DContent>);
-        var skinned = new SkinnedModelBasicEffectContent(0, 0.3f, new Vector3(0.5f), 0.4f, 20, 1, false, true, false, false, false, false, false,
-            none, none, none, none, none, none);
+        var material = RenderDeferredMaterial.StandIn(new ExternalReference("crate"), new Vector3(0.2f, 0.4f, 0.6f));
 
-        var material = RenderDeferredMaterial.StandIn(skinned, new ExternalReference("crusader"), new Vector3(0.5f));
-
-        Assert.Equal("crusader", material.Layer0.DiffuseTexture?.Path);
-        Assert.Equal((new Vector3(0.5f), 0.4f, 20f, 0.3f), (material.Layer0.DiffuseColor, material.Layer0.SpecAmount,
-            material.Layer0.SpecPower, material.Layer0.EmissiveAmount));
+        Assert.Equal((new Vector3(0.2f, 0.4f, 0.6f), 0f, 0f, "crate"), (material.Layer0.DiffuseColor,
+            material.Layer0.SpecAmount, material.Layer0.EmissiveAmount, material.Layer0.DiffuseTexture?.Path));
         Assert.Equal((1f, (RenderDeferredLayer?)null, (ExternalReference?)null), (material.Alpha, material.Layer1, material.ReflectionMap));
         Assert.Equal(RenderDeferredMaterial.SingleLayer, RenderDeferredMaterial.Technique(material, hasReflectionMap: false));
-    }
-
-    [Fact]
-    public void AStandIn_ForAnUnknownMaterial_IsJustItsDiffuse()
-    {
-        var material = RenderDeferredMaterial.StandIn(null, null, new Vector3(0.2f, 0.4f, 0.6f));
-
-        Assert.Equal((new Vector3(0.2f, 0.4f, 0.6f), 0f, 0f, (ExternalReference?)null), (material.Layer0.DiffuseColor,
-            material.Layer0.SpecAmount, material.Layer0.EmissiveAmount, material.Layer0.DiffuseTexture));
     }
 }
