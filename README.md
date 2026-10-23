@@ -1,0 +1,62 @@
+# OpenMagicka
+
+An open-source reimplementation of the engine of **Magicka** (Arrowhead Game Studios, 2011),
+in the spirit of [OpenMW](https://openmw.org): you bring the game data from your own copy,
+OpenMagicka runs it on modern systems.
+
+> Status: early development. Nothing is playable yet.
+
+## You need the original game
+
+OpenMagicka contains **no game assets** and never will. Buy Magicka on Steam
+([AppID 42910](https://store.steampowered.com/app/42910/Magicka/)); OpenMagicka reads the
+models, levels, textures, sounds and texts from that installation. Nothing is copied into this
+repository or redistributed.
+
+## Goals
+
+- run on Windows, Linux, macOS and Steam Deck, 64-bit, modern graphics APIs (Vulkan, D3D12, Metal);
+- behave like the original: spells, levels, triggers, co-op;
+- fix what breaks on modern PCs: frame-rate dependent logic, controllers, resolutions;
+- keep online co-op with our own protocol (no compatibility with the original client).
+
+## Clean-room rules
+
+The original executable is studied only to understand file formats and behaviour. Decompiled
+code never enters this repository, its wiki or its issues: specifications are written in our own
+words, tables and constants. See [docs/](docs/ENGINE_ANALYSIS.md).
+
+Third-party libraries in `lib/` (FNA, FNA3D, FAudio, MojoShader) are used unmodified. Their
+maintainers do not accept AI-generated contributions; please respect that when reporting
+issues upstream.
+
+## Building
+
+Requirements: .NET 10 SDK, Git, GitHub CLI (to fetch the native FNA libraries).
+
+```bash
+git clone --recursive https://github.com/vogster/OpenMagicka.git
+cd OpenMagicka
+sh tools/fetch_fnalibs.sh
+dotnet build OpenMagicka.slnx
+dotnet test tests/OpenMagicka.Tests
+dotnet run --project src/OpenMagicka.Launcher
+```
+
+On Windows run the shell scripts from Git Bash. `tools/linux_check.sh` builds, tests and
+smoke-runs the game on Linux inside Docker.
+
+## Documentation
+
+- [Engine analysis](docs/ENGINE_ANALYSIS.md): stack and content of the original
+- [Architecture decisions](docs/adr/): stack, network
+- [Risk checks](docs/engine/RISK_CHECKS.md): original shaders on FNA, XACT on FAudio, Linux
+- Format and gameplay specifications in [docs/formats](docs/formats/), [docs/gameplay](docs/gameplay/), [docs/engine](docs/engine/)
+
+Most documentation is in Russian.
+
+## License
+
+OpenMagicka is released under the [MIT License](LICENSE). Libraries in `lib/` keep their own
+licenses (FNA: Ms-PL). Magicka and its assets are property of their respective owners;
+OpenMagicka is not affiliated with Arrowhead Game Studios or Paradox Interactive.
