@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Content.Xnb.Readers;
@@ -21,8 +22,14 @@ public sealed class XnbReaderRegistry
     /// <summary>The XNA 3.1 readers used by Magicka's content.</summary>
     public static XnbReaderRegistry Standard { get; } = new(StandardReaders.All.ToFrozenDictionary());
 
-    /// <summary>Standard readers plus the engine libraries Magicka ships: XNAnimation and PolygonHead.</summary>
-    public static XnbReaderRegistry Magicka { get; } = Standard.With(XnAnimationReaders.All).With(PolygonHeadReaders.All);
+    /// <summary>
+    /// Everything Magicka's content needs: the standard readers, the engine libraries it ships
+    /// (XNAnimation, PolygonHead) and the game's own readers.
+    /// </summary>
+    public static XnbReaderRegistry Magicka { get; } = Standard
+        .With(XnAnimationReaders.All)
+        .With(PolygonHeadReaders.All)
+        .With(MagickaReaders.All);
 
     /// <summary>
     /// Returns a new registry that also knows the given readers (game-specific ones). A key that

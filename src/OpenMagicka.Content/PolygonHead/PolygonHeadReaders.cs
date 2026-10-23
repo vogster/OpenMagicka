@@ -6,11 +6,8 @@ namespace OpenMagicka.Content.PolygonHead;
 /// <summary>Readers of Arrowhead's PolygonHead engine. Layouts: docs/formats/XNB_READERS.md §3.</summary>
 internal static class PolygonHeadReaders
 {
-    /// <summary>
-    /// Limit for the BiTree recursion. Generous because BSP-style trees can be lopsided; to be
-    /// tightened once the depth of the real level trees is measured (LevelModel, OM-13).
-    /// </summary>
-    private const int MaxTreeDepth = 256;
+    /// <summary>Limit for the BiTree recursion; the deepest tree in the 132 levels has depth 8.</summary>
+    private const int MaxTreeDepth = 32;
 
     // i32 primitive count, i32 start index, bounding box, two child flags
     private const int TreeNodeSize = 4 + 4 + 24 + 2;

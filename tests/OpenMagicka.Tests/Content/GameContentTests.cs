@@ -72,7 +72,7 @@ public class GameContentTests(ITestOutputHelper output)
     }
 
     [GameContentFact]
-    public void EngineLibraryContent_LoadsCompletely()
+    public void MagickaContent_LoadsCompletely()
     {
         var loaded = LoadAll(XnbReaderRegistry.Magicka, allowedMissing: name => name.StartsWith("Magicka.", StringComparison.Ordinal));
 
@@ -80,6 +80,7 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Equal(327, loaded.GetValueOrDefault("SkinnedModelReader"));
         Assert.Equal(66, loaded.GetValueOrDefault("BitmapFontReader"));
         Assert.Equal(2296, loaded.GetValueOrDefault("Texture2DReader"));
+        Assert.Equal(132, loaded.GetValueOrDefault("LevelModelReader"));
     }
 
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>

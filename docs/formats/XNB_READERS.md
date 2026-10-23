@@ -419,6 +419,8 @@ BiTreeRootNode (one per material/batch):
 BiTreeNode (recursive, in order: A fully, then B): `i32 primitiveCount`, `i32 startIndex`,
 `Vector3 min`, `Vector3 max`, `bool hasChildA` [+node], `bool hasChildB` [+node]. numVertices is inherited from the root.
 
+Measured on all 132 levels: the deepest tree has depth 8 (OpenMagicka rejects depth > 32).
+
 Behavior: during rendering, if a node is fully inside the frustum, its whole index range is drawn; if it
 intersects and has both children, the renderer recurses; otherwise it is drawn in full. So the parent range covers
 the children's ranges (indices are ordered by the tree). `TriangleList` is drawn, baseVertex = 0.
@@ -499,7 +501,7 @@ Fields 6–9 are always read, regardless of the type.
 | 1 | string | name (→lower, ID = hash) |
 | 2 | bool | AffectShields |
 | 3 | `Object<Model>` | part model (part effects are Additive/RenderDeferred/RenderDeferredLiquid, otherwise an error) |
-| 4 | i32 + N × (`string` meshName, `bool`, `bool`) | MeshSettings: a pair of flags per mesh (by usage — visibility and shadow casting; not verified) |
+| 4 | i32 + N × (`string` meshName, `bool`, `bool`) | MeshSettings: a pair of flags per mesh (by usage — visibility and shadow casting; not verified). Combinations in the levels: (true, true) 1222, (false, true) 9, (true, false) 1 |
 | 5 | i32 + N × Liquid | liquids attached to the part |
 | 6 | i32 + N × (`string` name, Locator) | part locators |
 | 7 | f32 | animationDuration |
@@ -546,8 +548,8 @@ permuted when building the collision (0, 2, 1).
 | 11–13 | Object VB, Object IB, Object VertexDeclaration | |
 | 14–16 | i32 ×3 | vertexStride, numVertices, primitiveCount |
 
-Positions must be Vector3 with usageIndex 0. ForceField was not found even once in the verified files
-(the count is 0 everywhere) — the layout is from the code only.
+Positions must be Vector3 with usageIndex 0. The levels of the Steam release contain 5 force fields,
+and the OpenMagicka reader consumes every level with no bytes left, so the layout is confirmed by data.
 
 ### 4.6 CollisionMeshSlot (×10) and CameraMesh
 
@@ -555,7 +557,9 @@ Slot: `bool present`; if true — `Object<List<Vector3>> vertices`, `i32 triangl
 triangleCount × (`i32 I0`, `i32 I1`, `i32 I2`). Slots 0..9 become primitives of one CollisionSkin;
 the slot index is the primitive index that character physics uses to determine the surface material,
 so slot = `CollisionMaterials` (Generic, Gravel, Grass, Wood, Snow, Stone, Mud, Reflect, Water, Lava).
-Example `bf_s1`: slots 0, 3, 4, 5 are filled.
+Example `bf_s1`: slots 0, 3, 4, 5 are filled. Levels using each slot: Generic 110, Gravel 28, Grass 49,
+Wood 35, Snow 9, Stone 69, Mud 8, Reflect 4, Water 0, Lava 0 (water and lava collision comes from the
+Liquid entries instead). Every level has exactly one directional light.
 
 CameraMesh: `bool present` + the same layout (vertices + triangles).
 
@@ -579,7 +583,8 @@ the distance from its position to the box is ≤ its radius.
 | 4 | triangleCount × Triangle (25 bytes) | |
 
 Triangle: `u16 VertexA, VertexB, VertexC`, `u16 NeighbourA, NeighbourB, NeighbourC` (indices of neighboring
-triangles; 0xFFFF is probably "no neighbor", not verified), `f32 CostAB, CostBC, CostCA`, `u8 MovementProperties`.
+triangles; 0xFFFF = no neighbor — confirmed: 16174 such values in the 41912 triangles of all levels and nested
+parts, and every other value is a valid triangle index), `f32 CostAB, CostBC, CostCA`, `u8 MovementProperties`.
 Triangles with the Dynamic flag (0x80) get dynamic neighbors (joining with animated navmeshes).
 Limit of 65535 vertices/triangles (example `ru_s5`: 6818 vertices, 12577 triangles).
 
@@ -900,7 +905,7 @@ BuffType 0–8; AuraType 0–1; EventType 0–5, 8, 10–16.
 
 Total: **4308 of 4308** `.xnb` files parsed in full with no remainder.
 
-Not covered by data (layout from the code only): ForceField (0 in all levels), AuraType 2–4
+Not covered by data (layout from the code only): AuraType 2–4
 (Boost/LifeSteal/Love), EventType 6 (Decal) and 9 (Overkill, no fields), AnimationAction SetItemAttach,
 Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate branch without the animation part.
 
@@ -910,8 +915,8 @@ Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate 
 
 1. **Semantics of the bool pairs in MeshSettings** of AnimatedLevelPart (presumably visible / castShadows) — verify against
    their usage in part rendering.
-2. **Neighbour = 0xFFFF** in navmesh triangles — confirm that it means "no neighbor", and the meaning of Cost* (edge length
-   or the cost of crossing the edge to the neighbor).
+2. **Meaning of Cost*** in navmesh triangles (edge length or the cost of crossing the edge to the neighbor).
+   (0xFFFF = "no neighbor" is confirmed, see §4.9.)
 3. **Mapping of collision slots to CollisionMaterials**: the conclusion is based on the primitive index in character physics;
    it should be confirmed on levels with snow/water.
 4. **TextureCube face order** and mip order — the standard order is assumed (+X,−X,+Y,−Y,+Z,−Z); not verified visually.
@@ -927,4 +932,5 @@ Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate 
 9. **Factions, Order, ReactTo, CastType, Decal** — the numeric enum values are not listed here (stored as i32/u8).
 10. **Is bit-exact compatibility of `GetHashCodeCustom` needed** for strings containing non-ASCII characters (the algorithm
     works with UTF-16 code units — for ASCII the result matches the description).
-11. Compatibility of the `Content/Shaders/*.xnb` (fx_2_0) bytecode with MojoShader/FNA — not verified.
+11. Compatibility of the `Content/Shaders/*.xnb` (fx_2_0) bytecode with MojoShader/FNA — checked: 50 of 51 effects
+    work after a bytecode patch, see [Stack risk checks](../engine/RISK_CHECKS.md).
