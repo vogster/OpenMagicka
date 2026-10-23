@@ -2,6 +2,7 @@
 
 Usage: python tools/wiki_sync.py [--dry-run]
 The token is taken from $CHILLADESK_TOKEN or from .mcp.json.
+docs/README.md becomes the wiki home page; every other page is created under it.
 """
 import json
 import os
@@ -13,15 +14,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT = "OM"
 PARENT = "OpenMagicka"
 PAGES = {
-    "docs/ENGINE_ANALYSIS.md": "Анализ движка",
-    "docs/formats/XNB_READERS.md": "Форматы XNB",
-    "docs/formats/LEVELS_TRIGGERS.md": "Уровни и триггеры",
-    "docs/gameplay/SPELLS.md": "Заклинания и бой",
-    "docs/engine/ARCHITECTURE.md": "Архитектура движка",
-    "docs/engine/ENTITIES_AI.md": "Сущности, AI и сеть",
-    "docs/engine/RISK_CHECKS.md": "Проверка рисков стека",
-    "docs/adr/0001-stack.md": "ADR-0001 Стек",
-    "docs/adr/0002-network.md": "ADR-0002 Сетевая игра",
+    "docs/README.md": PARENT,
+    "docs/ENGINE_ANALYSIS.md": "Engine analysis",
+    "docs/TASKS.md": "Backlog",
+    "docs/formats/XNB_READERS.md": "XNB formats",
+    "docs/formats/LEVELS_TRIGGERS.md": "Levels and triggers",
+    "docs/gameplay/SPELLS.md": "Spells and combat",
+    "docs/engine/ARCHITECTURE.md": "Engine architecture",
+    "docs/engine/ENTITIES_AI.md": "Entities, AI and network",
+    "docs/engine/RISK_CHECKS.md": "Stack risk checks",
+    "docs/adr/0001-stack.md": "ADR-0001 Stack",
+    "docs/adr/0002-network.md": "ADR-0002 Network play",
 }
 MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+\.md)\)")
 
@@ -84,8 +87,10 @@ def main():
         if action == "update":
             call(url, auth, "update_wiki_page", {"project": PROJECT, "title": title, "content": content})
         else:
-            call(url, auth, "create_wiki_page", {"project": PROJECT, "title": title,
-                                                 "parent": PARENT, "content": content})
+            args = {"project": PROJECT, "title": title, "content": content}
+            if title != PARENT:
+                args["parent"] = PARENT
+            call(url, auth, "create_wiki_page", args)
 
 
 if __name__ == "__main__":
