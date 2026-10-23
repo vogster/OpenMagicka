@@ -71,7 +71,9 @@ internal sealed class XnbTestWriter
         return this;
     }
 
-    public XnbFile Build()
+    public XnbFile Build() => XnbFile.Read(BuildBytes());
+
+    public byte[] BuildBytes()
     {
         using var body = new MemoryStream();
         using var w = new BinaryWriter(body, Encoding.UTF8);
@@ -87,6 +89,6 @@ internal sealed class XnbTestWriter
         var file = new List<byte>("XNB"u8.ToArray()) { (byte)'w', 4, 0 };
         file.AddRange(BitConverter.GetBytes(10 + data.Length));
         file.AddRange(data);
-        return XnbFile.Read([.. file]);
+        return [.. file];
     }
 }

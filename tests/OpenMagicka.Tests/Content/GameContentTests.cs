@@ -88,6 +88,37 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Equal(4308, loaded.Values.Sum());
     }
 
+    [GameContentFact]
+    public void EveryExternalReference_PointsToAnExistingAsset()
+    {
+        var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var root = loader.Files.Root;
+        var total = 0;
+        var missing = new SortedSet<string>();
+        foreach (var path in Directory.GetFiles(root, "*.xnb", SearchOption.AllDirectories))
+        {
+            var asset = Path.GetRelativePath(root, path)[..^4].Replace(Path.DirectorySeparatorChar, '/');
+            var content = loader.Load(asset);
+            foreach (var reference in ExternalReferenceWalker.Find(content.Root).Concat(content.SharedResources.SelectMany(ExternalReferenceWalker.Find)))
+            {
+                total++;
+                var target = loader.ResolveReference(asset, reference);
+                if (target is null || !loader.Files.Exists(target + ".xnb"))
+                {
+                    missing.Add($"{asset} -> {reference.Path}");
+                }
+            }
+        }
+
+        output.WriteLine($"{total} external references, {missing.Count} distinct unresolved");
+        foreach (var m in missing.Take(40))
+        {
+            output.WriteLine("  missing " + m);
+        }
+        Assert.True(total > 1000, $"only {total} references found");
+        Assert.Empty(missing);
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {
