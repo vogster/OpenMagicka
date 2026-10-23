@@ -579,18 +579,24 @@ whether damage/notification/knockback/effects are applied.)
 6. **Statuses before resistances** (section 9): Fire→Burning, Cold→Cold, Water→Wet, Poison→Poisoned,
    Life→Healing, Steam→Wet. DPS = entry amount, magnitude = entry magnitude.
 7. **Resistances** (section 8) → modified amount and magnitude. `|magnitude| ≈ 0` → `Deflected`, done.
-8. `Stun` (amount > 0) → stun timer; `Bleed` → Bleeding status (DPS = the template's `BleedRate`).
+8. `Stun` (amount > 0) → stun timer; `Bleed` (amount > 0) → Bleeding status (DPS = the template's `BleedRate`).
 9. For the `Damage` flag:
    - Lightning against a **Wet** target → `amount ×2`;
    - Life → reduces the Poisoned magnitude by the entry magnitude (until removed);
    - Earth/Ice/Arcane against a **Frozen** target → `amount ×3` (otherwise blood/gore);
    - `HP −= amount × magnitude`; HP is capped above at MaxHP.
-   - Results: Damaged / Healed / Deflected (0) / Hit (`amount > HitTolerance`) / Pierced.
-10. Death: if HP ≤ 0 → Killed; if the target was Frozen or HP ≤ `−0.5·MaxHP − 500` →
-    **OverKill** (shatters into pieces, no corpse; HP = `−MaxHP − 1000`). Achievement for damage > 9000.
+   - Results: Damaged / Healed / Deflected (0) / Hit (`amount × magnitude > HitTolerance`) / Pierced.
+10. Death: if HP ≤ 0 → Killed; if the target was Frozen or HP ≤ `−0.5·MaxHP − 500` (the latter only
+    with blood and gore on) → **OverKill** (shatters into pieces, no corpse; HP = `−MaxHP − 1000`, but
+    only if the entry has an element other than Arcane; the OverKilled result is reported either way).
+    Achievement for damage > 9000.
 
 The result for the collection is the OR of the entry results, but `Deflected` remains only if all
 five entries were "deflected".
+
+In OpenMagicka, steps 6–10, the push velocity and regeneration are `OpenMagicka.Gameplay.Combat.DamageRules`
+(with `StatusSet` for §9 and `Resistances` for §8); steps 1–5 (immunity, entanglement, the
+self-shield, applying pushes and knockdowns, blocking) belong to the character (OM-32).
 
 Status DoT damage goes a separate path (`Damage(float, element)`): resistances are not applied
 (they are already accounted for in the DPS on application), but fire against Greased ×2, and shield/armor absorb it.
@@ -649,7 +655,9 @@ Wet→Frozen conversion, the `StatusResistance` of the **Ice** element is checke
 modifiers `×k`, negative ones `÷k`.
 
 `ResistanceAgainst(elements)` (for AI and some magicks): `1 − clamp(ΣModifier/300 + ΣMultiplier, −1, 1)`,
-where Frozen gives −350 to the Earth modifier and Greased doubles the Fire multiplier. 1 = full immunity.
+where Frozen gives −350 to the modifier and Greased doubles the multiplier. 1 = full immunity. The
+original checks the whole query, not the element at hand: with Frozen, every element's modifier loses
+350 when the query includes Earth; with Greased, every multiplier doubles when it includes Fire.
 
 ---
 
@@ -733,11 +741,17 @@ not applied, except that Cold and Wet only check the magnitude. So a grease with
 character), and nothing in vanilla applies Steamed (§13, question 3).
 
 More detail on the interactions above: grease is removed by Burning even when Burning itself is
-stopped by Cold or Wet, and by Wet even when Wet is stopped by burning; Burning on a Frozen target only
+stopped (by Cold, Wet or Frozen), and by Wet even when Wet is stopped by burning; Burning on a Frozen target only
 thaws it when the target is not also Wet. Cold that meets Burning (or drying) is not applied; if it
 meets Wet it freezes the target even so. Drying starts when burning removes Wet (or thaws the last of
 Frozen) unless it is already running, and restarts when Cold or Wet puts out a fire. (The original
 starts it only while the status's sound plays; OpenMagicka does not tie rules to sounds.)
+
+Reported outcomes: a status that took is "added" (also when a resistance turned its magnitude
+negative, as a Life multiplier below zero does to healing: it then holds no slot, but the cure of
+poison and bleeding already happened); one that met an opposite, froze the target or refreshed Frozen
+is "removed"; one resisted to nothing or forbidden is neither, even if it washed off grease or cured
+poison on the way. An expiring status stacked with a lasting one lasts.
 
 OpenMagicka difference: the original refreshes its status mask after an addition for the first four
 statuses only (Burning, Wet, Frozen, Cold), so a fresh Poisoned, Healing or Greased is invisible to
@@ -905,16 +919,16 @@ The spell color is the average of the colors (Fire and Lightning weighted by mag
 
 1. **Spray range**: the formula `R·(0.1·R·f)` gives ≈ `R²/10` (1×Fire ≈ 3.6, 5 elements ≈ 10).
    Is this intentional or an artifact? Needs checking against the game; for 1:1 we reproduce it as is.
-2. **Wet and Greased do not expire** on their own (magnitude does not decay). Check in the game whether there is external
-   removal (level water, time) not found in `Character`.
-3. **Steamed**: no source applying it was found in vanilla code (only handling). Possibly a dead
-   status, or it is applied from data/DLC.
+2. **Wet and Greased do not expire** on their own (magnitude does not decay). Confirmed in the status code
+   (§9): only other statuses remove them. Level water is not checked yet.
+3. **Steamed**: no source applying it was found in vanilla code (only handling); a full search for its
+   creation found none. Treated as a dead status that still works if something applies it.
 4. `const` constants from `Defines` (SPELL_TIME_*, SELF_*_MODIFIER, STATUS_*_TIME …): which are actually
    used (inlined in IL) needs a search for literals in IL, not by name.
 5. Life is counted twice in ice projectile damage (Force, Ice only), a bug in the original; decide
    whether to keep it (default: keep for compatibility).
 6. In `(Projectile, Area)`, fire/cold are included in the amount but not in the entry's element mask (the damage
-   is resisted as Earth/others); confirm in the game.
+   is resisted as Earth/others). Confirmed in the damage code; not yet seen in play.
 7. `Electrocute` in `Character` is empty: "water + lightning" in sprays/blasts does not shock Wet targets
    through this path. Check whether there is another mechanism (for example, via statuses).
 8. The exact geometry of barrier/mine chains (step, segment scale, fitting of the segment count)
@@ -924,8 +938,8 @@ The spell color is the average of the colors (Fire and Lightning weighted by mag
 10. TimeWarp, Wave, PerformanceEnchantment in the campaign: found only in Challenges; clarify
     (they may drop from characters via `DropMagicks` or come from DLC campaigns).
 11. Applying statuses **before** resistances means that a status's magnitude does not
-    depend on the attack's `Multiplier` (only on status resistance). Confirm on targets with
-    fire immunity.
+    depend on the attack's `Multiplier` (only on status resistance). Confirmed in the damage code
+    (§7.2 order); not yet seen in play on targets with fire immunity.
 12. How exactly player-count scaling affects already cached templates (it is applied at
     template load, and templates are cached by `ContentManager`): possible dependence on load
     order.
