@@ -19,6 +19,7 @@ PAGES = {
     "docs/gameplay/SPELLS.md": "Заклинания и бой",
     "docs/engine/ARCHITECTURE.md": "Архитектура движка",
     "docs/engine/ENTITIES_AI.md": "Сущности, AI и сеть",
+    "docs/engine/RISK_CHECKS.md": "Проверка рисков стека",
     "docs/adr/0001-stack.md": "ADR-0001 Стек",
     "docs/adr/0002-network.md": "ADR-0002 Сетевая игра",
 }

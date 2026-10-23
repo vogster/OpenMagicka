@@ -121,12 +121,14 @@ P/Invoke минимален: `QueryPerformanceCounter/Frequency`, `GetCurrentThr
 | [gameplay/SPELLS.md](gameplay/SPELLS.md) | элементы, очередь, типы заклинаний, урон, статусы, 34 магики |
 | [engine/ARCHITECTURE.md](engine/ARCHITECTURE.md) | потоки, рендер-пайплайн, шейдеры, физика, звук, ввод, сейвы |
 | [engine/ENTITIES_AI.md](engine/ENTITIES_AI.md) | сущности, состояния персонажа, AI, навмеш, сеть |
+| [engine/RISK_CHECKS.md](engine/RISK_CHECKS.md) | проверка рисков: шейдеры в FNA, XACT на FAudio, Linux |
 | [adr/0001-stack.md](adr/0001-stack.md) | решение: стек .NET 10 + FNA |
 | [adr/0002-network.md](adr/0002-network.md) | решение: сетевая модель и транспорт |
 
 ## 6. Ключевые риски
 
-- Совместимость XACT v45 (в т.ч. xWMA) с FAudio/FACT — главный непроверенный риск.
+- XACT v45 на FAudio работает, кроме xWMA: его нужно перекодировать при установке ([RISK_CHECKS](engine/RISK_CHECKS.md) §2).
+- Оригинальные шейдеры: 46/51 работают после патча байткода; 5, включая основной материал уровней `RenderDeferredEffect`, падают в MojoShader ([RISK_CHECKS](engine/RISK_CHECKS.md) §1).
 - FNA не поддерживает `EffectPool`: общие параметры (View/Projection/Time) выставлять в каждый эффект.
 - Лицензия JigLibX не подтверждена (XNAnimation — Ms-PL).
 - Ключи локализации/звуков/эффектов — хэш `String.GetHashCode` .NET 2.0–3.5 x86; нужна своя реализация.
