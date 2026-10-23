@@ -19,6 +19,7 @@ reason for the change; the changed code is marked `OpenMagicka fork`.
 |---|---|
 | `0001-hlsl-uniform-array-define.patch` | D3D11: the HLSL of effects with relatively addressed uniforms (the skinned characters' bone palette) did not compile |
 | `0002-spirv-scalar-exp.patch` | Vulkan: `AdditiveEffect` (light shafts and other additive objects) drew wrong colours, because AMD's driver miscompiles Exp2 of a whole vec4; `exp` is now one scalar Exp2 per written component |
+| `0003-preshader-dotswiz.patch` | All drivers: `ArcaneEffect` corrupted the heap when it was created, because its preshader uses `dotswiz6`, an opcode with 7 operands that MojoShader did not know and wrote past its 4-operand array; the opcode (and `dotswiz8`) is now supported and the array cannot overflow |
 
 ## Builds
 
@@ -31,6 +32,8 @@ the FNA3D and MojoShader commits, the SDL3 headers, the compiler and the hashes 
 of the DLL; a test fails when they no longer match the submodules or the patches, so rebuild after
 updating FNA or changing a patch. The licenses of FNA3D and MojoShader are in `licenses/`.
 
-The launcher ships this DLL instead of the FNA3D of the fetched fnalibs. On other platforms it uses
+The launcher ships this DLL instead of the FNA3D of the fetched fnalibs, with SOURCE.txt next to
+it as `FNA3D.OpenMagicka.txt`; the game takes FNA3D for ours only when the DLL's hash matches that
+record (`GraphicsDriver.HasOwnFna3d`), so a stock FNA3D in its place keeps the stock defaults. On other platforms it uses
 the stock FNA3D and defaults to the OpenGL driver, which the original effects need there
 (`GraphicsDriver`, docs/engine/ARCHITECTURE.md §3.2).

@@ -19,5 +19,5 @@ python tools/wiki_sync.py
 | M5 UI, audio, saves | audio, localization, menu, HUD, save import | |
 | M6 Multiplayer | local co-op, own network protocol | |
 
-Main open risks: `ArcaneEffect` still crashes in MojoShader (OM-62); xWMA playback (OM-61);
+Main open risks: our FNA3D with the MojoShader fixes exists for Windows x64 only (OM-69); xWMA playback (OM-61);
 the JigLibX license (OM-7).

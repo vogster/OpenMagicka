@@ -6,4 +6,5 @@ Compiler: Microsoft (R) C/C++ Optimizing Compiler Version 19.51.36260 for x64, s
 Patches:
   MojoShader/0001-hlsl-uniform-array-define.patch sha256 b7e21f5df0cf5559579329c5f7a8b68ed01545803689a83f5729f0494d31bdbe
   MojoShader/0002-spirv-scalar-exp.patch sha256 64b1063a55336d3d92a0cdfe1b89fe9aba8e655cab088ee40f2e50611818c5c9
-FNA3D.dll sha256 70f2cf95eabbf4230ea54724069f084bb58e2f808358799ca5030bd9364227f4
+  MojoShader/0003-preshader-dotswiz.patch sha256 1b9176773e95a499bab10f21012d83bf9f74da4cb278dbe15de0b14fb5a073b4
+FNA3D.dll sha256 369ed0ec246277ad5b16f5260f0dd673bbe6762f4bf91303ba3c05c47c8ab02d

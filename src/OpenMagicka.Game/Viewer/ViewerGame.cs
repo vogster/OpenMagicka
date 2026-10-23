@@ -83,7 +83,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         base.LoadContent();
         effect = new BasicEffect(GraphicsDevice);
         effect.EnableDefaultLighting();
-        shaders = new ShaderLibrary(new ShaderSource(loader), GpuWork);
+        shaders = new ShaderLibrary(new ShaderSource(loader, GraphicsDriver.HasOwnFna3d()), GpuWork);
         var library = shaders;
         deferredLoading = Task.Run(() => DeferredRenderer.Create(library, GpuWork, loader));
         particles = new ViewerParticles(Task.Run(() => OpenMagicka.Content.Particles.EffectLibrary.Load(loader.Files)));

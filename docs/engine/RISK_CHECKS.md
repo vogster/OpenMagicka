@@ -7,7 +7,7 @@ Date: 2026-10-23. Machine: Windows 11, AMD RX 9070 XT, FNA master `00498b0`, fna
 
 | Risk | Result |
 |---|---|
-| Original fx_2_0 shaders on FNA (OM-20, OM-60) | **50 of 51** effects load and draw after patching the bytecode; `ArcaneEffect` still corrupts the heap inside MojoShader (OM-62) |
+| Original fx_2_0 shaders on FNA (OM-20, OM-60, OM-62, OM-65) | **all 51** effects load and draw with our FNA3D (Windows x64); with the stock FNA3D 50 of 51, as `ArcaneEffect` corrupts the heap inside MojoShader |
 | XACT on FAudio (OM-18) | content version 45 is supported; **1000 cues** from 9 banks play; **xWMA does not work** (Windows: crash, Linux/macOS: no decoder) |
 | Linux (OM-2) | build, 21 tests and the window work in Docker (`tools/linux_check.sh`, Xvfb + Mesa llvmpipe) |
 
@@ -129,17 +129,27 @@ Debug FNA3D with assertions enabled (no assertion fires).
 This looks like a MojoShader bug worth reporting upstream (dot product output width and temp
 allocation). Per the maintainers' policy, a human has to write and verify that report.
 
-### 1.5 Still open: `ArcaneEffect` (OM-62)
+### 1.5 `ArcaneEffect` (OM-62, fixed in our FNA3D)
 
 `ArcaneEffect` fails differently: `0xC0000374` (heap corruption) while the effect is
 **created**. Stack: `FNA3D_CreateEffect` → `MOJOSHADER_compileEffect` → `readlargeobjects` →
-`MOJOSHADER_parse` → `destroy_context`, so parsing one of its four shader model 2.0 shaders
-corrupts the heap and the corruption is detected when the parse context is freed. No
-assertion fires. It is the only SM 2.0 effect with a non-empty preshader (34 instructions,
-40 literals, a `PRSI` output map). Finding the exact write needs a memory checker
-(AddressSanitizer build in the Linux container); page heap is not used because it changes
-system settings. It is one spell effect, so it does not block rendering levels; the fallback is
-our own HLSL for it.
+`MOJOSHADER_parse` → `destroy_context`. It is the only SM 2.0 effect with a non-empty preshader
+(34 instructions, 40 literals, a `PRSI` output map).
+
+Cause, found with an AddressSanitizer build of MojoShader's `testparse` (MSVC
+`/fsanitize=address`; a bad free in `MOJOSHADER_freePreshader`): instruction 24 of the
+preshader has the opcode `0x70E0` with 7 operands. It is D3DX's `dotswiz6`, the first three
+scalar sources dotted with the last three; here it gives the squared length of a vector, which
+`rsq` then normalises. MojoShader does not know the opcode, and its instruction structure holds
+only 4 operands, so the parser wrote past it into the next instructions; freeing one of the
+overwritten pointers corrupts the heap. The opcode `0x70D0` (`dotswiz8`, four with four, 9
+operands) has the same problem; the game does not use it.
+
+Our FNA3D (`native/patches/MojoShader/0003-preshader-dotswiz.patch`) parses and runs both
+opcodes, holds up to 9 operands per instruction and fails a parse with more instead of
+overflowing. Checked: all 51 effects parse cleanly under AddressSanitizer, and ArcaneEffect's
+preshader turns 1000 random inputs into unit vectors. With the stock FNA3D (Linux and macOS for
+now, OM-69) `ShaderSource` still refuses the effect, as the crash cannot be caught.
 
 ### 1.6 Other notes
 
@@ -149,7 +159,8 @@ our own HLSL for it.
   the default. Rechecked through the game's own path (`OpenMagicka --check-effects`: the
   `ShaderLibrary` loads each effect, patches it, creates it on the render thread, sets the
   global parameters and applies every pass): 50 of 51 effects on Vulkan and on D3D11
-  (`FNA3D_FORCE_DRIVER=D3D11`); `ArcaneEffect` is skipped (§1.5).
+  (`FNA3D_FORCE_DRIVER=D3D11`) with the stock FNA3D, where `ArcaneEffect` is skipped (§1.5);
+  with ours all 51 on Vulkan and OpenGL, and 50 on D3D11 (`ChasmEffect` below).
 - Drawing with real content (OM-63) showed that "loads and applies" is not "draws right" on every
   driver: on SDL_GPU (Vulkan) MojoShader's SPIR-V for `AdditiveEffect` gives wrong colours, and on
   D3D11 its HLSL for the skinned effects fails to compile at the first draw (shaders are compiled

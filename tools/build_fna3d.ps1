@@ -70,8 +70,13 @@ try {
     foreach ($patch in $patches) {
         Invoke-Native "applying $($patch.Name)" { git -C (Join-Path $src 'MojoShader') apply --ignore-whitespace $patch.FullName }
     }
-    $marked = Select-String -Path (Join-Path $src 'MojoShader/profiles/*.c') -Pattern 'OpenMagicka fork' -List
-    if ($marked.Count -lt $patches.Count) { throw 'the patches did not all reach the sources' }
+    foreach ($patch in $patches) {
+        # Applied for real: every file a patch changes carries the fork's marker afterwards.
+        foreach ($target in Select-String -Path $patch.FullName -Pattern '^\+\+\+ b/(.+)$') {
+            $file = Join-Path $src "MojoShader/$($target.Matches[0].Groups[1].Value.Trim())"
+            if (-not (Select-String -Path $file -Pattern 'OpenMagicka fork' -Quiet)) { throw "$($patch.Name) did not reach $file" }
+        }
+    }
 
     $build = Join-Path $work 'build'
     Invoke-Native 'cmake configure' {
@@ -89,7 +94,9 @@ try {
     $fna3d = git -C $source rev-parse HEAD
     $mojo = git -C (Join-Path $source 'MojoShader') rev-parse HEAD
     if ($LASTEXITCODE -ne 0) { throw 'git rev-parse failed' }
-    $compiler = (cl 2>&1 | Select-Object -First 1).ToString()
+    $env:VSLANG = '1033'   # cl's banner in English
+    $compiler = cl 2>&1 | ForEach-Object ToString | Where-Object { $_ -match 'Version \d+\.\d+\.\d+' } | Select-Object -First 1
+    if (-not $compiler) { throw 'could not read the version of cl' }
     $lines = @(
         'OpenMagicka build of FNA3D (altered source: see native/README.md).',
         "FNA3D $fna3d",

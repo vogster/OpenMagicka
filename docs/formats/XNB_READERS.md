@@ -936,5 +936,5 @@ Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate 
 9. **Factions, Order, ReactTo, CastType, Decal** — the numeric enum values are not listed here (stored as i32/u8).
 10. **Is bit-exact compatibility of `GetHashCodeCustom` needed** for strings containing non-ASCII characters (the algorithm
     works with UTF-16 code units — for ASCII the result matches the description).
-11. Compatibility of the `Content/Shaders/*.xnb` (fx_2_0) bytecode with MojoShader/FNA — checked: 50 of 51 effects
-    work after a bytecode patch, see [Stack risk checks](../engine/RISK_CHECKS.md).
+11. Compatibility of the `Content/Shaders/*.xnb` (fx_2_0) bytecode with MojoShader/FNA — checked: all 51 effects
+    work after a bytecode patch with our FNA3D (50 with the stock one), see [Stack risk checks](../engine/RISK_CHECKS.md).

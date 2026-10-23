@@ -16,6 +16,7 @@
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <None Include="$(FnaLibs)x64/*.dll" Exclude="$(FnaLibs)x64/FNA3D.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(RootDir)native/win-x64/FNA3D.dll" CopyToOutputDirectory="Always" Visible="false" />
+    <None Include="$(RootDir)native/win-x64/SOURCE.txt" Link="FNA3D.OpenMagicka.txt" CopyToOutputDirectory="Always" Visible="false" />
     <None Include="$(FnaLibs)D3D12/*.dll" Link="D3D12/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'X64'">

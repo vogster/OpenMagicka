@@ -48,11 +48,21 @@ public sealed class ShaderTests : IDisposable
     }
 
     [Fact]
-    public void EffectsThatCrashMojoShader_AreRefused()
+    public void EffectsThatCrashTheStockMojoShader_AreRefused()
     {
         var error = Assert.Throws<KnownBrokenEffectException>(() => Source().Bytecode("ArcaneEffect"));
 
         Assert.Contains("OM-62", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithOurFna3d_KnownBrokenEffectsAreNotSkipped()
+    {
+        var source = new ShaderSource(new ContentLoader(new ContentFileSystem(root), XnbReaderRegistry.Magicka), ownFna3d: true);
+
+        Assert.NotNull(source.Bytecode("ArcaneEffect"));
+        Assert.False(source.Skips("ArcaneEffect"));
+        Assert.True(Source().Skips("arcaneeffect"));
     }
 
     [Fact]

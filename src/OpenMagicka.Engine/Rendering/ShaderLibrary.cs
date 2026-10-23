@@ -8,7 +8,7 @@ using OpenMagicka.Engine.Threading;
 
 namespace OpenMagicka.Engine.Rendering;
 
-/// <summary>An effect the game does not load because it crashes MojoShader natively (where it cannot be caught).</summary>
+/// <summary>An effect the game does not load because it crashes the stock MojoShader natively (where it cannot be caught).</summary>
 public sealed class KnownBrokenEffectException(string message) : NotSupportedException(message);
 
 /// <summary>A game effect ready for the GPU: patched bytecode and the parameters it marks shared.</summary>
@@ -23,18 +23,22 @@ public sealed class ShaderSource
 {
     public const string Directory = "Shaders";
 
+    /// <summary>Effects the stock MojoShader crashes on; our FNA3D loads them.</summary>
     public static readonly FrozenDictionary<string, string> KnownBroken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["ArcaneEffect"] = "heap corruption in MOJOSHADER_parse (OM-62)",
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private readonly ContentLoader loader;
+    private readonly bool ownFna3d;
     private readonly ConcurrentDictionary<string, Lazy<ShaderProgram>> cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public ShaderSource(ContentLoader loader)
+    /// <param name="ownFna3d">FNA3D is our own build (native/README.md), whose MojoShader loads every effect.</param>
+    public ShaderSource(ContentLoader loader, bool ownFna3d = false)
     {
         ArgumentNullException.ThrowIfNull(loader);
         this.loader = loader;
+        this.ownFna3d = ownFna3d;
         Names = loader.Files.ListFiles(Directory, recursive: true)
             .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
             .Select(p => p[(Directory.Length + 1)..^4])
@@ -44,12 +48,13 @@ public sealed class ShaderSource
     /// <summary>The effect names under Shaders/, in name order.</summary>
     public IReadOnlyList<string> Names { get; }
 
-    public static bool IsKnownBroken(string name) => KnownBroken.ContainsKey(Path.GetFileName(Normalize(name)));
+    /// <summary>Whether the effect is refused (<see cref="KnownBrokenEffectException"/>) because this FNA3D would crash on it.</summary>
+    public bool Skips(string name) => !ownFna3d && KnownBroken.ContainsKey(Path.GetFileName(Normalize(name)));
 
     public ShaderProgram Get(string name)
     {
         var key = Normalize(name);
-        if (KnownBroken.TryGetValue(Path.GetFileName(key), out var reason))
+        if (!ownFna3d && KnownBroken.TryGetValue(Path.GetFileName(key), out var reason))
         {
             throw new KnownBrokenEffectException($"effect {key} is not loaded: {reason}");
         }

@@ -48,7 +48,7 @@ public sealed class OpenMagickaGame : ThreadedGame<GameFrame>
         }
         ExitCode = options.CheckEffects ? 1 : 0;
         var loader = new ContentLoader(new ContentFileSystem(content), XnbReaderRegistry.Magicka);
-        shaders = new ShaderLibrary(new ShaderSource(loader), GpuWork);
+        shaders = new ShaderLibrary(new ShaderSource(loader, GraphicsDriver.HasOwnFna3d()), GpuWork);
         var library = shaders;
         Task.Run(() => EffectWarmup.Run(library, GpuWork)).ContinueWith(task =>
         {

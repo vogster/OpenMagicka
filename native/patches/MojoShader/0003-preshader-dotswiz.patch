@@ -1,0 +1,154 @@
+OpenMagicka fork of MojoShader (altered source, see native/README.md).
+
+Preshaders: support the dotswiz6 and dotswiz8 opcodes, and never write past an instruction's
+operand array.
+
+D3DX preshaders have two dot-product opcodes MojoShader did not know, 0x70E0 (dotswiz6: the
+first three scalar sources dotted with the last three) and 0x70D0 (dotswiz8: four with four).
+They have 7 and 9 operands with the destination, but the instruction structure held only 4, so
+parsing ArcaneEffect (whose pixel shader normalises a vector with dotswiz6 and rsq) wrote past
+the array, corrupted the heap and crashed when the context was destroyed (an AddressSanitizer
+build reported a bad free in MOJOSHADER_freePreshader). Now:
+- the opcodes are parsed and run (MOJOSHADER_PRESHADEROP_DOTSWIZ6/8, added after the existing
+  ones so no value moves; they are not "scalar ops");
+- an instruction holds up to 9 operands, and one with more (or a count that wraps) fails the
+  parse instead of overflowing;
+- dotswiz is only accepted with one result element, the only form seen and verified;
+- the preshader runner has room for 8 sources;
+- testparse names the new opcodes and no longer reads past its xyzw mask when printing an
+  operand that starts at w (an existing bug of the tool, not of the library).
+Checked: all 51 effects of the game parse cleanly under AddressSanitizer (spirv, glsl120 and d3d
+profiles), and ArcaneEffect's preshader turns 1000 random inputs into unit vectors.
+
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -445,7 +445,10 @@ typedef enum MOJOSHADER_preshaderOpcode
+     MOJOSHADER_PRESHADEROP_ATAN2_SCALAR,
+     MOJOSHADER_PRESHADEROP_DIV_SCALAR,
+     MOJOSHADER_PRESHADEROP_DOT_SCALAR,
+-    MOJOSHADER_PRESHADEROP_NOISE_SCALAR
++    MOJOSHADER_PRESHADEROP_NOISE_SCALAR,
++    // OpenMagicka fork: dot products of N scalar sources with N more (N = 3 or 4), one result.
++    MOJOSHADER_PRESHADEROP_DOTSWIZ6,
++    MOJOSHADER_PRESHADEROP_DOTSWIZ8
+ } MOJOSHADER_preshaderOpcode;
+ 
+ typedef enum MOJOSHADER_preshaderOperandType
+@@ -469,7 +472,7 @@ typedef struct MOJOSHADER_preshaderInstruction
+     MOJOSHADER_preshaderOpcode opcode;
+     unsigned int element_count;
+     unsigned int operand_count;
+-    MOJOSHADER_preshaderOperand operands[4];
++    MOJOSHADER_preshaderOperand operands[9];  // OpenMagicka fork: DOTSWIZ8 has 8 sources + dest.
+ } MOJOSHADER_preshaderInstruction;
+ 
+ typedef struct MOJOSHADER_preshader
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2681,10 +2681,27 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+             case 0xA080: opcode = MOJOSHADER_PRESHADEROP_DIV_SCALAR; break;
+             case 0xD000: opcode = MOJOSHADER_PRESHADEROP_DOT_SCALAR; break;
+             case 0xD020: opcode = MOJOSHADER_PRESHADEROP_NOISE_SCALAR; break;
++            case 0x70E0: opcode = MOJOSHADER_PRESHADEROP_DOTSWIZ6; break;  // OpenMagicka fork
++            case 0x70D0: opcode = MOJOSHADER_PRESHADEROP_DOTSWIZ8; break;  // OpenMagicka fork
+             default: fail(ctx, "Unknown preshader opcode."); break;
+         } // switch
+ 
+-        uint32 operand_count = SWAP32(fxlc.tokens[1]) + 1;  // +1 for dest.
++        // OpenMagicka fork: never write past the operand array (the count may also wrap).
++        const uint32 source_count = SWAP32(fxlc.tokens[1]);
++        if (source_count >= STATICARRAYLEN(inst->operands))
++        {
++            fail(ctx, "Too many preshader operands.");
++            return;
++        } // if
++        // OpenMagicka fork: dotswiz is only known for a single result element.
++        if (((opcode == MOJOSHADER_PRESHADEROP_DOTSWIZ6) || (opcode == MOJOSHADER_PRESHADEROP_DOTSWIZ8))
++            && ((opcodetok & 0xFF) != 1))
++        {
++            fail(ctx, "Unsupported preshader dotswiz element count.");
++            return;
++        } // if
++
++        uint32 operand_count = source_count + 1;  // +1 for dest.
+ 
+         inst->opcode = opcode;
+         inst->element_count = (unsigned int) (opcodetok & 0xFF);
+diff --git a/mojoshader_effects.c b/mojoshader_effects.c
+--- a/mojoshader_effects.c
++++ b/mojoshader_effects.c
+@@ -33,7 +33,8 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+     } // if
+ 
+     double dst[4] = { 0, 0, 0, 0 };
+-    double src[3][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
++    double src[8][4];  // OpenMagicka fork: up to 8 sources (DOTSWIZ8)
++    memset(src, '\0', sizeof (src));
+     const double *src0 = &src[0][0];
+     const double *src1 = &src[1][0];
+     const double *src2 = &src[2][0];
+@@ -57,7 +58,8 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+         const MOJOSHADER_preshaderOperand *operand = inst->operands;
+         const int elems = inst->element_count;
+         const int elemsbytes = sizeof (double) * elems;
+-        const int isscalarop = (inst->opcode >= scalarstart);
++        const int isscalarop = (inst->opcode >= scalarstart) &&
++                               (inst->opcode <= MOJOSHADER_PRESHADEROP_NOISE_SCALAR);
+ 
+         assert(elems >= 0);
+         assert(elems <= 4);
+@@ -179,6 +181,20 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+             //OPCODE_CASE(NOISE_SCALAR, ???)  // !!! FIXME: ?
+             #undef OPCODE_CASE
+ 
++            // OpenMagicka fork: the first half of the scalar sources dotted with the second half
++            //  (the parser only accepts one result element for these).
++            case MOJOSHADER_PRESHADEROP_DOTSWIZ6:
++            case MOJOSHADER_PRESHADEROP_DOTSWIZ8:
++            {
++                const int half = (inst->opcode == MOJOSHADER_PRESHADEROP_DOTSWIZ6) ? 3 : 4;
++                double final = 0.0;
++                for (i = 0; i < half; i++)
++                    final += src[i][0] * src[i + half][0];
++                for (i = 0; i < elems; i++)
++                    dst[i] = final;
++                break;
++            } // case
++
+             case MOJOSHADER_PRESHADEROP_DOT:
+             {
+                 double final = 0.0;
+diff --git a/utils/testparse.c b/utils/testparse.c
+--- a/utils/testparse.c
++++ b/utils/testparse.c
+@@ -149,7 +149,8 @@ static void print_preshader_operand(const MOJOSHADER_preshader *preshader,
+     const MOJOSHADER_preshaderInstruction *inst = &preshader->instructions[instidx];
+     const MOJOSHADER_preshaderOperand *operand = &inst->operands[opidx];
+     const int elems = inst->element_count;
+-    const int isscalarop = (inst->opcode >= MOJOSHADER_PRESHADEROP_SCALAR_OPS);
++    const int isscalarop = (inst->opcode >= MOJOSHADER_PRESHADEROP_SCALAR_OPS) &&
++                           (inst->opcode <= MOJOSHADER_PRESHADEROP_NOISE_SCALAR);
+     const int isscalar = ((isscalarop) && (opidx == 0)); // probably wrong.
+     int i;
+ 
+@@ -200,7 +201,7 @@ static void print_preshader_operand(const MOJOSHADER_preshader *preshader,
+             {
+                 printf(".");
+                 for (i = 0; i < elems; i++)
+-                    printf("%c", mask[idx++]);
++                    printf("%c", mask[(idx++) % 4]);  // OpenMagicka fork: stay in the mask
+             } // else if
+             break;
+         } // case
+@@ -222,7 +223,8 @@ static void print_preshader(const MOJOSHADER_preshader *preshader,
+         "nop", "mov", "neg", "rcp", "frc", "exp", "log", "rsq", "sin", "cos",
+         "asin", "acos", "atan", "min", "max", "lt", "ge", "add", "mul",
+         "atan2", "div", "cmp", "movc", "dot", "noise", "min", "max", "lt",
+-        "ge", "add", "mul", "atan2", "div", "dot", "noise"
++        "ge", "add", "mul", "atan2", "div", "dot", "noise",
++        "dotswiz6", "dotswiz8"  // OpenMagicka fork
+     };
+ 
+     INDENT(); printf("PRESHADER:\n");
