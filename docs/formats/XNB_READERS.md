@@ -905,6 +905,10 @@ BuffType 0–8; AuraType 0–1; EventType 0–5, 8, 10–16.
 
 Total: **4308 of 4308** `.xnb` files parsed in full with no remainder.
 
+The C# readers of OpenMagicka (`OpenMagicka.Content`, registry `XnbReaderRegistry.Magicka`) reproduce
+this: with `MAGICKA_DIR` set, the test `MagickaContent_LoadsCompletely` loads all 4308 files with no
+bytes left, and the LZX output matches the research decoder byte for byte (SHA-256 per file).
+
 Not covered by data (layout from the code only): AuraType 2–4
 (Boost/LifeSteal/Love), EventType 6 (Decal) and 9 (Overkill, no fields), AnimationAction SetItemAttach,
 Ability ElementSteal/ZombieGrip, CollisionSkinReader, the PhysicsEntityTemplate branch without the animation part.

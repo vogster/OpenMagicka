@@ -18,12 +18,12 @@ internal static partial class LevelModelReader
     public static LevelModelContent Read(XnbContentReader r)
     {
         var geometry = r.ReadObject<BiTreeModelContent>();
-        var parts = ReadList(r, MinPartSize, x => ReadAnimatedPart(x, depth: 0));
-        var lights = ReadList(r, 1 + 24 + 8 + 13 + 24 + 12 + 5, ReadLight);
-        var effects = ReadList(r, 2 + 28, ReadEffectPlacement);
-        var physics = ReadList(r, 64 + 1, x => new PhysicsEntityPlacement(x.ReadMatrix(), x.ReadString()));
-        var liquids = ReadList(r, 4 + 12 + 3, ReadLiquid);
-        var forceFields = ReadList(r, 41 + 3 + 12, ReadForceField);
+        var parts = r.ReadList(MinPartSize, x => ReadAnimatedPart(x, depth: 0));
+        var lights = r.ReadList(1 + 24 + 8 + 13 + 24 + 12 + 5, ReadLight);
+        var effects = r.ReadList(2 + 28, ReadEffectPlacement);
+        var physics = r.ReadList(64 + 1, x => new PhysicsEntityPlacement(x.ReadMatrix(), x.ReadString()));
+        var liquids = r.ReadList(4 + 12 + 3, ReadLiquid);
+        var forceFields = r.ReadList(41 + 3 + 12, ReadForceField);
 
         var collision = new CollisionMeshContent?[CollisionSlots];
         for (var slot = 0; slot < CollisionSlots; slot++)
@@ -32,8 +32,8 @@ internal static partial class LevelModelReader
         }
         var camera = r.ReadBoolean() ? ReadCollisionMesh(r) : null;
 
-        var triggers = ReadList(r, 1 + 40, x => new TriggerAreaContent(x.ReadString(), x.ReadVector3(), x.ReadVector3(), x.ReadQuaternion()));
-        var locators = ReadList(r, 1 + 68, ReadLocator);
+        var triggers = r.ReadList(1 + 40, x => new TriggerAreaContent(x.ReadString(), x.ReadVector3(), x.ReadVector3(), x.ReadQuaternion()));
+        var locators = r.ReadList(1 + 68, ReadLocator);
         var navMesh = ReadNavMesh(r);
         return new LevelModelContent(geometry, parts, lights, effects, physics, liquids, forceFields,
             collision, camera, triggers, locators, navMesh);
@@ -46,9 +46,10 @@ internal static partial class LevelModelReader
         var direction = r.ReadVector3();
         var type = (LevelLightType)r.ReadInt32();
         var variation = (LightVariationType)r.ReadInt32();
-        if (!Enum.IsDefined(type) || !Enum.IsDefined(variation))
+        // The original refuses to load other light types (Custom = 10).
+        if (!Enum.IsDefined(type))
         {
-            throw new InvalidDataException($"light '{name}' has type {(int)type} and variation {(int)variation}");
+            throw new InvalidDataException($"light '{name}' has unsupported type {(int)type}");
         }
         return new LevelLightContent(name, position, direction, type, variation,
             Range: r.ReadSingle(),
@@ -78,9 +79,9 @@ internal static partial class LevelModelReader
             VertexBuffer: r.ReadObject<VertexBufferContent>(),
             IndexBuffer: r.ReadObject<IndexBufferContent>(),
             Declaration: r.ReadObject<VertexDeclarationContent>(),
-            VertexStride: ReadNonNegative(r),
-            NumVertices: ReadNonNegative(r),
-            PrimitiveCount: ReadNonNegative(r),
+            VertexStride: r.ReadNonNegative(),
+            NumVertices: r.ReadNonNegative(),
+            PrimitiveCount: r.ReadNonNegative(),
             HasCollision: r.ReadBoolean(),
             Freezable: r.ReadBoolean(),
             AutoFreeze: r.ReadBoolean());
@@ -100,26 +101,9 @@ internal static partial class LevelModelReader
         VertexBuffer: r.ReadObject<VertexBufferContent>(),
         IndexBuffer: r.ReadObject<IndexBufferContent>(),
         Declaration: r.ReadObject<VertexDeclarationContent>(),
-        VertexStride: ReadNonNegative(r),
-        NumVertices: ReadNonNegative(r),
-        PrimitiveCount: ReadNonNegative(r));
+        VertexStride: r.ReadNonNegative(),
+        NumVertices: r.ReadNonNegative(),
+        PrimitiveCount: r.ReadNonNegative());
 
     private static LocatorContent ReadLocator(XnbContentReader r) => new(r.ReadString(), r.ReadMatrix(), r.ReadSingle());
-
-    /// <summary>A u32 count followed by that many items; minBytes guards against huge allocations.</summary>
-    private static T[] ReadList<T>(XnbContentReader r, int minBytes, Func<XnbContentReader, T> read)
-    {
-        var items = new T[r.ReadCount(minBytes)];
-        for (var i = 0; i < items.Length; i++)
-        {
-            items[i] = read(r);
-        }
-        return items;
-    }
-
-    private static int ReadNonNegative(XnbContentReader r)
-    {
-        var value = r.ReadInt32();
-        return value >= 0 ? value : throw new InvalidDataException($"negative level value {value}");
-    }
 }

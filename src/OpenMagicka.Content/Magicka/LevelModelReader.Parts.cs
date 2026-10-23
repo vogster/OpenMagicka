@@ -21,16 +21,16 @@ internal static partial class LevelModelReader
         var name = r.ReadString();
         var affectShields = r.ReadBoolean();
         var model = r.ReadObject<ModelContent>();
-        var meshSettings = ReadList(r, 1 + 2, x => new MeshSetting(x.ReadString(), x.ReadBoolean(), x.ReadBoolean()));
-        var liquids = ReadList(r, 4 + 12 + 3, ReadLiquid);
-        var locators = ReadList(r, 1 + 68, ReadLocator);
+        var meshSettings = r.ReadList(1 + 2, x => new MeshSetting(x.ReadString(), x.ReadBoolean(), x.ReadBoolean()));
+        var liquids = r.ReadList(4 + 12 + 3, ReadLiquid);
+        var locators = r.ReadList(1 + 68, ReadLocator);
         var duration = r.ReadSingle();
         var animation = XnAnimationReaders.ReadKeyframes(r);
-        var effects = ReadList(r, 2 + 28, ReadEffectPlacement);
-        var lights = ReadList(r, 1 + 64, x => new PartLightAttachment(x.ReadString(), x.ReadMatrix()));
+        var effects = r.ReadList(2 + 28, ReadEffectPlacement);
+        var lights = r.ReadList(1 + 64, x => new PartLightAttachment(x.ReadString(), x.ReadMatrix()));
         var collision = r.ReadBoolean() ? ReadPartCollision(r) : null;
         var navMesh = r.ReadBoolean() ? ReadNavMesh(r) : null;
-        var children = ReadList(r, MinPartSize, x => ReadAnimatedPart(x, depth + 1));
+        var children = r.ReadList(MinPartSize, x => ReadAnimatedPart(x, depth + 1));
         return new AnimatedLevelPartContent(name, affectShields, model, meshSettings, liquids, locators,
             duration, animation, effects, lights, collision, navMesh, children);
     }
@@ -46,11 +46,11 @@ internal static partial class LevelModelReader
     }
 
     /// <summary>A List&lt;Vector3&gt; object of vertices, then an i32 count of index triples.</summary>
-    private static CollisionMeshContent ReadCollisionMesh(XnbContentReader r)
+    internal static CollisionMeshContent ReadCollisionMesh(XnbContentReader r)
     {
         var vertices = r.ReadObject<IReadOnlyList<Vector3>>()
             ?? throw new InvalidDataException("collision mesh without a vertex list");
-        var triangles = ReadList(r, 12, x => new CollisionTriangle(x.ReadInt32(), x.ReadInt32(), x.ReadInt32()));
+        var triangles = r.ReadList(12, x => new CollisionTriangle(x.ReadInt32(), x.ReadInt32(), x.ReadInt32()));
         foreach (var t in triangles)
         {
             if (!InRange(t.I0, vertices.Count) || !InRange(t.I1, vertices.Count) || !InRange(t.I2, vertices.Count))

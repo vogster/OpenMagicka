@@ -74,13 +74,18 @@ public class GameContentTests(ITestOutputHelper output)
     [GameContentFact]
     public void MagickaContent_LoadsCompletely()
     {
-        var loaded = LoadAll(XnbReaderRegistry.Magicka, allowedMissing: name => name.StartsWith("Magicka.", StringComparison.Ordinal));
+        // Every reader the game uses is implemented: nothing may be missing.
+        var loaded = LoadAll(XnbReaderRegistry.Magicka, allowedMissing: _ => false);
 
         Assert.Equal(553, loaded.GetValueOrDefault("ModelReader"));
         Assert.Equal(327, loaded.GetValueOrDefault("SkinnedModelReader"));
         Assert.Equal(66, loaded.GetValueOrDefault("BitmapFontReader"));
         Assert.Equal(2296, loaded.GetValueOrDefault("Texture2DReader"));
         Assert.Equal(132, loaded.GetValueOrDefault("LevelModelReader"));
+        Assert.Equal(454, loaded.GetValueOrDefault("ItemReader"));
+        Assert.Equal(338, loaded.GetValueOrDefault("CharacterTemplateReader"));
+        Assert.Equal(69, loaded.GetValueOrDefault("PhysicsEntityTemplateReader"));
+        Assert.Equal(4308, loaded.Values.Sum());
     }
 
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
