@@ -1,4 +1,6 @@
 using System.Collections.Frozen;
+using OpenMagicka.Content.PolygonHead;
+using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Content.Xnb.Readers;
 
 namespace OpenMagicka.Content.Xnb;
@@ -19,12 +21,22 @@ public sealed class XnbReaderRegistry
     /// <summary>The XNA 3.1 readers used by Magicka's content.</summary>
     public static XnbReaderRegistry Standard { get; } = new(StandardReaders.All.ToFrozenDictionary());
 
-    /// <summary>Returns a new registry that also knows the given readers (game-specific ones).</summary>
-    public XnbReaderRegistry With(IEnumerable<KeyValuePair<string, XnbTypeReaderFunc>> additional)
+    /// <summary>Standard readers plus the engine libraries Magicka ships: XNAnimation and PolygonHead.</summary>
+    public static XnbReaderRegistry Magicka { get; } = Standard.With(XnAnimationReaders.All).With(PolygonHeadReaders.All);
+
+    /// <summary>
+    /// Returns a new registry that also knows the given readers (game-specific ones). A key that
+    /// is already registered is an error unless <paramref name="replace"/> is set.
+    /// </summary>
+    public XnbReaderRegistry With(IEnumerable<KeyValuePair<string, XnbTypeReaderFunc>> additional, bool replace = false)
     {
         var merged = new Dictionary<string, XnbTypeReaderFunc>(readers);
         foreach (var (key, reader) in additional)
         {
+            if (!replace && merged.ContainsKey(key))
+            {
+                throw new ArgumentException($"reader '{key}' is already registered", nameof(additional));
+            }
             merged[key] = reader;
         }
         return new XnbReaderRegistry(merged.ToFrozenDictionary());

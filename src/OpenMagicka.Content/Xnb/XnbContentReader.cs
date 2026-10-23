@@ -78,6 +78,15 @@ public sealed class XnbContentReader
         var other => throw new InvalidDataException($"expected {typeof(T).Name}, found {other.GetType().Name}"),
     };
 
+    /// <summary>An object that is either an inline <typeparamref name="T"/> or an external reference.</summary>
+    public ContentRef<T> ReadContentRef<T>() where T : class => ReadObject() switch
+    {
+        null => default,
+        T inline => ContentRef<T>.FromInline(inline),
+        ExternalReference external => ContentRef<T>.FromExternal(external),
+        var other => throw new InvalidDataException($"expected {typeof(T).Name} or a reference, found {other.GetType().Name}"),
+    };
+
     /// <summary>0 = null, otherwise a 1-based index into the file's shared resources.</summary>
     public SharedResourceRef? ReadSharedResourceRef()
     {
@@ -124,6 +133,34 @@ public sealed class XnbContentReader
     }
 
     public string ReadString() => reader.ReadString();
+
+    /// <summary>
+    /// One UTF-8 encoded character as written by BinaryWriter.Write(char): 1 to 3 bytes. A 4-byte
+    /// sequence (outside the BMP) is accepted as well, deliberately wider than the writer.
+    /// </summary>
+    public Rune ReadUtf8Char()
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        bytes[0] = reader.ReadByte();
+        var length = bytes[0] switch
+        {
+            < 0x80 => 1,
+            >= 0xC2 and < 0xE0 => 2,
+            >= 0xE0 and < 0xF0 => 3,
+            >= 0xF0 and < 0xF5 => 4,
+            _ => throw new InvalidDataException($"invalid UTF-8 lead byte 0x{bytes[0]:X2}"),
+        };
+        for (var i = 1; i < length; i++)
+        {
+            bytes[i] = reader.ReadByte();
+        }
+        if (Rune.DecodeFromUtf8(bytes[..length], out var rune, out var consumed) != System.Buffers.OperationStatus.Done
+            || consumed != length)
+        {
+            throw new InvalidDataException("invalid UTF-8 character");
+        }
+        return rune;
+    }
 
     public bool ReadBoolean() => reader.ReadByte() switch
     {
@@ -176,6 +213,8 @@ public sealed class XnbContentReader
         ReadSingle(), ReadSingle(), ReadSingle(), ReadSingle());
 
     public BoundingSphere ReadBoundingSphere() => new(ReadVector3(), ReadSingle());
+
+    public BoundingBox ReadBoundingBox() => new(ReadVector3(), ReadVector3());
 
     private XnbTypeReaderFunc Resolve(int index)
     {

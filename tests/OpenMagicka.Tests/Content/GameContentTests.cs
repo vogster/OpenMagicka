@@ -62,6 +62,29 @@ public class GameContentTests(ITestOutputHelper output)
     [GameContentFact]
     public void StandardXnaContent_LoadsCompletely()
     {
+        var loaded = LoadAll(XnbReaderRegistry.Standard, allowedMissing: name => !name.StartsWith("Microsoft.Xna", StringComparison.Ordinal));
+
+        Assert.Equal(2296, loaded.GetValueOrDefault("Texture2DReader"));
+        Assert.Equal(52, loaded.GetValueOrDefault("EffectReader"));
+        Assert.Equal(13, loaded.GetValueOrDefault("TextureCubeReader"));
+        Assert.Equal(7, loaded.GetValueOrDefault("Texture3DReader"));
+        Assert.Equal(1, loaded.GetValueOrDefault("ListReader<String>"));
+    }
+
+    [GameContentFact]
+    public void EngineLibraryContent_LoadsCompletely()
+    {
+        var loaded = LoadAll(XnbReaderRegistry.Magicka, allowedMissing: name => name.StartsWith("Magicka.", StringComparison.Ordinal));
+
+        Assert.Equal(553, loaded.GetValueOrDefault("ModelReader"));
+        Assert.Equal(327, loaded.GetValueOrDefault("SkinnedModelReader"));
+        Assert.Equal(66, loaded.GetValueOrDefault("BitmapFontReader"));
+        Assert.Equal(2296, loaded.GetValueOrDefault("Texture2DReader"));
+    }
+
+    /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
+    private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
+    {
         var files = Directory.GetFiles(GameContent.ContentDirectory!, "*.xnb", SearchOption.AllDirectories);
         var loaded = new Dictionary<string, int>();
         var unsupported = new Dictionary<string, int>();
@@ -73,15 +96,14 @@ public class GameContentTests(ITestOutputHelper output)
             var rootKey = xnb.TypeReaders[0].Key;
             try
             {
-                XnbContent.Load(xnb, XnbReaderRegistry.Standard);
+                XnbContent.Load(xnb, registry);
                 loaded[rootKey] = loaded.GetValueOrDefault(rootKey) + 1;
             }
             catch (XnbUnsupportedReaderException e)
             {
-                // Game-specific readers come later; an XNA reader must never be missing.
-                if (xnb.TypeReaders.Any(t => t.Key == e.ReaderKey && t.Name.StartsWith("Microsoft.Xna", StringComparison.Ordinal)))
+                if (xnb.TypeReaders.Any(t => t.Key == e.ReaderKey && !allowedMissing(t.Name)))
                 {
-                    failures.Add($"{path}: missing XNA reader {e.ReaderKey}");
+                    failures.Add($"{path}: missing reader {e.ReaderKey}");
                 }
                 unsupported[e.ReaderKey] = unsupported.GetValueOrDefault(e.ReaderKey) + 1;
             }
@@ -100,10 +122,6 @@ public class GameContentTests(ITestOutputHelper output)
             output.WriteLine($"later  {count,5} {key}");
         }
         Assert.Empty(failures);
-        Assert.Equal(2296, loaded.GetValueOrDefault("Texture2DReader"));
-        Assert.Equal(52, loaded.GetValueOrDefault("EffectReader"));
-        Assert.Equal(13, loaded.GetValueOrDefault("TextureCubeReader"));
-        Assert.Equal(7, loaded.GetValueOrDefault("Texture3DReader"));
-        Assert.Equal(1, loaded.GetValueOrDefault("ListReader<String>"));
+        return loaded;
     }
 }
