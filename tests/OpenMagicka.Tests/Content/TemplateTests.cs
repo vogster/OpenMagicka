@@ -216,7 +216,7 @@ public class TemplateTests
 
         var template = Assert.IsType<CharacterTemplateContent>(Load(w).Root);
 
-        Assert.Equal(("goblin_shaman", 4, true, true), (template.Id, template.Factions, template.Fearless, template.CanSeeInvisible));
+        Assert.Equal(("goblin_shaman", Factions.FRIENDLY, true, true), (template.Id, template.Factions, template.Fearless, template.CanSeeInvisible));
         Assert.Equal("head", Assert.Single(template.Lights).JointName);
         Assert.Equal((300f, 2, 3, 25, 1, 70f, 1.5f), (template.Stats.MaxHitpoints, template.Stats.NumberOfHealthBars,
             template.Stats.HitTolerance, template.Stats.ExperienceValue, template.Stats.Regeneration, template.Stats.Mass, template.Stats.StunTime));

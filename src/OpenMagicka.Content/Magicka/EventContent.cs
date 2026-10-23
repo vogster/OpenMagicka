@@ -43,7 +43,7 @@ public sealed record DecalEvent(int A, int B, int Scale) : EventContent;
 
 /// <summary>Spawns a character from Data/Characters; rotation in degrees.</summary>
 public sealed record SpawnEvent(string CharacterType, string IdleAnimation, string SpawnAnimation, float Health,
-    byte Order, byte ReactTo, byte Reaction, float Rotation, Vector3 Offset) : EventContent;
+    Order Order, ReactTo ReactTo, Order Reaction, float Rotation, Vector3 Offset) : EventContent;
 
 public sealed record OverkillEvent : EventContent;
 public sealed record SpawnGibsEvent(int StartIndex, int EndIndex) : EventContent;

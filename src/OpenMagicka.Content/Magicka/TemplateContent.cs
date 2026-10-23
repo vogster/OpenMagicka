@@ -16,7 +16,7 @@ public sealed record MoveAnimationsContent(MovementProperties Movement, IReadOnl
 public sealed record CharacterTemplateContent(
     string Id,
     string DisplayId,
-    int Factions,
+    Factions Factions,
     int BloodType,
     bool IsEthereal,
     bool LooksEthereal,

@@ -96,7 +96,7 @@ public static class DialogReader
     {
         var ttl = -1f;
         var animation = Animation.talk_casual0;
-        var bank = Banks.Characters;
+        var bank = SoundBanks.Characters;
         string? sound = null;
         foreach (var attribute in LegacyXml.AttributesOf(node))
         {
@@ -109,7 +109,7 @@ public static class DialogReader
                     (bank, sound) = parts.Length switch
                     {
                         1 => (bank, parts[0]),
-                        2 => (LegacyXml.Enum<Banks>(parts[0]), parts[1]),
+                        2 => (LegacyXml.Enum<SoundBanks>(parts[0]), parts[1]),
                         _ => throw new InvalidDataException($"invalid sound \"{attribute.Value}\": expected [bank/]cue"),
                     };
                     break;

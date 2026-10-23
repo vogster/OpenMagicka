@@ -31,7 +31,7 @@ an abstraction (UDP + our own lobby/relay server, Steam optional). Details:
 - [Stack risk checks](engine/RISK_CHECKS.md): original shaders on FNA, XACT on FAudio, Linux
 - [XNB formats](formats/XNB_READERS.md): binary layouts of the content readers
 - [Levels and triggers](formats/LEVELS_TRIGGERS.md): .lvl, scenes, conditions and actions, dialogs
-- [Enumerations](formats/ENUMS.md): names and values of the original's enums (animations, sound banks)
+- [Enumerations](formats/ENUMS.md): names and values of the original's enums (elements, factions, magicks, animations…)
 - [Spells and combat](gameplay/SPELLS.md): elements, combinations, magicks, damage, statuses
 - [Engine architecture](engine/ARCHITECTURE.md): main loop, rendering, physics, audio, input, saves
 - [Entities, AI and network](engine/ENTITIES_AI.md)

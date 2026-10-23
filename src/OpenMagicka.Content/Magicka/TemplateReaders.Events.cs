@@ -42,7 +42,7 @@ internal static partial class TemplateReaders
             5 => new CameraShakeEvent(r.ReadSingle(), r.ReadSingle(), r.ReadBoolean()),
             6 => new DecalEvent(r.ReadInt32(), r.ReadInt32(), r.ReadInt32()),
             8 => new SpawnEvent(r.ReadString(), r.ReadString(), r.ReadString(), r.ReadSingle(),
-                r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadSingle(), r.ReadVector3()),
+                (Order)r.ReadByte(), (ReactTo)r.ReadByte(), (Order)r.ReadByte(), r.ReadSingle(), r.ReadVector3()),
             9 => new OverkillEvent(),
             10 => new SpawnGibsEvent(r.ReadInt32(), r.ReadInt32()),
             11 => new SpawnItemEvent(r.ReadString()),

@@ -19,7 +19,7 @@ public sealed record BlockAbility(float Cooldown, AbilityTarget Target, string? 
     float Arc, int Shield) : AbilityContent(Cooldown, Target, Fuzzy, Animations);
 
 public sealed record CastSpellAbility(float Cooldown, AbilityTarget Target, string? Fuzzy, IReadOnlyList<string> Animations,
-    float MinRange, float MaxRange, float Arc, float ChantSpeed, float Power, int CastType, IReadOnlyList<Elements> Elements)
+    float MinRange, float MaxRange, float Arc, float ChantSpeed, float Power, CastType CastType, IReadOnlyList<Elements> Elements)
     : AbilityContent(Cooldown, Target, Fuzzy, Animations);
 
 public sealed record ConfuseGripAbility(float Cooldown, AbilityTarget Target, string? Fuzzy, IReadOnlyList<string> Animations)

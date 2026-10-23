@@ -77,7 +77,7 @@ internal static partial class TemplateReaders
         var moveAnimations = r.ReadList(1 + 4, x => new MoveAnimationsContent((MovementProperties)x.ReadByte(), ReadStrings(x)));
         var buffs = r.ReadList(BuffHeaderSize, ReadBuff);
         var auras = r.ReadList(AuraHeaderSize, ReadAura);
-        return new CharacterTemplateContent(id, displayId, factions, bloodType,
+        return new CharacterTemplateContent(id, displayId, (Factions)factions, bloodType,
             flags[0], flags[1], flags[2], flags[3], flags[4], flags[5], flags[6],
             sounds, gibs, lights, stats, summonBank, summonCue, resistances, models, skeleton, attachedEffects,
             animationSets, equipment, events, ai, abilities, moveAnimations, buffs, auras);

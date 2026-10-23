@@ -36,7 +36,7 @@ public class DialogReaderTests
         var message = Assert.Single(interact.Messages);
         Assert.Equal(("owner", MessageType.Say, false, false, 400), (message.Character, message.Type, message.Facing, message.ForceOnScreen, message.Width));
         var line = message.Lines[0];
-        Assert.Equal(("#poi_horse1", Banks.WaveBank, "poi_generic", Animation.talk_casual0, 2.5f), (line.Key, line.Bank, line.Sound, line.Animation, line.Ttl));
+        Assert.Equal(("#poi_horse1", SoundBanks.WaveBank, "poi_generic", Animation.talk_casual0, 2.5f), (line.Key, line.Bank, line.Sound, line.Animation, line.Ttl));
         Assert.Empty(line.Arguments);
         Assert.Equal("#poi_horse2", message.Lines[1].Key);
         Assert.Equal(["#name_a", "#name_b"], message.Lines[1].Arguments);
@@ -53,7 +53,7 @@ public class DialogReaderTests
         Assert.Equal((null, 0, InteractType.Talk, 0), (dialog.Id, dialog.Key, dialog.IconText, dialog.RepeatFrom));
         Assert.Equal((false, true, 1), (interact.Lock, interact.FocusOwner, interact.Count));
         Assert.Equal((null, true, true, 600), (message.Character, message.Facing, message.ForceOnScreen, message.Width));
-        Assert.Equal((Banks.Characters, (string?)null, Animation.talk_casual0, -1f), (line.Bank, line.Sound, line.Animation, line.Ttl));
+        Assert.Equal((SoundBanks.Characters, (string?)null, Animation.talk_casual0, -1f), (line.Bank, line.Sound, line.Animation, line.Ttl));
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class DialogReaderTests
         var message = One("""<Dialog><Interact><message facing="maybe" width="wide"><text sound="Grunt">#a</text></message></Interact></Dialog>""")
             .Interacts[0].Messages[0];
 
-        Assert.Equal((Banks.Characters, "grunt"), (message.Lines[0].Bank, message.Lines[0].Sound));
+        Assert.Equal((SoundBanks.Characters, "grunt"), (message.Lines[0].Bank, message.Lines[0].Sound));
         Assert.False(message.Facing);                // bool.TryParse failing leaves false
         Assert.Equal(600, message.Width);            // int.TryParse failing keeps the default
     }

@@ -22,7 +22,7 @@ internal static partial class TemplateReaders
         {
             "block" => new BlockAbility(cooldown, target, fuzzy, animations, r.ReadSingle(), r.ReadInt32()),
             "castspell" => new CastSpellAbility(cooldown, target, fuzzy, animations,
-                r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadInt32(), ReadElements(r)),
+                r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), (CastType)r.ReadInt32(), ReadElements(r)),
             "confusegrip" => new ConfuseGripAbility(cooldown, target, fuzzy, animations),
             "damagegrip" => new DamageGripAbility(cooldown, target, fuzzy, animations),
             "removestatus" => new RemoveStatusAbility(cooldown, target, fuzzy, animations),

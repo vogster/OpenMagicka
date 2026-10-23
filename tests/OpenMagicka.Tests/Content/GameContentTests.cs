@@ -243,6 +243,61 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Throws<InvalidDataException>(() => OpenMagicka.Content.Levels.SceneReader.Read(new MemoryStream(files.ReadAllBytes(orphan)), orphan));
     }
 
+    [GameContentFact]
+    public void EveryEnumValueInTheLevelScripts_Parses()
+    {
+        var parsers = new Dictionary<string, Func<string, bool>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["element"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Elements>(v, true, out _),
+            ["elements"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Elements>(v, true, out _),
+            ["faction"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Factions>(v, true, out _),
+            ["factions"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Factions>(v, true, out _),
+            ["order"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Order>(v, true, out _),
+            ["reaction"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Order>(v, true, out _),
+            ["reactto"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.ReactTo>(v, true, out _),
+            ["casttype"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.CastType>(v, true, out _),
+            ["magick"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.MagickType>(v, true, out _),
+            ["magicktype"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.MagickType>(v, true, out _),
+            ["statuseffect"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.StatusEffects>(v, true, out _),
+            ["animation"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Animation>(v, true, out _),
+            ["idleanimation"] = v => Enum.TryParse<OpenMagicka.Content.Magicka.Animation>(v, true, out _),
+        };
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var seen = new Dictionary<string, int>();
+        var bad = new SortedSet<string>();
+        foreach (var path in files.ListFiles("Levels", recursive: true).Where(p => p.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)))
+        {
+            var document = new System.Xml.XmlDocument();
+            document.Load(new System.Xml.XmlTextReader(new MemoryStream(files.ReadAllBytes(path))) { DtdProcessing = System.Xml.DtdProcessing.Prohibit });
+            foreach (System.Xml.XmlAttribute attribute in document.SelectNodes("//@*")!)
+            {
+                // "animation" names a character animation only on the AI event of that name;
+                // elsewhere (tutorial hints, level parts) it is something else.
+                var isAnimation = attribute.Name.Equals("animation", StringComparison.OrdinalIgnoreCase)
+                    || attribute.Name.Equals("idleAnimation", StringComparison.OrdinalIgnoreCase);
+                if (isAnimation && !attribute.OwnerElement!.Name.Equals("animation", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                if (parsers.TryGetValue(attribute.Name, out var parse))
+                {
+                    seen[attribute.Name.ToLowerInvariant()] = seen.GetValueOrDefault(attribute.Name.ToLowerInvariant()) + 1;
+                    if (!parse(attribute.Value))
+                    {
+                        bad.Add($"{attribute.Name}=\"{attribute.Value}\"");
+                    }
+                }
+            }
+        }
+        output.WriteLine(string.Join(", ", seen.OrderBy(p => p.Key).Select(p => $"{p.Key} {p.Value}")));
+        foreach (var b in bad)
+        {
+            output.WriteLine("  unparsed " + b);
+        }
+        Assert.True(seen.Values.Sum() > 5000, "too few enum attributes found");
+        Assert.Empty(bad);
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {

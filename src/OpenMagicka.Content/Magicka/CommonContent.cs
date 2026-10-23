@@ -3,12 +3,13 @@ using OpenMagicka.Content.Xna;
 
 namespace OpenMagicka.Content.Magicka;
 
-/// <summary>The eleven magic elements; bit index = position in resistance tables.</summary>
+/// <summary>The eleven magic elements (flags), with the original's alias Physical and its named groups.</summary>
 [Flags]
 public enum Elements
 {
     None = 0,
     Earth = 0x1,
+    Physical = 0x1,
     Water = 0x2,
     Cold = 0x4,
     Fire = 0x8,
@@ -19,7 +20,22 @@ public enum Elements
     Ice = 0x100,
     Steam = 0x200,
     Poison = 0x400,
+
+    // Groups the original names; content uses them in element lists.
+    Offensive = 0xFF3F,
+    Defensive = 0xB0,
+    All = 0xFFFF,
+    Magick = 0xFFFF,
+    Basic = 0xFF,
+    Instant = 0x371,
+    InstantPhysical = 0x171,
+    InstantNonPhysical = 0x270,
+    StatusEffects = 0x64E,
+    ShieldElements = 0xE0,
+    PhysicalElements = 0x101,
+    Beams = 0x60,
 }
+
 
 [Flags]
 public enum AttackProperties

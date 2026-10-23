@@ -13,7 +13,7 @@ public enum MessageType
 /// its <c>#1;</c>, <c>#2;</c> placeholders; a sound cue (lowered, null for none) from a bank; the
 /// speaker's animation; and how long it stays (-1: until the player continues).
 /// </summary>
-public sealed record DialogLine(string Key, IReadOnlyList<string> Arguments, Banks Bank, string? Sound, Animation Animation, float Ttl)
+public sealed record DialogLine(string Key, IReadOnlyList<string> Arguments, SoundBanks Bank, string? Sound, Animation Animation, float Ttl)
 {
     private readonly IReadOnlyList<string> arguments = ReadOnly.List(Arguments);
 

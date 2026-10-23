@@ -249,24 +249,253 @@ variant (`idlelong0`); the game picks a random variant for the generic one.
 | 230 | `taunt2` |
 | 231 | `totalanimations` |
 
-## Sound banks (`Banks`, flags, `ushort`)
+## Sound banks (`SoundBanks`, flags, `int`)
 
-The bank part of a `bank/cue` sound reference (dialog lines, actions). Default: Characters.
+The bank part of a `bank/cue` sound reference (dialog lines, actions, templates). Default for
+dialog lines: Characters. (`ushort` in the original; XNB stores it as `int`.)
 
 | Value | Name |
 |---|---|
-| 0x1 | WaveBank |
-| 0x2 | Music |
-| 0x4 | Ambience |
-| 0x8 | UI |
-| 0x10 | Spells |
-| 0x20 | Characters |
-| 0x40 | Footsteps |
-| 0x80 | Weapons |
-| 0x100 | Misc |
-| 0x200 | Additional |
-| 0x400 | AdditionalMusic |
+| 0 | `None` |
+| 0x1 | `WaveBank` |
+| 0x2 | `Music` |
+| 0x4 | `Ambience` |
+| 0x8 | `UI` |
+| 0x10 | `Spells` |
+| 0x20 | `Characters` |
+| 0x40 | `Footsteps` |
+| 0x80 | `Weapons` |
+| 0x100 | `Misc` |
+| 0x200 | `Additional` |
+| 0x400 | `AdditionalMusic` |
 
 ## Dialog message type (`MessageType`)
 
 A single value: `Say` = 0.
+
+## Elements (flags, `int`)
+
+Spell elements: damage, resistances, abilities, trigger conditions (`element`, `elements`). `Physical` is another name of Earth (the content writes `physical`); the names after Poison are groups (`beams`, `PhysicalElements`).
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 0x1 | `Earth` |
+| 0x1 | `Physical` |
+| 0x2 | `Water` |
+| 0x4 | `Cold` |
+| 0x8 | `Fire` |
+| 0x10 | `Lightning` |
+| 0x20 | `Arcane` |
+| 0x40 | `Life` |
+| 0x80 | `Shield` |
+| 0x100 | `Ice` |
+| 0x200 | `Steam` |
+| 0x400 | `Poison` |
+| 0xff3f | `Offensive` |
+| 0xb0 | `Defensive` |
+| 0xffff | `All` |
+| 0xffff | `Magick` |
+| 0xff | `Basic` |
+| 0x371 | `Instant` |
+| 0x171 | `InstantPhysical` |
+| 0x270 | `InstantNonPhysical` |
+| 0x64e | `StatusEffects` |
+| 0xe0 | `ShieldElements` |
+| 0x101 | `PhysicalElements` |
+| 0x60 | `Beams` |
+
+## Status effects (`StatusEffects`, flags, `short`)
+
+`Life` is another name of Healing. The original's count sentinel `NumberOfTypes` (0x200) is left out.
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 0x1 | `Burning` |
+| 0x2 | `Wet` |
+| 0x4 | `Frozen` |
+| 0x8 | `Cold` |
+| 0x10 | `Poisoned` |
+| 0x20 | `Healing` |
+| 0x20 | `Life` |
+| 0x40 | `Greased` |
+| 0x80 | `Steamed` |
+| 0x100 | `Bleeding` |
+
+## Attack properties (`AttackProperties`, flags)
+
+`short` in the original, stored as `int` in XNB. Knockback = Knockdown | Pushed.
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 0x1 | `Damage` |
+| 0x2 | `Knockdown` |
+| 0x4 | `Pushed` |
+| 0x6 | `Knockback` |
+| 0x8 | `Piercing` |
+| 0x10 | `ArmourPiercing` |
+| 0x20 | `Status` |
+| 0x40 | `Entanglement` |
+| 0x80 | `Stun` |
+| 0x100 | `Bleed` |
+
+## Factions (flags, `int`)
+
+`factions="evil,friendly"` in scripts; NEUTRAL (all non-player factions) and PLAYERS are groups. The sentinel `NUMBER_OF_FACTIONS` (0xF) is left out.
+
+| Value | Name |
+|---|---|
+| 0 | `NONE` |
+| 0x1 | `EVIL` |
+| 0x2 | `WILD` |
+| 0x4 | `FRIENDLY` |
+| 0x8 | `DEMON` |
+| 0x10 | `UNDEAD` |
+| 0x20 | `HUMAN` |
+| 0x40 | `WIZARD` |
+| 0xff | `NEUTRAL` |
+| 0x100 | `PLAYER0` |
+| 0x200 | `PLAYER1` |
+| 0x400 | `PLAYER2` |
+| 0x800 | `PLAYER3` |
+| 0x1000 | `TEAM_RED` |
+| 0x2000 | `TEAM_BLUE` |
+| 0x3f00 | `PLAYERS` |
+
+## AI orders (`Order`, `byte`)
+
+`order` and `reaction` attributes, the order and reaction of spawn events in XNB.
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 1 | `Idle` |
+| 2 | `Attack` |
+| 3 | `Defend` |
+| 4 | `Flee` |
+| 5 | `Wander` |
+| 6 | `Panic` |
+
+## AI provocation (`ReactTo`, flags, `byte`)
+
+`reactto="proximity, attack"` (spaces around names are allowed).
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 0x1 | `Attack` |
+| 0x2 | `Proximity` |
+
+## Cast types (`CastType`)
+
+None and Blast share 0.
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 0 | `Blast` |
+| 1 | `Force` |
+| 2 | `Area` |
+| 3 | `Self` |
+| 4 | `Weapon` |
+| 5 | `Magick` |
+
+## Magicks (`MagickType`)
+
+`magick` / `magickType` attributes, also as numbers (`magick="37"`). NrOfMagicks (35) ends the castable magicks; the values after it are item and enemy effects.
+
+| Value | Name |
+|---|---|
+| 0 | `None` |
+| 1 | `Revive` |
+| 2 | `Grease` |
+| 3 | `Haste` |
+| 4 | `Invisibility` |
+| 5 | `Teleport` |
+| 6 | `Fear` |
+| 7 | `Charm` |
+| 8 | `ThunderB` |
+| 9 | `Rain` |
+| 10 | `Tornado` |
+| 11 | `Blizzard` |
+| 12 | `MeteorS` |
+| 13 | `Conflagration` |
+| 14 | `ThunderS` |
+| 15 | `TimeWarp` |
+| 16 | `Vortex` |
+| 17 | `SUndead` |
+| 18 | `SElemental` |
+| 19 | `SDeath` |
+| 20 | `SPhoenix` |
+| 21 | `Nullify` |
+| 22 | `Corporealize` |
+| 23 | `CTD` |
+| 24 | `Napalm` |
+| 25 | `Portal` |
+| 26 | `TractorPull` |
+| 27 | `ProppMagick` |
+| 28 | `Levitate` |
+| 29 | `ChainLightning` |
+| 30 | `Confuse` |
+| 31 | `Wave` |
+| 32 | `PerformanceEnchantment` |
+| 33 | `JudgementSpray` |
+| 34 | `Amalgameddon` |
+| 35 | `NrOfMagicks` |
+| 36 | `Grow` |
+| 37 | `Shrink` |
+| 38 | `Etherealize` |
+| 39 | `Polymorph` |
+| 40 | `Earthquake` |
+| 41 | `Votal` |
+| 42 | `KnockDownChance` |
+| 43 | `SummonCross` |
+| 44 | `VladZap` |
+| 45 | `SpawnSlime` |
+| 46 | `SpawnSlimeOverkill` |
+| 47 | `GreaseSplash` |
+| 48 | `EtherealClone` |
+| 49 | `InflictBleedDamage` |
+| 50 | `InflictPoisonDamage` |
+
+## AI events (`AIEventType`) and loops (`LoopType`)
+
+The tag of an AI event, and the `type` of a loop event.
+
+| Value | Name |
+|---|---|
+| 0 | `Move` |
+| 1 | `Animation` |
+| 2 | `Face` |
+| 3 | `Kill` |
+| 4 | `Loop` |
+
+| Value | Name |
+|---|---|
+| 0 | `Loop` |
+| 1 | `Reverse` |
+
+## Collision materials (`CollisionMaterial`, `byte`)
+
+Surface materials of level collision meshes. The sentinel `NR_OF_MATERIAL` is left out.
+
+| Value | Name |
+|---|---|
+| 0 | `Generic` |
+| 1 | `Gravel` |
+| 2 | `Grass` |
+| 3 | `Wood` |
+| 4 | `Snow` |
+| 5 | `Stone` |
+| 6 | `Mud` |
+| 7 | `Reflect` |
+| 8 | `Water` |
+| 9 | `Lava` |
+
+## Checked against the content
+
+Every enum-valued attribute in the level scripts parses with these tables (6352 values of
+`element(s)`, `faction(s)`, `order`, `reaction`, `reactto`, `castType`, `magick(Type)`,
+`statusEffect` and the `animation` of AI events): `GameContentTests`.
