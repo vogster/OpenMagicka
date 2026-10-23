@@ -579,7 +579,7 @@ layout remove the dependency on the original blobs (and enable mods).
   `DestinationDimensions` = ∞ (it only serves the half-pixel shift).
 - The level's effects (`VisualEffectPlacement`) start with the level, each placed with
   `CreateWorld(position, forward, up)`; an animated part's effects too, times the part's world
-  transform at its rest pose (they then follow the part). The viewer steps them on the render thread with the frame
+  transform at its rest pose (the original then moves them with the part; the viewer keeps parts at rest). The viewer steps them on the render thread with the frame
   time (cut to 0.1 s) after a 2-second warm-up; the game will step them on its logic thread.
 
 ### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (904 files)

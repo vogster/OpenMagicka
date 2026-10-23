@@ -154,6 +154,35 @@ public class LevelPartTests
     }
 
     [Fact]
+    public void APartsEffect_TurnsWithThePart()
+    {
+        var turned = new BonePose(new Vector3(10, 0, 0), Quaternion.CreateFromAxisAngle(Vector3.Up, MathHelper.PiOver2), Vector3.One);
+        var door = Part("door", Vector3.Zero, null) with
+        {
+            Animation = [new AnimationKeyframe(0, turned)],
+            Effects = [new VisualEffectPlacement("smoke", new Vector3(1, 0, 0), Vector3.Forward, 0, "chimney_smoke")],
+        };
+
+        var world = Assert.Single(LevelParts.Effects([door])).World;
+
+        // The effect's own place first, then the part's: (1, 0, 0) turned a quarter about Y is (0, 0, -1).
+        Assert.True(Vector3.Distance(new Vector3(10, 0, -1), world.Translation) < 1e-4f, $"{world.Translation}");
+        Assert.True(Vector3.Distance(Vector3.Left, world.Forward) < 1e-4f, $"{world.Forward}");
+    }
+
+    [Fact]
+    public void APartWhoseRestPoseIsNotFinite_StartsNoEffects_NorDoItsChildren()
+    {
+        var child = Part("lid", Vector3.Zero, null) with { Effects = [new VisualEffectPlacement("a", Vector3.Zero, Vector3.Forward, 0, "x")] };
+        var broken = Part("ring", new Vector3(float.NaN, 0, 0), null, children: [child]) with
+        {
+            Effects = [new VisualEffectPlacement("b", Vector3.Zero, Vector3.Forward, 0, "y")],
+        };
+
+        Assert.Empty(LevelParts.Effects([broken]));
+    }
+
+    [Fact]
     public void ALevelsOwnEffect_IsPlacedAlongItsForward()
     {
         var placed = PlacedEffect.At(new VisualEffectPlacement("fire", new Vector3(1, 2, 3), Vector3.Right, 0, "torch_fire"), Matrix.Identity);
