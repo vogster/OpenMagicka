@@ -46,6 +46,23 @@ dotnet run --project src/OpenMagicka.Launcher
 On Windows run the shell scripts from Git Bash. `tools/linux_check.sh` builds, tests and
 smoke-runs the game on Linux inside Docker.
 
+Tests that need the game files run when `MAGICKA_DIR` points at a Magicka installation.
+
+## Content tool
+
+`omx` reads the game's content with OpenMagicka's readers:
+
+```bash
+dotnet run --project src/OpenMagicka.Tools -- check "<Magicka folder>"
+dotnet run --project src/OpenMagicka.Tools -- dump "<Magicka folder>/Content/Levels/Swamp/sw_s1.xml"
+dotnet run --project src/OpenMagicka.Tools -- info "<Magicka folder>/Content/Levels/Swamp/sw_s1.xnb"
+```
+
+`check` reads every XNB file, level, scene, dialog file, visual effect and language and lists
+what fails. `dump` prints an `.xnb`, `.lvl` or content `.xml` file as JSON (lists and dictionaries are cut after
+256 items; `--full` prints them all; byte buffers show their length). `info` prints an XNB
+header and its type readers.
+
 ## Documentation
 
 - [Engine analysis](docs/ENGINE_ANALYSIS.md): stack and content of the original

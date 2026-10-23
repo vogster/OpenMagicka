@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>omx</AssemblyName>
+    <RootNamespace>OpenMagicka.Tools</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenMagicka.Content\OpenMagicka.Content.csproj" />
+  </ItemGroup>
+
+</Project>

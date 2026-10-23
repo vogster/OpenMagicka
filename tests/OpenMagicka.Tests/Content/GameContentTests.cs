@@ -298,6 +298,29 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Empty(bad);
     }
 
+    [GameContentFact]
+    public void Omx_DumpsEveryXnbFileAsJson_AndChecksTheWholeGame()
+    {
+        var root = GameContent.ContentDirectory!;
+        var failures = new List<string>();
+        foreach (var path in Directory.GetFiles(root, "*.xnb", SearchOption.AllDirectories))
+        {
+            var dump = new StringWriter();
+            if (OpenMagicka.Tools.Omx.Run(["dump", path], dump, TextWriter.Null) != 0)
+            {
+                failures.Add(path);
+                continue;
+            }
+            using var json = System.Text.Json.JsonDocument.Parse(dump.ToString());
+        }
+        Assert.Empty(failures);
+
+        var report = new StringWriter();
+        Assert.Equal(0, OpenMagicka.Tools.Omx.Run(["check", Path.GetDirectoryName(root)!], report, TextWriter.Null));
+        output.WriteLine(report.ToString());
+        Assert.Contains("xnb: 4308 of 4308 read", report.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {
