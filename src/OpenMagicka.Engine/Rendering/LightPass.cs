@@ -16,8 +16,10 @@ internal sealed class LightPass : IDisposable
     private const int WithShadows = 0;
     private const int WithoutShadows = 1;
 
-    /// <summary>Spot light techniques without shadows: with and without distance attenuation.</summary>
+    /// <summary>Spot light techniques: with or without shadows, with or without distance attenuation.</summary>
+    private const int SpotShadowedAttenuated = 0;
     private const int SpotAttenuated = 1;
+    private const int SpotShadowedUnattenuated = 2;
     private const int SpotUnattenuated = 3;
 
     /// <summary>How close to a light's volume the camera may come before its inner side is drawn: more than any near plane the viewer uses.</summary>
@@ -57,12 +59,9 @@ internal sealed class LightPass : IDisposable
         {
             throw new InvalidDataException("the light effects do not have the expected techniques");
         }
-        var sunParameters = new FnaEffectParameters(sun.Effect);
-        var missing = SunParameters.Where(name => !sunParameters.Contains(name)).ToArray();
-        if (missing.Length > 0)
-        {
-            throw new InvalidDataException($"the sun's effect has no parameter {string.Join(", ", missing)}");
-        }
+        Require(sun, SunParameters);
+        Require(point, ["ShadowMap"]);
+        Require(spot, ["ShadowMap", "ShadowMapSize", "LightViewProjection"]);
         (this.sun, this.point, this.spot) = (sun, point, spot);
         sphere = new LightMesh(device, LightVolumes.Sphere());
         try
@@ -78,13 +77,24 @@ internal sealed class LightPass : IDisposable
 
     public IEnumerable<GameEffect> Effects => [sun, point, spot];
 
+    /// <summary>A missing parameter fails here, so the viewer falls back, rather than in a frame.</summary>
+    private static void Require(GameEffect effect, IEnumerable<string> names)
+    {
+        var parameters = new FnaEffectParameters(effect.Effect);
+        var missing = names.Where(name => !parameters.Contains(name)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidDataException($"an effect has no parameter {string.Join(", ", missing)}");
+        }
+    }
+
     /// <summary>Adds every light into the bound light target; the G-buffer's normals and depth are read.</summary>
     public void Accumulate(GraphicsDevice device, FullscreenQuad quad, GpuLevel level, DeferredFrame frame, BoundingFrustum view,
-        Texture2D normal, Texture2D depth, SunShadow? shadow)
+        Texture2D normal, Texture2D depth, SunShadow? shadow, LightShadows shadows)
     {
         DrawSun(device, quad, frame.Sun, normal, depth, shadow);
-        DrawPointLights(device, level.PointLights, view, frame.Globals.CameraPosition, normal, depth);
-        DrawSpotLights(device, level.SpotLights, view, frame.Globals.CameraPosition, normal, depth);
+        DrawPointLights(device, level.PointLights, view, frame.Globals.CameraPosition, normal, depth, shadows);
+        DrawSpotLights(device, level.SpotLights, view, frame.Globals.CameraPosition, normal, depth, shadows);
     }
 
     private void DrawSun(GraphicsDevice device, FullscreenQuad quad, DirectionalLighting light, Texture2D normal, Texture2D depth, SunShadow? shadow)
@@ -117,11 +127,10 @@ internal sealed class LightPass : IDisposable
     /// the inner side, so the light neither vanishes nor loses what the near plane cuts off.
     /// </summary>
     private void DrawPointLights(GraphicsDevice device, IReadOnlyList<PointLighting> lights, BoundingFrustum view, Vector3 camera,
-        Texture2D normal, Texture2D depth)
+        Texture2D normal, Texture2D depth, LightShadows shadows)
     {
         device.BlendState = LightBlend;
         device.DepthStencilState = DepthStencilState.None;
-        point.Effect.CurrentTechnique = point.Effect.Techniques[WithoutShadows];
         var parameters = new FnaEffectParameters(point.Effect);
         parameters.SetValue("NormalMap", normal);
         parameters.SetValue("DepthMap", depth);
@@ -133,6 +142,9 @@ internal sealed class LightPass : IDisposable
             {
                 continue;
             }
+            var shadow = shadows.For(lamp);
+            point.Effect.CurrentTechnique = point.Effect.Techniques[shadow is null ? WithoutShadows : WithShadows];
+            parameters.SetValue("ShadowMap", shadow);
             parameters.SetValue("World", lamp.World);
             parameters.SetValue("LightPosition", lamp.Position);
             parameters.SetValue("LightRadius", lamp.Radius);
@@ -146,7 +158,7 @@ internal sealed class LightPass : IDisposable
 
     /// <summary>Each spot light whose reach is in view, as its cone, drawn like the point lights.</summary>
     private void DrawSpotLights(GraphicsDevice device, IReadOnlyList<SpotLighting> lights, BoundingFrustum view, Vector3 camera,
-        Texture2D normal, Texture2D depth)
+        Texture2D normal, Texture2D depth, LightShadows shadows)
     {
         device.BlendState = LightBlend;
         device.DepthStencilState = DepthStencilState.None;
@@ -161,7 +173,20 @@ internal sealed class LightPass : IDisposable
             {
                 continue;
             }
-            spot.Effect.CurrentTechnique = spot.Effect.Techniques[lamp.Attenuation ? SpotAttenuated : SpotUnattenuated];
+            var shadow = shadows.For(lamp);
+            spot.Effect.CurrentTechnique = spot.Effect.Techniques[(shadow is null, lamp.Attenuation) switch
+            {
+                (true, true) => SpotAttenuated,
+                (true, false) => SpotUnattenuated,
+                (false, true) => SpotShadowedAttenuated,
+                (false, false) => SpotShadowedUnattenuated,
+            }];
+            if (shadow is { } map)
+            {
+                parameters.SetValue("ShadowMap", map.Map);
+                parameters.SetValue("ShadowMapSize", (float)map.Map.Width);
+                parameters.SetValue("LightViewProjection", map.View);
+            }
             parameters.SetValue("World", lamp.World);
             parameters.SetValue("LightPosition", lamp.Position);
             parameters.SetValue("LightDirection", lamp.Direction);

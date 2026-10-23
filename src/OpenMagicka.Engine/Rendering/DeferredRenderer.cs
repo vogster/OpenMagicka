@@ -15,8 +15,9 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
 /// the sun's shadow map, a depth prepass into an R32F target, the G-buffer (Main + Normal, after
 /// RestoreDepth), the lights into a light accumulator (<see cref="LightPass"/>), the composition
-/// with fog, then additive objects, and the result shown on the back buffer. Not yet: point and
-/// spot light shadows, decals, sky map, particles, post effects (OM-24 to OM-27). The original
+/// with fog, then additive objects, and the result shown on the back buffer. Shadow maps are drawn
+/// first: the sun's, then the shadow-casting point and spot lights' (<see cref="LightShadows"/>).
+/// Not yet: decals, sky map, particles, post effects (OM-25 to OM-27). The original
 /// composes into Main while reading it; here Main is copied first, since sampling and writing one
 /// target is undefined on modern APIs. Render thread only.
 /// </summary>
@@ -55,6 +56,7 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
     private readonly LightPass lights;
+    private readonly LightShadows lightShadows = new();
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
@@ -110,10 +112,11 @@ public sealed class DeferredRenderer : IDisposable
         EnsureTargets(device);
         device.RasterizerState = RasterizerState.CullNone;
         UnbindTextures(device);
-        var shadow = DrawSunShadow(device, level, frame);
-
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
+        var shadow = DrawSunShadow(device, level, frame);
+        lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, globals, viewProjection, Matrix.Identity, cull));
+
         foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned }.Concat(lights.Effects))
         {
             effect.Globals.Apply(globals);
@@ -141,7 +144,7 @@ public sealed class DeferredRenderer : IDisposable
         UnbindTextures(device);
         device.SetRenderTarget(light);
         device.Clear(Color.Transparent);
-        lights.Accumulate(device, quad, level, frame, frustum, normal!, depth!, shadow);
+        lights.Accumulate(device, quad, level, frame, frustum, normal!, depth!, shadow, lightShadows);
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);
@@ -189,14 +192,26 @@ public sealed class DeferredRenderer : IDisposable
             shadowMap = new RenderTarget2D(device, size, size, false, SurfaceFormat.Single, DepthFormat.Depth24);
         }
         var view = SunShadowView.Around(frame.Sun.Direction, frame.ShadowFocus, size);
-        var lightGlobals = frame.Globals with { View = view.LightView, Projection = view.LightProjection };
-        deferred.Globals.Apply(lightGlobals);
-        skinned.Globals.Apply(lightGlobals);
-        shadowFrustum.Matrix = view.LightViewProjection;
         device.SetRenderTarget(shadowMap);
         device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, NoCaster, 1, 0);
-        DrawOpaque(device, level, OpaquePass.Shadow, shadowFrustum);
+        DrawCasters(device, level, frame.Globals, view.LightView, view.LightProjection, RasterizerState.CullCounterClockwise);
         return new SunShadow(shadowMap, view);
+    }
+
+    /// <summary>
+    /// The opaque geometry seen by a light, with the shadow techniques, into the bound shadow map.
+    /// The casters take the view-projection from the shared globals, so these are set to the
+    /// light's view here; the camera's are set again before the camera passes.
+    /// </summary>
+    private void DrawCasters(GraphicsDevice device, GpuLevel level, GlobalEffectValues camera, Matrix view, Matrix projection, RasterizerState cull)
+    {
+        var lightGlobals = camera with { View = view, Projection = projection };
+        deferred.Globals.Apply(lightGlobals);
+        skinned.Globals.Apply(lightGlobals);
+        shadowFrustum.Matrix = lightGlobals.ViewProjection;
+        device.RasterizerState = cull;
+        DrawOpaque(device, level, OpaquePass.Shadow, shadowFrustum);
+        device.RasterizerState = RasterizerState.CullNone;
     }
 
     private int DrawOpaque(GraphicsDevice device, GpuLevel level, OpaquePass pass, BoundingFrustum view)
@@ -328,6 +343,7 @@ public sealed class DeferredRenderer : IDisposable
     {
         DisposeTargets();
         shadowMap?.Dispose();
+        lightShadows.Dispose();
         quad.Dispose();
         sprites.Dispose();
         lights.Dispose();

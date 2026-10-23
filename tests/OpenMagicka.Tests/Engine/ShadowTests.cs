@@ -82,3 +82,90 @@ public class ShadowTests
         Assert.Equal(distance, Vector3.Distance(camera, focus), 2);
     }
 }
+
+public class LightShadowViewTests
+{
+    private static Vector3 Project(Vector3 point, Matrix viewProjection)
+    {
+        var clip = Vector4.Transform(new Vector4(point, 1), viewProjection);
+        return new Vector3(clip.X, clip.Y, clip.Z) / clip.W;
+    }
+
+    [Theory]
+    [InlineData(0, 1, 0, 0)]    // the faces in cube order: +X, -X, +Y, -Y, +Z, -Z
+    [InlineData(1, -1, 0, 0)]
+    [InlineData(2, 0, 1, 0)]
+    [InlineData(3, 0, -1, 0)]
+    [InlineData(4, 0, 0, 1)]
+    [InlineData(5, 0, 0, -1)]
+    public void EachCubeFace_LooksOutOfTheLightAlongItsAxis(int face, float x, float y, float z)
+    {
+        var light = new Vector3(4, 2, -3);
+        var faces = LightShadowViews.PointFaces(light, 8);
+
+        var ahead = Project(light + new Vector3(x, y, z) * 4, faces[face]);
+
+        Assert.Equal(6, faces.Count);
+        Assert.Equal(0, ahead.X, 3);
+        Assert.Equal(0, ahead.Y, 3);
+        Assert.InRange(ahead.Z, 0, 1);
+    }
+
+    /// <summary>The Direct3D cube convention: each face's texture right (u) and up directions.</summary>
+    [Theory]
+    [InlineData(0, 1, 0, 0, 0, 0, -1, 0, 1, 0)]
+    [InlineData(1, -1, 0, 0, 0, 0, 1, 0, 1, 0)]
+    [InlineData(2, 0, 1, 0, 1, 0, 0, 0, 0, -1)]
+    [InlineData(3, 0, -1, 0, 1, 0, 0, 0, 0, 1)]
+    [InlineData(4, 0, 0, 1, 1, 0, 0, 0, 1, 0)]
+    [InlineData(5, 0, 0, -1, -1, 0, 0, 0, 1, 0)]
+    public void EachCubeFace_IsOrientedAsTheCubeIsSampled(int face, float ax, float ay, float az, float ux, float uy, float uz, float vx, float vy, float vz)
+    {
+        var light = new Vector3(4, 2, -3);
+        var view = LightShadowViews.PointFaces(light, 8)[face];
+        var ahead = light + new Vector3(ax, ay, az) * 4;
+
+        Assert.True(Project(ahead + new Vector3(ux, uy, uz) * 0.5f, view).X > 0.05f, "u");
+        Assert.True(Project(ahead + new Vector3(vx, vy, vz) * 0.5f, view).Y > 0.05f, "up");
+    }
+
+    [Fact]
+    public void ACubeFace_MirrorsX_AsTheOriginalDoes()
+    {
+        var faces = LightShadowViews.PointFaces(Vector3.Zero, 1);
+
+        // Looking along +Z (face 4) with up +Y, a point to the +X side lands on the face's +X half once mirrored.
+        Assert.True(Project(new Vector3(0.3f, 0, 0.5f), faces[4]).X > 0);
+    }
+
+    [Fact]
+    public void ASpotLightsShadowView_LooksDownItsCone_UpToItsRange()
+    {
+        var spot = new SpotLighting(new Vector3(1, 10, 1), Vector3.Down, 20, 0.5f, 1, true, Vector3.One, Vector3.Zero, 0, 512);
+
+        var view = LightShadowViews.Spot(spot);
+
+        var centre = Project(new Vector3(1, 0, 1), view);
+        Assert.Equal((0f, 0f), (MathF.Round(centre.X, 3), MathF.Round(centre.Y, 3)));
+        Assert.InRange(centre.Z, 0, 1);
+        Assert.True(Project(new Vector3(1, -15, 1), view).Z > 1, "beyond the range");
+        Assert.True(MathF.Abs(Project(new Vector3(1 + 10 * MathF.Tan(0.6f), 0, 1), view).X) > 1, "outside the cone");
+    }
+}
+
+public class LightShadowSizeTests
+{
+    private static LevelLightContent Make(LevelLightType type, bool shadows, int size) => new(
+        "lamp", Vector3.Zero, Vector3.Down, type, LightVariationType.None, 6, true, 0.5f, 1, Vector3.One, Vector3.Zero, 0, 0, 0, size, shadows);
+
+    [Fact]
+    public void PointAndSpotLights_CastShadows_WhenTheLevelSaysSo()
+    {
+        Assert.Equal([512, 0, 0], SceneLighting.PointLights([Make(LevelLightType.Point, true, 512), Make(LevelLightType.Point, false, 512),
+            Make(LevelLightType.Point, true, 0)]).Select(l => l.ShadowMapSize));
+        Assert.Equal([256, 0], SceneLighting.SpotLights([Make(LevelLightType.Spot, true, 256), Make(LevelLightType.Spot, false, 256)])
+            .Select(l => l.ShadowMapSize));
+        Assert.Equal([1024], SceneLighting.PointLights([Make(LevelLightType.Point, true, 4096)]).Select(l => l.ShadowMapSize));
+        Assert.Equal([0], SceneLighting.SpotLights([Make(LevelLightType.Spot, true, 256) with { Range = 0.01f }]).Select(l => l.ShadowMapSize));
+    }
+}
