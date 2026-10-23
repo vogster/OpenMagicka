@@ -61,6 +61,21 @@ public sealed class ContentFileSystemTests : IDisposable
     }
 
     [Fact]
+    public void ListFiles_GivesContentPathsInNameOrder_IgnoringCase()
+    {
+        File.WriteAllText(Path.Combine(root, "Audio", "b.xsb"), "");
+        File.WriteAllText(Path.Combine(root, "Audio", "A.xgs"), "");
+        var fs = new ContentFileSystem(root);
+
+        Assert.Equal(["Audio/A.xgs", "Audio/b.xsb", "Audio/Loc.xwb"], fs.ListFiles("AUDIO"));
+        Assert.Equal(["Models/Items_NPC/acc_AmmoBelt_0.xnb"], fs.ListFiles("models", recursive: true));
+        Assert.Empty(fs.ListFiles("Models"));
+        Assert.Empty(fs.ListFiles("missing"));
+        Assert.Empty(fs.ListFiles(".."));
+        Assert.Equal(4, fs.ListFiles("", recursive: true).Count);
+    }
+
+    [Fact]
     public void Constructor_MissingDirectory_Throws()
     {
         Assert.Throws<DirectoryNotFoundException>(() => new ContentFileSystem(Path.Combine(root, "nope")));

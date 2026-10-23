@@ -698,13 +698,28 @@ the order I2, I1, I0 (winding order inverted).
 - Language selection: Steam language → enum. If the language is unavailable, `eng` is used.
   It is saved in `Settings.sav`.
 - Loading: all `*.loctable.xml` files in the language directory (Excel 2003 SpreadsheetML:
-  `Workbook/Worksheet/Table/Row`). Column 1 is the key, starting with `#`; column 2 is the
-  text. Key = **hash of the lowercase key string** (§12.1). Empty texts are skipped;
-  later files override earlier ones (directory enumeration order, undefined!).
-- When a string is returned, `\n` is replaced with a line break. `#key;` references inside strings
-  are expanded recursively, optionally with color `[c=…]…[/c]`. `#players` returns
-  the list of player names ("A, B & C").
-- A string that is not found is returned as `NOT FOUND: <hash>`.
+  `Workbook/Worksheet/Table/Row`; element names compared ignoring case). In a row with at
+  least two child nodes, the text of the first node is the key and the text of the second
+  is the string; cells are taken by position (`ss:Index` is ignored) and the text includes
+  nested markup. Only keys starting with `#` count (this skips the header row). ID = **hash of
+  the lowercase key, `#` included** (§12.1). Empty texts are skipped; later files override
+  earlier ones. The order is the directory enumeration order, but in the shipped content no
+  key has two different texts, so the order changes nothing. OpenMagicka uses name order
+  ignoring case. Shipped table sizes: eng 3250, rus 3250, deu 3244, ita 3264, pol 3254,
+  spa 3228, fra 3227, hun 3224 strings.
+- `GetString` replaces the two characters `\n` with a line break and does not expand references.
+- Reference expansion (`#key;`): find the first `#`, then the first `;` after it; the text
+  between them (with the `#`) is a key, replaced by that string expanded the same way, and
+  the scan restarts at the start of the text. With no `;` after the first `#`, expansion stops
+  (so `50# off` stays as is). The coloured variant wraps every replacement in `[c=r,g,b]…[/c]`
+  (numbers in invariant culture, 7 significant digits). `ParseReferences` on free text wraps
+  each replacement in `[c=1,1,1]…[/c]` and uses `GetString`. The original has no limit and
+  loops or overflows the stack on a cyclic reference; OpenMagicka stops at nesting depth 16,
+  1024 replacements per call and a result length of 65536 chars.
+- `#players` always returns the list of player names ("A", "A & B", "A, B & C"), even if a table
+  defines that key.
+- A string that is not found is returned as `NOT FOUND: <id>`. 84 item name and description keys
+  (`#item_staff27` and others) have no string in any shipped language (85 in French).
 - Changing the language reloads fonts (`FontManager.LoadFonts`) and `Loc.xwb`.
 
 ---
@@ -874,7 +889,8 @@ Recommendation:
 5. The JigLibX license (§13) and the list of modifications made by Arrowhead.
 6. The checkpoint state format (`CheckpointState.Write`) — for importing mid-level saves.
 7. The `LeaderBoardData` format in `ch_*.sav`.
-8. The override order of `*.loctable.xml` with duplicate keys (`GetFiles` order).
+8. ~~The override order of `*.loctable.xml` with duplicate keys.~~ Resolved: no key has two
+   different texts in the shipped tables (§10).
 9. Behavior of `FilterEffect`, `DeferredShading` and `Bloom` in gamma space
    (sRGB is not used). On modern APIs, sRGB RTs must not be enabled.
 10. `.ani` cursors: whether they are animated and whether our own RIFF/ACON parser is needed.

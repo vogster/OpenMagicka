@@ -42,6 +42,29 @@ public sealed class ContentFileSystem
         File.ReadAllBytes(Resolve(path) ?? throw new FileNotFoundException($"content file not found: {path}", path));
 
     /// <summary>
+    /// Content paths (with their real letter case) of the files in a directory, matched ignoring
+    /// case, optionally with its subdirectories; ordered by path ignoring case. For the files of
+    /// one directory that is the order in which Windows lists them to the original (a recursive
+    /// listing is not: '/' sorts after '-' and '.'). "" is the root.
+    /// </summary>
+    public IReadOnlyList<string> ListFiles(string directory, bool recursive = false)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        var normalized = Normalize(directory);
+        if (normalized is null && !directory.Split('/', '\\').All(segment => segment is "" or "."))
+        {
+            return [];
+        }
+        var prefix = normalized is null ? "" : normalized.ToLowerInvariant() + "/";
+        return index.Value
+            .Where(file => file.Key.StartsWith(prefix, StringComparison.Ordinal)
+                && (recursive || file.Key.IndexOf('/', prefix.Length) < 0))
+            .Select(file => Path.GetRelativePath(Root, file.Value).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
     /// Resolves an external reference written relative to the directory of the referring asset
     /// (both without extension). Keeps letter case; returns null if the result leaves the root.
     /// </summary>

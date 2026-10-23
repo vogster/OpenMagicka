@@ -152,6 +152,36 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Equal(20, patched);
     }
 
+    [GameContentFact]
+    public void EveryLanguage_LoadsAndHoldsTheItemNames()
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var languages = OpenMagicka.Content.Localization.LanguagePack.Available(files);
+        Assert.Equal(["deu", "eng", "fra", "hun", "ita", "pol", "rus", "spa"], languages);
+
+        var loader = new OpenMagicka.Content.ContentLoader(files, XnbReaderRegistry.Magicka);
+        var keys = files.ListFiles("Data/Items", recursive: true)
+            .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
+            .Select(p => loader.Load(p[..^4]).Root)
+            .OfType<OpenMagicka.Content.Magicka.ItemContent>()
+            .SelectMany(item => new[] { item.DisplayName, item.Description })
+            .Where(key => key.StartsWith('#'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Assert.True(keys.Length > 300, $"only {keys.Length} item string keys");
+
+        foreach (var language in languages)
+        {
+            var table = OpenMagicka.Content.Localization.LanguagePack.Load(files, language);
+            var missing = keys.Where(k => !table.TryGetRaw(OpenMagicka.Content.Localization.StringTable.Id(k), out _)).ToArray();
+            output.WriteLine($"{language}: {table.Count} strings, {missing.Length} of {keys.Length} item keys missing: {string.Join(' ', missing.Take(8))}");
+            Assert.True(table.Count > 3000, $"{language}: only {table.Count} strings");
+            // 84 item keys (unused staffs and the like) have no string in any shipped table;
+            // the original shows "NOT FOUND" for them too. French lacks one more.
+            Assert.Equal(language == "fra" ? 85 : 84, missing.Length);
+        }
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {
