@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The tests need neither the FNA native libraries nor the game files: tests that read
+      # the game's content run only when MAGICKA_DIR is set and are skipped here.
+      - name: Build tests
+        run: dotnet build tests/OpenMagicka.Tests -c Release
+
+      - name: Build server
+        run: dotnet build src/OpenMagicka.Server -c Release
+
+      - name: Test
+        run: dotnet test tests/OpenMagicka.Tests -c Release --no-build --logger "console;verbosity=normal"
