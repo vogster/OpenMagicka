@@ -5,6 +5,7 @@ using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.Xnb;
 using OpenMagicka.Engine.Physics;
 using OpenMagicka.Physics;
+using OpenMagicka.Physics.Characters;
 using OpenMagicka.Tests.Content;
 using Xunit.Abstractions;
 
@@ -56,7 +57,7 @@ public class PhysicsSpikeTests(ITestOutputHelper output)
     };
 
     private static List<(PhysicsBody Body, Vector3 Spawn, float Ground)> Populate(PhysicsWorld world, List<(Vector3 Spawn, float Ground)> points) =>
-        [.. points.Select((p, i) => (world.AddBody(ShapeFor(i), p.Spawn, mass: 75, lockRotation: ShapeFor(i) is CapsuleShape), p.Spawn, p.Ground))];
+        [.. points.Select((p, i) => (world.AddBody(ShapeFor(i), p.Spawn, mass: 75, ShapeFor(i) is CapsuleShape ? BodyOptions.LockRotation : BodyOptions.None), p.Spawn, p.Ground))];
 
     [GameContentFact]
     public void EveryLevel_HoldsTheBodiesDroppedOnIt()
@@ -96,6 +97,64 @@ public class PhysicsSpikeTests(ITestOutputHelper output)
         output.WriteLine($"{levels} levels, {bodies} bodies dropped; {rolledOff} rolled off an edge, {through.Count} fell straight through");
         Assert.True(levels > 100, $"only {levels} levels with collision");
         Assert.Empty(through);
+    }
+
+    [GameContentFact]
+    public void CharactersWalkingAboutEveryLevel_StayOnIt()
+    {
+        int levels = 0, characters = 0, grounded = 0, impacts = 0, hurting = 0;
+        var speeds = new int[12];
+        var materials = new SortedSet<int>();
+        var through = new List<string>();
+        var random = new Random(7);
+        foreach (var (path, level) in Levels())
+        {
+            using var world = new PhysicsWorld();
+            if (LevelCollision.AddTo(world, level) == 0)
+            {
+                continue;
+            }
+            levels++;
+            var walkers = SpawnPoints(world, level.NavMesh, count: 16)
+                .Select(p => (Body: new CharacterBody(world, new Vector3(p.Spawn.X, p.Ground + 0.95f, p.Spawn.Z), new CharacterShape(0.4f, 1, 75, 4)), p.Ground))
+                .ToList();
+            for (var tick = 0; tick < 300; tick++)
+            {
+                if (tick % 60 == 0)
+                {
+                    walkers.ForEach(w => w.Body.Movement = new Vector3(random.NextSingle() - 0.5f, 0, random.NextSingle() - 0.5f));
+                }
+                walkers.ForEach(w => w.Body.BeforeStep(Tick));
+                world.Step(Tick);
+                foreach (var (body, _) in walkers)
+                {
+                    if (body.AfterStep().ImpactSpeed is { } speed)
+                    {
+                        impacts++;
+                        speeds[Math.Min((int)speed, speeds.Length - 1)]++;
+                        hurting += OpenMagicka.Gameplay.Characters.ImpactDamage.For(speed) is null ? 0 : 1;
+                    }
+                }
+            }
+            foreach (var (body, ground) in walkers)
+            {
+                characters++;
+                grounded += body.IsTouchingGround ? 1 : 0;
+                if (body.GroundMaterial is { } m)
+                {
+                    materials.Add(m);
+                }
+                if (world.CastSegment(body.Body.Position, body.Body.Position - Reach) is null
+                    && world.CastSegment(body.Body.Position + Reach, body.Body.Position) is null)
+                {
+                    through.Add($"{path}: a character from ground {ground} ended at {body.Body.Position} with no level above or below");
+                }
+            }
+        }
+        output.WriteLine($"{levels} levels, {characters} characters walked 5 s: {grounded} on the ground at the end, {impacts} impacts ({hurting} hurting; by m/s {string.Join(" ", speeds)}); materials {string.Join(",", materials)}");
+        Assert.Empty(through);
+        Assert.True(grounded > characters * 9 / 10, $"only {grounded} of {characters} on the ground");
+        Assert.Contains(0, materials);
     }
 
     [GameContentFact]

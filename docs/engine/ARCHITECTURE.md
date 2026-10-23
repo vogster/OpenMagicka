@@ -848,6 +848,96 @@ sound, effects, railgun reflection off `Reflect`, etc. Friction parameters
 (0.1, 1, 1). `CollisionSkinReader` (XNB): Vector3 vertices, int32 indices in triples in
 the order I2, I1, I0 (winding order inverted).
 
+### 7.4 Character body
+
+A character is a capsule centred on its position, sized by the template (`Radius`, `Length`, `Mass`),
+with no rotation, no friction and no bounce; it never sleeps. Its feet are `Radius + Length/2`
+below the centre. Flying templates ignore gravity. Facing is separate from the physics: it turns
+towards the wanted direction by `clamp(dt · TurnSpeed, 0, 1)` of the way each tick (a normalised
+quaternion blend).
+
+**Commands from gameplay.**
+
+| Command | Effect |
+|---|---|
+| Movement | horizontal, length clamped to 1; a non-zero value also sets the wanted direction |
+| Wanted direction | horizontal unit vector; ignored when zero |
+| Max speed × speed multiplier | the template's `Speed`; the multiplier is clamped to 0..100 |
+| Allow move, allow rotate, run backward | gates for steering; running backward faces away from the wanted direction |
+| Slow | a factor on steering, reset to 1 after every tick |
+| Push (impulse) | adds impulse / mass to a pending velocity change; the body counts as pushed; a pending Y above 0.5 lifts it off the ground |
+| Push (velocity) | the same without the mass; lifts off above 2.7 |
+| Jump (velocity) | only from the ground, when not already lifting off and allowed to move: the velocity is zeroed, the jump added, the body counts as jumping and lifts off |
+| Extra force (animations) | a velocity added once; it is shortened by how much of it the body already moves along, `f · clamp(1 − f̂·v/‖f‖, 0, 1)` |
+
+Entangled characters take no pushes, jumps or extra force; nor does a character whose speed
+multiplier is zero take extra force.
+
+**Before the physics step**, in this order:
+
+1. Ground timer: a flying character counts as on the ground and steers its vertical speed towards
+   2 m above the nav mesh: `vy += 0.2 · (target − y) − 0.02 · vy`. Otherwise the time since the last
+   ground contact grows by `dt`. The character touches the ground while that time is at most
+   **0.2 s** (so a short drop or a step does not count as falling), or while levitating.
+2. The pending velocity change is added and cleared.
+3. Lifting off: the ground timer jumps to 0.3 s and the character no longer touches the ground.
+4. Otherwise, while pushed and on the ground: a knocked-down character stops dead and is no longer
+   pushed. Anyone else slows by a factor per second of **0.02** (0.1 on ice or grease or while
+   levitating), loses any upward speed, and stops counting as pushed below `√0.33 ·` max speed.
+   A pushed character turns to face away from its motion. In the air a push is not slowed.
+5. Otherwise, on the ground: horizontal speed is dropped (no sliding), except on ice or grease or
+   while levitating; an upward speed is cut to 80 % unless flying or jumping; the jump and push
+   flags clear. The target velocity is movement × max speed × multiplier; the change towards it is
+   horizontal, scaled by `min(dt, 1)` on ice, grease or while levitating (slow to start and stop),
+   then by Slow. It is applied when the character may move ("moving" when the resulting horizontal
+   speed is not zero), and the character turns when it may rotate.
+6. In the air and not pushed, nothing steers: the character keeps its velocity under gravity.
+7. Extra force is added and cleared; Slow resets to 1; grease clears (gameplay sets it again each tick).
+
+**Contacts**, as the solver meets them (the closing speed is the character's own velocity along
+the direction into the other shape). The original looks for contacts at the poses the step is about
+to reach (it moves every body for the step, collects contacts within **0.05 m**, and moves them
+back), so a contact the character leaves during the step does not count: a jump has no ground under
+it from its first tick. OpenMagicka finds contacts at the current poses and skips, for these rules,
+any contact whose gap after the step (gravity included) is over 0.05 m. A lift-off of less than
+about 3 m/s upward therefore still finds the ground and is cancelled on the next tick, as in the
+original.
+
+- **Ground** is a contact with level geometry, ice, or a physics object whose surface faces up by
+  more than 0.7 (slopes under about 45°). It resets the ground timer and records the ground normal,
+  the position (while alive) and the material: the mesh index on the level, Generic on a physics
+  object.
+- **Impact with the level or ice in the air** (not on the ground, not jumping, not immune), closing
+  speed `v > 0`: `damage = 100 · (v / 10)^2.7`. Above 50 it deals that much Earth damage with
+  magnitude 1, and above 100 it also knocks down; at most one impact per tick. Falling about 1.5 m
+  at the game's gravity is the threshold.
+- **Small characters**: the character passes through a non-player whose mass is under half its own
+  (the small one is still shoved) and knocks it down when moving into it.
+- **While pushed** (or given a lift-off during the step itself): running into a character (moving into it, or it lies knocked
+  down) knocks it down and passes through it when it is no heavier; when it is heavier, the pushed
+  character falls itself if it was on the ground within the last 0.2 s (as of the start of the
+  step). Being pushed into a wall of
+  the level (surface within ±0.3 of vertical) while moving into it knocks the character down.
+- **Standing still** on the ground (no horizontal speed), the character passes through other
+  characters: idle characters do not shove each other. OpenMagicka exception: a small character is
+  still shoved by a heavy one walking through it (in the original both sides ignored the contact, so
+  the small one stood still while the heavy one passed). Two idle characters that overlap stay
+  overlapped until one moves.
+- Touching a hostile character makes an invisible character visible.
+
+Water, lava and ice add their own rules (wading slows movement to `clamp(1 − depth/2, 0.5, 1)`,
+water damps velocity to a tenth per second, a status grows with the depth, drowning once the water
+reaches the feet-to-centre height); they come with the liquid collision (OM-29).
+
+OpenMagicka differences: in the original, the first impact of a tick also skips that contact's
+ground check, and a pushed character turns only when `vx + vz > 0`; ours checks the ground for every
+contact and turns whenever it moves horizontally.
+
+In OpenMagicka the body is `OpenMagicka.Physics.Characters.CharacterBody`: gameplay passes its
+conditions (alive, player, entangled, knocked down, levitating, grease, turn speed, nav-mesh height
+for flyers) before the step and gets a report after it (the impact speed, knockdowns, characters
+touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamage`.
+
 ---
 
 ## 8. Audio (XACT)

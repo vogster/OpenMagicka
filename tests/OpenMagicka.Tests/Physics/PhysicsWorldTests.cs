@@ -111,7 +111,7 @@ public class PhysicsWorldTests
     {
         using var world = new PhysicsWorld();
         AddFloor(world);
-        var character = world.AddBody(new CapsuleShape(Radius: 0.5f, Length: 1), new Vector3(0, 1, 0), mass: 75, lockRotation: true);
+        var character = world.AddBody(new CapsuleShape(Radius: 0.5f, Length: 1), new Vector3(0, 1, 0), mass: 75, BodyOptions.LockRotation);
         var crate = world.AddBody(new BoxShape(new Vector3(1, 1, 1)), new Vector3(-3, 0.5f, 0), mass: 20);
 
         crate.Velocity = new Vector3(15, 0, 0);
@@ -128,7 +128,7 @@ public class PhysicsWorldTests
         using var world = new PhysicsWorld(PhysicsSettings.Default with { Gravity = Vector3.Zero });
         Vector3[] wall = [new(5, -5, -5), new(5, 5, -5), new(5, 5, 5), new(5, -5, 5)];
         world.AddStaticMesh(0, wall, [new MeshTriangle(0, 2, 1), new MeshTriangle(0, 3, 2)]);   // facing −X
-        var boulder = world.AddBody(new SphereShape(0.225f), Vector3.Zero, mass: 101, fast: true);
+        var boulder = world.AddBody(new SphereShape(0.225f), Vector3.Zero, mass: 101, BodyOptions.Fast);
 
         boulder.Velocity = new Vector3(110, 0, 0);       // 1.8 m per tick
         Run(world, 0.5f);

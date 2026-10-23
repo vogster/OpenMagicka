@@ -1,5 +1,6 @@
 using System.Numerics;
 using Jitter2;
+using Jitter2.Collision;
 using Jitter2.Dynamics;
 using Jitter2.LinearMath;
 using J = Jitter2.Collision.Shapes;
@@ -14,6 +15,7 @@ public sealed class PhysicsWorld : IDisposable
 {
     private readonly World world;
     private readonly SegmentQuery segments = new();
+    private readonly HashSet<PhysicsBody> bodies = [];
     private bool disposed;
 
     public PhysicsWorld(PhysicsSettings? settings = null)
@@ -27,20 +29,37 @@ public sealed class PhysicsWorld : IDisposable
             SolverIterations = (Settings.SolverIterations, Settings.RelaxationIterations),
             AllowDeactivation = true,
         };
+        world.NarrowPhaseFilter = new ContactFilter(world, world.NarrowPhaseFilter ?? new TriangleEdgeCollisionFilter());
+        world.PreSubStep += _ => MixFriction();
     }
 
     public PhysicsSettings Settings { get; }
 
     internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 
+    /// <summary>True while <see cref="Step"/> runs, when contact listeners are heard.</summary>
+    public bool IsStepping { get; private set; }
+
+    /// <summary>Bodies and meshes cannot change while the engine walks them.</summary>
+    private void ThrowIfStepping()
+    {
+        ThrowIfDisposed();
+        if (IsStepping)
+        {
+            throw new InvalidOperationException("the world cannot change during a step (from a contact listener)");
+        }
+    }
+
     /// <summary>
     /// Adds an immovable triangle mesh whose hits report <paramref name="material"/>. A triangle is
     /// solid, and hit by segments, only from its front: the side its right-hand normal
     /// (B − A) × (C − A) points to. Degenerate triangles are dropped.
     /// </summary>
-    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles)
+    /// <param name="friction">The level's own surfaces use 1 (docs/engine/ARCHITECTURE.md §7.3).</param>
+    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles, float friction = 1)
     {
-        ThrowIfDisposed();
+        ThrowIfStepping();
+        NonNegative(friction, nameof(friction));
         ArgumentNullException.ThrowIfNull(vertices);
         ArgumentNullException.ThrowIfNull(triangles);
         var points = vertices.Select(v => Vectors.ThrowIfNotFinite(v, nameof(vertices)).ToJitter()).ToArray();
@@ -56,11 +75,12 @@ public sealed class PhysicsWorld : IDisposable
             (indices[3 * i], indices[3 * i + 1], indices[3 * i + 2]) = (t.A, t.B, t.C);
         }
         var shapes = NonDegenerate(points, indices);
-        var mesh = new StaticMesh(material, shapes.Count);
+        var mesh = new StaticMesh(material, shapes.Count, friction);
         if (shapes.Count > 0)
         {
             var body = world.CreateRigidBody();
             body.MotionType = MotionType.Static;
+            body.Friction = friction;
             body.Tag = mesh;
             body.AddShapes(shapes, MassInertiaUpdateMode.Preserve);
         }
@@ -83,11 +103,9 @@ public sealed class PhysicsWorld : IDisposable
         }
     }
 
-    /// <param name="lockRotation">Keeps the body upright, as for a character.</param>
-    /// <param name="fast">Continuous collision for bodies that move far in one tick (projectiles).</param>
-    public PhysicsBody AddBody(BodyShape shape, Vector3 position, float mass, bool lockRotation = false, bool fast = false)
+    public PhysicsBody AddBody(BodyShape shape, Vector3 position, float mass, BodyOptions options = BodyOptions.None)
     {
-        ThrowIfDisposed();
+        ThrowIfStepping();
         ArgumentNullException.ThrowIfNull(shape);
         Vectors.ThrowIfNotFinite(position, nameof(position));
         if (!(mass > 0) || !float.IsFinite(mass))
@@ -99,11 +117,36 @@ public sealed class PhysicsWorld : IDisposable
         body.AddShape(collider, MassInertiaUpdateMode.Update);
         body.SetMassInertia(mass);
         body.Position = position.ToJitter();
-        body.AllowedMotion = lockRotation ? MotionAxes.Linear : MotionAxes.All;
-        body.EnableCcd = fast;
+        body.AllowedMotion = options.HasFlag(BodyOptions.LockRotation) ? MotionAxes.Linear : MotionAxes.All;
+        body.EnableCcd = options.HasFlag(BodyOptions.Fast);
+        if (options.HasFlag(BodyOptions.NeverSleeps))
+        {
+            body.DeactivationTime = NeverDeactivate;
+        }
+        if (options.HasFlag(BodyOptions.Undamped))
+        {
+            body.Damping = (0, 0);
+        }
         var wrapper = new PhysicsBody(this, body, shape);
         body.Tag = wrapper;
+        bodies.Add(wrapper);
         return wrapper;
+    }
+
+    /// <summary>Long enough to never happen in a game session.</summary>
+    private static readonly TimeSpan NeverDeactivate = TimeSpan.FromDays(365);
+
+    /// <summary>The engine takes the larger friction of a pair; ours is the geometric mean, so 0 slides on anything.</summary>
+    private void MixFriction()
+    {
+        foreach (var body in bodies)
+        {
+            foreach (var arbiter in body.Identity.Contacts)
+            {
+                ref var data = ref arbiter.Handle.Data;
+                data.Friction = MathF.Sqrt(arbiter.Body1.Friction * arbiter.Body2.Friction);
+            }
+        }
     }
 
     private static J.RigidBodyShape ToJitter(BodyShape shape) => shape switch
@@ -122,7 +165,7 @@ public sealed class PhysicsWorld : IDisposable
 
     public void Remove(PhysicsBody body)
     {
-        ThrowIfDisposed();
+        ThrowIfStepping();
         ArgumentNullException.ThrowIfNull(body);
         if (body.IsRemoved || !body.BelongsTo(this))
         {
@@ -130,17 +173,26 @@ public sealed class PhysicsWorld : IDisposable
         }
         world.Remove(body.Body);
         body.IsRemoved = true;
+        bodies.Remove(body);
     }
 
     /// <summary>Advances the simulation by one tick.</summary>
     public void Step(float dt)
     {
-        ThrowIfDisposed();
+        ThrowIfStepping();
         if (!(dt > 0) || !float.IsFinite(dt))
         {
             throw new ArgumentOutOfRangeException(nameof(dt), dt, "the time step must be positive");
         }
-        world.Step(dt, multiThread: false);
+        IsStepping = true;
+        try
+        {
+            world.Step(dt, multiThread: false);
+        }
+        finally
+        {
+            IsStepping = false;
+        }
     }
 
     /// <summary>

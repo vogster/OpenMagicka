@@ -69,6 +69,45 @@ public sealed class PhysicsBody
 
     public float Mass => Body.Mass;
 
+    /// <summary>A contact's friction is the geometric mean of both surfaces' (0 slides on anything).</summary>
+    public float Friction
+    {
+        get => Body.Friction;
+        set => Body.Friction = value >= 0 && float.IsFinite(value) ? value : throw new ArgumentOutOfRangeException(nameof(Friction), value, "must not be negative");
+    }
+
+    /// <summary>Bounciness from 0 to 1.</summary>
+    public float Restitution
+    {
+        get => Body.Restitution;
+        set => Body.Restitution = value is >= 0 and <= 1 ? value : throw new ArgumentOutOfRangeException(nameof(Restitution), value, "must be from 0 to 1");
+    }
+
+    public bool AffectedByGravity
+    {
+        get => Body.AffectedByGravity;
+        set => Body.AffectedByGravity = value;
+    }
+
+    /// <summary>Hears the body's contacts during a step. A body has one listener for good: it can be set once.</summary>
+    public IContactListener? Listener
+    {
+        get => listener;
+        set
+        {
+            if (listener is not null && !ReferenceEquals(listener, value))
+            {
+                throw new InvalidOperationException("the body already has a contact listener");
+            }
+            listener = value;
+        }
+    }
+
+    private IContactListener? listener;
+
+    /// <summary>Whatever the game attaches to the body, such as the entity it belongs to.</summary>
+    public object? Tag { get; set; }
+
     /// <summary>False while the body sleeps.</summary>
     public bool IsAwake => Body.IsActive;
 }

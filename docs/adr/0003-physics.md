@@ -112,5 +112,11 @@ Jitter2 passes. What the spike found:
 - Long segments cost about 1.6 µs each. 1,000 a tick is far more than the game needs, but
   queries should stay short where they can.
 
-Not covered yet: animated level parts (moving collision), friction per material, ice and water,
-characters and the shield.
+Characters (`CharacterBody`, Engine architecture §7.4) were added on the facade's contact
+listeners. A contact one side passes through is registered by hand with the solver off for that
+side, so a heavy character walks through a small one while still shoving it. The engine takes the
+larger friction of a pair; the facade mixes the geometric mean instead, so a frictionless capsule
+slides on the level. 1,925 characters walking at random for 5 s over all 132 levels: none left
+the level, 96 % stood on the ground at the end, 10 hit hard enough to be hurt (walking off ledges).
+
+Not covered yet: animated level parts (moving collision), ice and water, and the shield.
