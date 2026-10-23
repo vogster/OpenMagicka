@@ -100,6 +100,62 @@ assigns and sends in spawn messages. Keep pools only as an optimization.
 9. Every **1/30 s**: network entity snapshots for each connection (§6.4).
 10. Input (`ControlManager.HandleInput`) runs **at the end** of the frame. So input is applied in the next frame.
 
+### 1.6 The manager in detail
+
+**Membership.** Adding an entity that is already in the manager does nothing; there is room for 512.
+Entities added during the update loop are updated in the same frame (they join the end of the
+list). Nothing leaves during the update: entities that report `Removable` are taken out in step 7,
+in list order, and each is deinitialised (its body disabled, its unique name released if it still
+points to it); the server broadcasts their removal. Shields and barriers also sit in their own
+lists. Unique names (`UniqueID`) map to the entity that last took them.
+
+**Grid placement.** Positions and radii are measured in cells (÷ 8 m), on X and Z. An entity
+covers the columns from `floor(x − h)` to `floor(x + h)`, `h = min(r, 8)`. In each column, the
+rows from `floor(z − e)` to `floor(z + e)`, where `e = min(h, √(r² − (c − x)²))` and `c` is the
+column edge nearer the centre (`e = r` when the root is not a number). Every index is taken
+modulo 16, so an entity also sits in far cells that wrap onto its own. In the column that holds
+the centre, the nearer edge gives a chord shorter than the radius, so the original misses some
+cells the circle does reach (an entity just across a row boundary is not found from there);
+OpenMagicka uses the full half-span `h` for that column.
+
+**Radius query** (`GetEntities(center, radius, ignoreProtected, ignoreY)`):
+- the cells from `floor((c − R)/8)` to `floor((c + R)/8)` on each axis (all 16 when the span is
+  over 16), modulo 16;
+- each entity once, if it is not dead and its distance to the centre is at most `R + its radius`
+  (on X and Z only with `ignoreY`, in 3D otherwise);
+- with `ignoreProtected`, each **shield** in the result then filters the rest (never itself): a
+  damageable entity is dropped when the segment from the centre to it hits the shield (tolerance
+  0.5) at a point other than the centre itself. Every entity that is not damageable is dropped too,
+  wherever it is (the original tests the shield only for the damageable ones and drops the
+  others), including other shields that are not damageable;
+- with `ignoreY`, the centre is flattened to height 0 first, for the shield test as well.
+
+**Closest damageable** (`GetClosestIDamageable(caster, center, radius, ignoreProtected)`): the
+same cells; alive damageables other than the caster within `R + their radius`, the nearest one.
+With `ignoreProtected`, one is skipped when the segment to it hits **any** shield in the level
+(tolerance 0.5).
+
+**Protected by a shield**: inside a sphere shield (closer to its centre than its radius).
+
+**Arc test** (`ArcIntersect(origin, direction, range, angle, heightTolerance)`), used by melee and
+area spells: the target's height must be within the tolerance of the origin's; then, on X and Z,
+its distance `d` to the origin minus its radius `r` must be within the range, and the angle
+between the direction and the way to the target, less the target's half-width `acos(1 − r²/(2d²))`,
+must be under `angle`. The direction is flattened but not renormalised. The hit point is on the
+target's surface, towards the origin. Point blank (closer than `r/2` to the centre, where the
+half-width is not a number, or right at it) is a miss, as in the original.
+
+**OpenMagicka.** `OpenMagicka.Gameplay.Entities`:
+- The server gives each entity an explicit `NetId` when it is added (clients take it from the spawn
+  message) instead of the original's handles. Entities a client makes for itself (gibs, effects)
+  take ids from a separate local range, so they never collide with the server's.
+- Removal reports each entity with the id it had, for the broadcast; queries skip entities that
+  have left the manager even before the next grid rebuild; nothing can update, remove or clear while
+  an update or a removal is running. Changing a unique name while in the manager moves the entry.
+- Positions or radii beyond 10⁷ m are left out of the grid (one runaway value must not stall it).
+- No pools for now (.NET allocates cheaply; they can come back as an optimisation), and no separate
+  barrier list until barriers exist. The frame order stays as in §1.5.
+
 ---
 
 ## 2. Character
