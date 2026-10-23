@@ -3,6 +3,7 @@ using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.XnAnimation;
 using OpenMagicka.Content.Xna;
+using OpenMagicka.Engine.Particles;
 using OpenMagicka.Engine.Rendering;
 
 namespace OpenMagicka.Tests.Engine;
@@ -136,5 +137,27 @@ public class LevelPartTests
 
         var point = Vector3.Transform(Vector3.UnitX, matrix);              // scaled to 2, turned to -Z, moved
         Assert.True(Vector3.Distance(new Vector3(1, 2, 1), point) < 1e-4f, point.ToString());
+    }
+
+    [Fact]
+    public void APartsEffects_StartAtItsRestPose_AsChildrenOfIt()
+    {
+        var effect = new VisualEffectPlacement("smoke", new Vector3(1, 2, 0), Vector3.Forward, 0, "chimney_smoke");
+        var child = Part("lid", new Vector3(0, 3, 0), null) with { Effects = [effect] };
+        var door = Part("door", new Vector3(10, 0, 0), null, children: [child]);
+
+        var placed = Assert.Single(LevelParts.Effects([door]));
+
+        Assert.Equal("chimney_smoke", placed.Effect);
+        Assert.Equal(new Vector3(11, 5, 0), placed.World.Translation);
+        Assert.Equal(Vector3.Forward, placed.World.Forward);
+    }
+
+    [Fact]
+    public void ALevelsOwnEffect_IsPlacedAlongItsForward()
+    {
+        var placed = PlacedEffect.At(new VisualEffectPlacement("fire", new Vector3(1, 2, 3), Vector3.Right, 0, "torch_fire"), Matrix.Identity);
+
+        Assert.Equal((new Vector3(1, 2, 3), Vector3.Right), (placed.World.Translation, placed.World.Forward));
     }
 }

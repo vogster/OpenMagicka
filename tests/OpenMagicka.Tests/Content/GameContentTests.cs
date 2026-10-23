@@ -368,7 +368,7 @@ public class GameContentTests(ITestOutputHelper output)
     public void EveryLevelModel_TurnsIntoDrawableBatches()
     {
         var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
-        int levels = 0, statics = 0, parts = 0, liquids = 0;
+        int levels = 0, statics = 0, parts = 0, liquids = 0, partEffects = 0;
         foreach (var path in loader.Files.ListFiles("Levels", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
         {
             var file = loader.LoadUncached(path[..^4]);
@@ -383,11 +383,12 @@ public class GameContentTests(ITestOutputHelper output)
             parts += partBatches.Count;
             var liquidBatches = OpenMagicka.Engine.Rendering.LevelLiquids.Batches(level.Liquids);
             liquids += liquidBatches.Count;
+            partEffects += OpenMagicka.Engine.Rendering.LevelParts.Effects(level.AnimatedParts).Count;
             Assert.All(levelBatches.Concat(partBatches).Concat(liquidBatches), b => Assert.True(float.IsFinite(b.Bounds.Min.X + b.Bounds.Max.X), $"{path}: bounds {b.Bounds}"));
         }
-        output.WriteLine($"{levels} levels: {statics} static batches, {parts} animated part batches (with their liquids), {liquids} liquids");
+        output.WriteLine($"{levels} levels: {statics} static batches, {parts} animated part batches (with their liquids), {liquids} liquids, {partEffects} effects on parts");
         Assert.Equal(132, levels);
-        Assert.Equal((9500, 1521, 89), (statics, parts, liquids));     // 6 energy rings of ch_end_of_world have a NaN rest pose; 9 parts' liquids
+        Assert.Equal((9500, 1521, 89, 10), (statics, parts, liquids, partEffects));     // 6 energy rings of ch_end_of_world have a NaN rest pose; 9 parts' liquids
     }
 
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>

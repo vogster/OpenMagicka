@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.Particles;
 using OpenMagicka.Engine.Particles;
 
@@ -36,7 +35,7 @@ public sealed class ViewerParticles
     public IReadOnlyList<string> Missing { get; private set; } = [];
 
     /// <summary>Replaces the running effects with a level's; false while the library is still loading (try again next frame).</summary>
-    public bool Start(IReadOnlyList<VisualEffectPlacement> placements)
+    public bool Start(IReadOnlyList<PlacedEffect> placements)
     {
         ArgumentNullException.ThrowIfNull(placements);
         if (!library.IsCompletedSuccessfully)
@@ -54,7 +53,7 @@ public sealed class ViewerParticles
                 continue;
             }
             var instance = new VisualEffectInstance(effect, seed: index * 7919);
-            instance.Start(Matrix.CreateWorld(placement.Position, placement.Forward, Vector3.Up));
+            instance.Start(placement.World);
             running.Add(instance);
         }
         Missing = missing;

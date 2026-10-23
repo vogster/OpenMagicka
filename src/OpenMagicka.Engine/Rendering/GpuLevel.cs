@@ -76,8 +76,8 @@ public sealed class GpuLevel : IDisposable
     /// <summary>The sky's tint (1, 1, 1 when the scene sets none).</summary>
     public Vector3 SkyColor { get; }
 
-    /// <summary>The level's visual effects, which the original starts with the level; none for models.</summary>
-    public IReadOnlyList<VisualEffectPlacement> EffectPlacements { get; private init; } = [];
+    /// <summary>The level's and its parts' visual effects, which the original starts with the level; none for models.</summary>
+    public IReadOnlyList<Particles.PlacedEffect> Effects { get; private init; } = [];
 
     public int BatchCount => batches.Length;
 
@@ -168,12 +168,14 @@ public sealed class GpuLevel : IDisposable
         {
             warnings.Add($"{sky.Texture}: the sky map is not a 2D texture");
         }
-        var placements = file.Root is LevelModelContent placed ? placed.Effects : [];
+        IReadOnlyList<Particles.PlacedEffect> placements = file.Root is LevelModelContent placed
+            ? [.. placed.Effects.Select(e => Particles.PlacedEffect.At(e, Matrix.Identity)), .. LevelParts.Effects(placed.AnimatedParts)]
+            : [];
         return new GpuLevel(modelAsset, [.. batchTasks.Select(t => t.Result)], textures, LevelGeometry.FramingBounds(content), warnings, sun,
             SceneLighting.PointLights(lights), SceneLighting.SpotLights(lights),
             sky is not null ? textures.GetValueOrDefault(sky.Texture) as Texture2D : null, sky?.Color ?? Vector3.One)
         {
-            EffectPlacements = placements,
+            Effects = placements,
         };
     }
 

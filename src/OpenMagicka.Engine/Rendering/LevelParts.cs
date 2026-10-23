@@ -10,7 +10,8 @@ namespace OpenMagicka.Engine.Rendering;
 /// original places them when a level starts: a part's world transform is the pose of its
 /// animation's first keyframe times its parent part's world transform, and every mesh of the part's
 /// model is drawn with it (the model's bone transforms are not used). A mesh's visibility comes
-/// from the part's mesh settings, which must name every mesh. A part's liquids move with it.
+/// from the part's mesh settings, which must name every mesh. A part's liquids and visual effects
+/// move with it.
 /// A part whose rest pose is not finite (six energy rings of ch_end_of_world start with an all-NaN
 /// keyframe) is skipped with its children. docs/formats/XNB_READERS.md §4.3.
 /// </summary>
@@ -27,6 +28,32 @@ public static class LevelParts
             Add(part, Matrix.Identity, shared, batches);
         }
         return batches;
+    }
+
+    /// <summary>The visual effects of the parts and their children, placed at the parts' rest pose.</summary>
+    public static IReadOnlyList<Particles.PlacedEffect> Effects(IReadOnlyList<AnimatedLevelPartContent> parts)
+    {
+        ArgumentNullException.ThrowIfNull(parts);
+        var placed = new List<Particles.PlacedEffect>();
+        foreach (var part in parts)
+        {
+            AddEffects(part, Matrix.Identity, placed);
+        }
+        return placed;
+    }
+
+    private static void AddEffects(AnimatedLevelPartContent part, Matrix parent, List<Particles.PlacedEffect> placed)
+    {
+        var world = (part.Animation.Count > 0 ? PoseMatrix(part.Animation[0].Pose) : Matrix.Identity) * parent;
+        if (!IsFinite(world))
+        {
+            return;
+        }
+        placed.AddRange(part.Effects.Select(e => Particles.PlacedEffect.At(e, world)));
+        foreach (var child in part.Children)
+        {
+            AddEffects(child, world, placed);
+        }
     }
 
     /// <summary>XNAnimation's pose matrix: scale, then rotation, then translation.</summary>

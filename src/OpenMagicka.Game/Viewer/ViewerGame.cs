@@ -199,7 +199,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         }
         if (!particlesStarted)
         {
-            particlesStarted = particles.Start(level.EffectPlacements);
+            particlesStarted = particles.Start(level.Effects);
             if (particlesStarted && particles.Error is { } error)
             {
                 Console.Error.WriteLine($"OpenMagicka: no particles: the effects did not load: {error}");

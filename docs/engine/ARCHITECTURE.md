@@ -578,7 +578,8 @@ layout remove the dependency on the original blobs (and enable mods).
   R32F depth, `SpritesA…D` = the sheets (256 × 256, depths 1, 4, 4 and 8, colour format), and
   `DestinationDimensions` = ∞ (it only serves the half-pixel shift).
 - The level's effects (`VisualEffectPlacement`) start with the level, each placed with
-  `CreateWorld(position, forward, up)`. The viewer steps them on the render thread with the frame
+  `CreateWorld(position, forward, up)`; an animated part's effects too, times the part's world
+  transform at its rest pose (they then follow the part). The viewer steps them on the render thread with the frame
   time (cut to 0.1 s) after a 2-second warm-up; the game will step them on its logic thread.
 
 ### 5.2 `VisualEffect` and the `Effects/**/*.xml` format (904 files)
@@ -710,7 +711,8 @@ layout remove the dependency on the original blobs (and enable mods).
   them from the effect instance (seed + 4099 × emitter index), so a run can be repeated.
 - A cone wider than π gives NaN directions (the square root of a negative number).
 - **Not yet:** particle lights (`SpawnLights`, the effect's `<Light>`), the Particles setting's spawn
-  modifier (taken as 1), and the effects of animated parts.
+  modifier (taken as 1); both wait for the game core (OM-66): particle lights are off by default in the
+  original (the ParticleLights setting) and only one level effect has a light.
 
 ---
 

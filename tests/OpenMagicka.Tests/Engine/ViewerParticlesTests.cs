@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using OpenMagicka.Content;
-using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.Particles;
 using OpenMagicka.Game.Viewer;
 using static OpenMagicka.Tests.Particles.VisualEffectReaderTests;
@@ -20,7 +19,7 @@ public sealed class ViewerParticlesTests : IDisposable
 
     public void Dispose() => Directory.Delete(root, recursive: true);
 
-    private static VisualEffectPlacement At(string effect, float x) => new("e", new Vector3(x, 0, 0), Vector3.Forward, 0, effect);
+    private static OpenMagicka.Engine.Particles.PlacedEffect At(string effect, float x) => new(effect, Matrix.CreateTranslation(x, 0, 0));
 
     [Fact]
     public void ALevelsEffects_StartWarmedUp_AndUnknownOnesAreReported()

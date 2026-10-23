@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.Particles;
 
 namespace OpenMagicka.Engine.Particles;
@@ -79,5 +80,20 @@ public sealed class VisualEffectInstance
             }
         }
         lastTransform = transform;
+    }
+}
+
+/// <summary>A visual effect a level starts with, by name, and where it stands in the world.</summary>
+public sealed record PlacedEffect(string Effect, Matrix World)
+{
+    /// <summary>
+    /// A placement in the space of <paramref name="parent"/> (identity for the level's own effects, a
+    /// part's world transform for a part's): <c>CreateWorld(position, forward, up)</c> × parent, as the
+    /// original starts them.
+    /// </summary>
+    public static PlacedEffect At(VisualEffectPlacement placement, Matrix parent)
+    {
+        ArgumentNullException.ThrowIfNull(placement);
+        return new PlacedEffect(placement.Effect, Matrix.CreateWorld(placement.Position, placement.Forward, Vector3.Up) * parent);
     }
 }
