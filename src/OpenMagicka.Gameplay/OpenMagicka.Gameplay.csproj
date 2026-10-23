@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Game rules: spells, elements, entities. No FNA dependency, so a server can run them too. -->
+
+</Project>

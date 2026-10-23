@@ -80,6 +80,8 @@ to the caster. The input buffer is cleared.
 
 - Capacity: `Defines.SPELL_QUECAP = 5` for the player (for NPCs, the capacity of their list; for a weapon item, also 5).
 - A queue entry is a `Spell` with magnitude 1 of one element (or the result of a merge, see below).
+- Ours: `OpenMagicka.Gameplay.Spells` (`ElementQueue`, `ElementRelations`, `Spell`, `MagickBook`), an
+  immutable queue where conjuring returns the new queue and whether it grew (OM-34).
 
 ### 2.1 Relations between elements
 
@@ -91,7 +93,10 @@ to the caster. The input buffer is cleared.
 
 Notes:
 - The "opposites" check uses the entries' flags: Steam is not Water, so
-  Steam + Lightning do **not** cancel; Ice + Lightning do not cancel either.
+  Steam + Lightning do **not** cancel; Ice + Lightning do not cancel either. For the four pairs
+  each flag may sit on either side, so one entry holding both Arcane and Life is opposite to
+  anything, and a magick entry (`All`) is opposite to every element: conjuring an element onto a
+  queue holding a combined magick removes the magick (Shield–Shield needs Shield on both sides).
 - `InclusiveOpposites` = Opposites + the Fire–Water pair. Used when beams meet and for damage
   to elemental barriers (not in the queue).
 - Poison–Life cancel only at the magnitude level when adding spells (section 3), not in the queue.
@@ -107,7 +112,8 @@ Notes:
    section 3) **into the place of the earlier** entry, the later one is removed.
 4. "Combinable" pass: the same for Water+Cold / Water+Fire pairs.
 
-Each pass runs exactly once, in this order. Consequence: the merge product of step 3
+A merge stores the spell sum (section 3) of the two entries. Each pass runs exactly once, in this
+order. Consequence: the merge product of step 3
 (Water) is not checked for opposites again during the same addition (this is how, for example,
 the Amalgameddon magick is reachable: `S Q R A F` → `[Arcane, Water, Lightning]`).
 
@@ -116,7 +122,13 @@ is removed; otherwise the first revertable one → merged with `X` in its place;
 merged in its place; otherwise `X` is discarded. (For a weapon with the *lightning precedence* flag,
 if nothing was found, the first entry from the end that is not Lightning is replaced with Lightning.)
 
+The lightning precedence does not look at the element added: the game sets the flag only when
+lightning strikes a weapon, so the added entry is Lightning there anyway.
+
 The function returns "element added" only if the queue length grew by 1.
+
+A weapon's queue (charging an item) adds the element's spell normalised to a total magnitude of 1
+(section 3) instead; that belongs to the items (OM-38).
 
 ### 2.3 Examples
 
@@ -124,6 +136,9 @@ The function returns "element added" only if the queue length grew by 1.
 - `Q A` → `[]` (Water–Lightning); `E E` → `[]` (the second shield cancels the first).
 - `Q F R` → `[Water]` (Steam+Cold are revertable); `Q R F` → `[Water]` (Ice+Fire).
 - `F D Q` → `[Steam, Earth]` (water merges with the *latest* suitable entry, here Fire at position 0).
+- `S Q R A F W` → `[]`: after `S Q R A F` (`[Arcane, Water, Lightning]`) Life cancels Arcane, and
+  the walk goes on with the entry that was before Life, so Lightning then cancels Water.
+  `S Q R A F S` → `[Arcane, Arcane]`, `S Q R A F D` → `[Arcane, Water]`.
 
 ---
 
@@ -145,6 +160,12 @@ Let `ΣX = A.X + B.X` for each element.
 5. `k = min(ΣW, ΣF)`: `T += k`, `W −= k`, `F −= k`.
 6. `k = min(ΣW, ΣC)`: `I += k`, `W −= k`, `C −= k`.
 7. `Element` = union of the flags of all elements with magnitude > 0.
+
+Steps 2, 3, 5 and 6 use the original sums (ΣF, ΣC, ΣW), not the values already reduced in step 1,
+so a magnitude can end up **negative**: a spell holding Water, Fire and Cold (1 each) added to an
+empty one gives F = C = W = −1, Steam 1, Ice 1 (flags Steam | Ice). Negative magnitudes set no
+flag. A player's queue never holds Water, Fire and Cold together, so only spells built otherwise
+(characters, items) can reach this.
 
 Since the queue is already normalized, in practice an element's magnitude = the number of its entries in the queue
 (for example, `Q F Q F D` → Steam 2, Earth 1). `Spell.DefaultSpell(mask)` gives magnitude 1 for each
@@ -649,7 +670,12 @@ separate elements).
 - `IsMagick` / `CombineMagick`: walk the queue from the first element; every step must
   exist, the final node must hold a magick, and the magick must be allowed. Then
   `CombineMagick` replaces the queue with a single entry `{Element = All, MagickType}`.
-- `GetMagickType` (HUD hint): the same, but allows a "cut-off".
+- `GetMagickType` (HUD hint): walks every entry without stopping. When the current node has no
+  child for an entry, the hint becomes that node's magick (possibly none) and the walk restarts
+  from the root with the next entry; otherwise it becomes the child's magick. The last value is
+  the hint.
+- An entry's child slot is its element index, `round(log2(mask))` (a magick entry, `All`, has
+  index 15, beyond the 11 slots, so it never matches).
 - `Equatable(combo, queue)`: prefix comparison by flags (for highlighting in the magick book).
 - Cast: Boost (Space) → `CombineMagick` or an already present magick entry → `CastType = Magick` →
   `SpecialAbility.Execute`. **Instant** magicks (Revive, Haste, Invisibility, Teleport, Napalm,
