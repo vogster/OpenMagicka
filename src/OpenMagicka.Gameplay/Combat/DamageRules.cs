@@ -40,7 +40,8 @@ public sealed record DamageTarget(
 
 /// <summary>The character after one entry of damage.</summary>
 /// <param name="Dealt">Amount × magnitude taken off the hit points (negative healed); 0 when deflected.</param>
-public sealed record DamageOutcome(float HitPoints, StatusSet Statuses, DamageResult Result, float Dealt = 0, bool Stunned = false, bool InterruptsCast = false);
+/// <param name="Landed">The entry kept some magnitude through the resistances (it was not deflected by them).</param>
+public sealed record DamageOutcome(float HitPoints, StatusSet Statuses, DamageResult Result, float Dealt = 0, bool Stunned = false, bool InterruptsCast = false, bool Landed = false);
 
 /// <summary>
 /// How one entry of damage lands on a character, steps 6–10 of docs/gameplay/SPELLS.md §7.2: statuses
@@ -60,6 +61,10 @@ public static class DamageRules
     public static DamageOutcome Hit(DamageEntry damage, DamageTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (!float.IsFinite(damage.Amount) || !float.IsFinite(damage.Magnitude))
+        {
+            throw new ArgumentOutOfRangeException(nameof(damage), damage, "the amount and magnitude must be finite");
+        }
         if (target.HitPoints <= 0 || target.IsImmortal)
         {
             return new DamageOutcome(target.HitPoints, target.Statuses, DamageResult.None);
@@ -78,7 +83,7 @@ public static class DamageRules
         }
         if (!damage.Attack.HasFlag(AttackProperties.Damage))
         {
-            return new DamageOutcome(target.HitPoints, statuses, result, Stunned: stunned, InterruptsCast: interrupts);
+            return new DamageOutcome(target.HitPoints, statuses, result, Stunned: stunned, InterruptsCast: interrupts, Landed: true);
         }
         var (amount, thinned) = Special(damage, statuses);
         var dealt = amount * damage.Magnitude;
@@ -93,7 +98,7 @@ public static class DamageRules
                 after = -target.MaxHitPoints - 1000;                              // shattered: no corpse to revive
             }
         }
-        return new DamageOutcome(after, thinned, result, dealt, stunned, interrupts);
+        return new DamageOutcome(after, thinned, result, dealt, stunned, interrupts, Landed: true);
     }
 
     /// <summary>A whole attack's result: every entry's flags, but Deflected only if all of them were.</summary>

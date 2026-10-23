@@ -216,6 +216,59 @@ If the template faction is not `FRIENDLY`, resistances are scaled on load by the
 `f = 1 − (players − 1) · 0.00666`: positive multipliers and modifiers are multiplied by `f`, negative ones are divided by `f`.
 With 4 players this is about −2%. The effect is small, but it is worth replicating to match the numbers.
 
+### 2.5 The character's core each frame
+
+What a character does in its own update, leaving out animation, effects, auras, grips and the state
+machine (OM-33), in this order:
+
+1. Hit points are capped at the maximum; the immortality timer runs down (immortal while it is
+   above 0). The speed multiplier resets to 1.
+2. Zap: while the zap timer (0.1 s after a lightning hit) is not below 0, the speed multiplier is
+   the template's `ZapModifier` (unless it is not a number); the timer runs down. The stun timer
+   runs down (stunned while it is above 0 and alive).
+3. Dead: an undying character's revival timer runs down and, at 0, it lives again with
+   `UndieHitPoints` (not after an overkill). Otherwise the corpse timer runs down; the corpse can be
+   removed once it is below −10 (it starts at 20–40 s on spawning, 10 after drowning, −100 after an
+   overkill: removed at once).
+4. Regeneration (§2.3) and then the statuses' tick (SPELLS.md §9): their damage goes the
+   damage-over-time path (§2.2: no resistances, fire ×2 on grease; the self-shield takes it first);
+   cold and poison cap the speed multiplier.
+5. Frozen (or bloating): no speed, no turning, no movement.
+6. The last attacker is forgotten 8 s after the last hit, counted only while no status is active.
+
+**Death.** A character dies when its hit points reach 0 (in the original, its dead state calls
+`Die` once the death animation starts; OpenMagicka dies on the same frame). An undying character
+(not drowning) starts its revival timer (`UndieTime`, or 0.5 s when it is zero) and rises with
+`UndieHitPoints`; a template that gives none would die again at once, as in the original. An overkill
+sets the hit points to `−MaxHP − 1000` and the corpse timer to −100.
+
+**Blocking** compares the block with amount × magnitude for a full block, but takes a partial block
+off the amount alone (as the original). A fully blocked entry still sets its statuses (with its full
+amount as DPS); a partly blocked one goes on with the rest. Nothing reports `KnockedDown` in the
+result (the original sets the knocked-down state, not the flag).
+
+**Entanglement** (vines): a magnitude up to 20 that an `Entanglement` attack adds (not on the immortal
+or the burning). While it is above 0 the character is entangled: no pushes, jumps or impulses. Damage,
+or a fire status, takes its magnitude off; fire, or more than is left, breaks it at once.
+
+**Knockdown**: `KnockDown(magnitude)` needs `magnitude ≥ KnockdownTolerance`; plain `KnockDown()`
+does not. A tolerance of exactly 5000 means the character cannot be knocked down. Either stops the
+character's horizontal motion. Getting up is the state machine's (OM-33).
+
+**Physics events** (the body's report after each step, §7.4 of the engine architecture): an impact
+becomes Earth damage through the full damage path (`ImpactDamage`, with Knockdown above 100, the
+last attacker credited), the characters it knocked down fall, and a knockdown of its own fells it.
+
+In OpenMagicka the core is `OpenMagicka.Gameplay.Characters.Character`; a `GameWorld` runs the frame
+of §1.5 around it: each character's body is set up and steered, physics steps, the bodies' reports
+go back to their characters, the grid is rebuilt, entities update, and the removable leave.
+`GameWorld.Spawn` makes and adds a character; a removed character's body is gone and it cannot be
+added again; a removed character keeps the position it had, and an attacker that left the level is
+forgotten. Non-finite damage, immortality or entanglement values are rejected. `CharacterTemplates.From` (Engine) maps
+the content reader's template onto the core's, raising the capsule length to 0.01 as the original's
+reader does (67 of the 338 vanilla templates give 0). In the vanilla data no template is undying or
+flies (the only movement flag set is Jump), and one cannot be knocked down.
+
 ---
 
 ## 3. CharacterTemplate (`Content/Data/Characters/*.xnb`, 338 files)

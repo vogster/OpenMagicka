@@ -37,6 +37,8 @@ public sealed class PhysicsWorld : IDisposable
 
     internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 
+    public bool IsDisposed => disposed;
+
     /// <summary>True while <see cref="Step"/> runs, when contact listeners are heard.</summary>
     public bool IsStepping { get; private set; }
 

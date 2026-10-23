@@ -4,6 +4,7 @@
     <ProjectReference Include="$(FnaProject)" />
     <ProjectReference Include="..\OpenMagicka.Content\OpenMagicka.Content.csproj" />
     <ProjectReference Include="..\OpenMagicka.Physics\OpenMagicka.Physics.csproj" />
+    <ProjectReference Include="..\OpenMagicka.Gameplay\OpenMagicka.Gameplay.csproj" />
   </ItemGroup>
 
   <ItemGroup>
