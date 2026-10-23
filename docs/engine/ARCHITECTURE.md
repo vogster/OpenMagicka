@@ -942,6 +942,13 @@ Recommendation:
    CPU snapshot of the frame: draw command lists, camera, particle and light arrays. Port the
    `DataChannel` triple buffer as is. The loader thread parses and decodes data, and
    passes GPU resource creation to the render thread's queue.
+   *Implemented (OM-19, `OpenMagicka.Engine.Threading`):* `LogicLoop` runs the simulation on
+   the "Logic" thread at the fixed 60 Hz tick of ADR-0001 (not the original's variable step)
+   and writes a frame after the ticks that were due; `FrameExchange` is the three-slot
+   exchange (the writer never waits, the reader keeps the newest frame); `FrameTiming.Alpha`
+   gives the render thread its interpolation factor; `RenderQueue` holds GPU work from other
+   threads, run by the render thread with a per-frame budget; input is polled on the render
+   thread and read by logic through `LatestValue`. `ThreadedGame` ties them to FNA.
 2. **Content.** Our own `ContentManager` for XNB v4 (LZX already exists in `tools/research/xnb.py`)
    with a case-insensitive path resolver and reference counters as in `SharedContentManager`.
    The root is `Content` of the user's install.

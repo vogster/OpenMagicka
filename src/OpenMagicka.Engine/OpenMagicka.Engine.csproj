@@ -5,4 +5,8 @@
     <ProjectReference Include="..\OpenMagicka.Content\OpenMagicka.Content.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenMagicka.Tests" />
+  </ItemGroup>
+
 </Project>
