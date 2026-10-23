@@ -321,6 +321,37 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Contains("xnb: 4308 of 4308 read", report.ToString(), StringComparison.Ordinal);
     }
 
+    [GameContentFact]
+    public void SharedEffectParameters_AreTheGlobalOnes()
+    {
+        var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var shared = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        foreach (var path in loader.Files.ListFiles("Shaders", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            var effect = Assert.IsType<OpenMagicka.Content.Xna.EffectContent>(loader.Load(path[..^4]).Root);
+            foreach (var parameter in OpenMagicka.Content.Effects.Fx2Effect.Parse(effect.Bytecode).Parameters.Where(p => p.IsShared))
+            {
+                var key = $"{parameter.Name} ({parameter.Class} {parameter.Type})";
+                if (!shared.TryGetValue(key, out var users))
+                {
+                    shared[key] = users = new SortedSet<string>(StringComparer.Ordinal);
+                }
+                users.Add(Path.GetFileNameWithoutExtension(path));
+            }
+        }
+        foreach (var (key, users) in shared)
+        {
+            output.WriteLine($"{key}: {users.Count} effects: {string.Join(' ', users)}");
+        }
+        // The 7 globals of the EffectPool, plus three per-object values some effects mark shared.
+        Assert.Equal(
+        [
+            "CameraPosition (Vector Float)", "CubeMapRotation (MatrixRows Float)", "EyeOfTheBeholder (Vector Float)",
+            "InverseViewProjection (MatrixRows Float)", "Projection (MatrixRows Float)", "ProjectionMapMatrix (MatrixRows Float)",
+            "Time (Scalar Float)", "View (MatrixRows Float)", "ViewProjection (MatrixRows Float)", "World (MatrixRows Float)",
+        ], shared.Keys);
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {

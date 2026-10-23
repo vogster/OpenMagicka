@@ -18,6 +18,14 @@ internal sealed class Fx2TestBuilder
     private readonly List<(int Op, uint Value)> passStates = [];
     private readonly List<(int Op, uint Value)> samplerStates = [];
     private readonly List<(int State, byte[] Code)> shaders = [];
+    private readonly List<(string Name, string Semantic, uint Flags)> matrices = [];
+
+    /// <summary>Adds a float4x4 parameter (after the sampler) with D3DX parameter flags (1 = shared).</summary>
+    public Fx2TestBuilder Matrix(string name, uint flags, string semantic = "")
+    {
+        matrices.Add((name, semantic, flags));
+        return this;
+    }
 
     public Fx2TestBuilder State(int op, uint value)
     {
@@ -76,6 +84,14 @@ internal sealed class Fx2TestBuilder
             WriteAt(blob, samplerSlots[i], (uint)samplerStates[i].Op);
             WriteAt(blob, samplerSlots[i] + 12, (uint)valueAt);
         }
+        var matrixTypes = matrices.Select(m =>
+        {
+            var name = String(m.Name);
+            var semantic = m.Semantic.Length > 0 ? String(m.Semantic) : 0;
+            var type = Add(3, 2, (uint)name, (uint)semantic, 0, 4, 4);    // float, matrix rows, 4x4
+            var value = Add(new uint[16]);
+            return (Type: type, Value: value, m.Flags);
+        }).ToList();
         var techniqueName = String("Technique1");
         var passName = String("Pass1");
         var passValues = passStates.Select(s => Add(s.Value)).ToList();
@@ -88,8 +104,12 @@ internal sealed class Fx2TestBuilder
                 structure.AddRange(BitConverter.GetBytes(w));
             }
         }
-        S(1, 1, 0, 0);                                    // parameters, techniques, unused, objects
+        S(1 + (uint)matrices.Count, 1, 0, 0);             // parameters, techniques, unused, objects
         S((uint)samplerType, (uint)samplerValue, 0, 0);   // sampler parameter, no annotations
+        foreach (var (type, value, flags) in matrixTypes)
+        {
+            S((uint)type, (uint)value, flags, 0);
+        }
         S((uint)techniqueName, 0, 1);                     // technique: name, annotations, passes
         S((uint)passName, 0, (uint)passStates.Count);     // pass: name, annotations, states
         for (var i = 0; i < passStates.Count; i++)

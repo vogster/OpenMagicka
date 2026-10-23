@@ -129,8 +129,13 @@ our own HLSL for it.
 
 ### 1.6 Other notes
 
-- D3D12 (`FNA3D_FORCE_DRIVER=SDLGPU`, `SDL_GPU_DRIVER=direct3d12`) printed nothing even for a
-  working effect — not investigated. FNA3D picks Vulkan by default.
+- D3D12: the SDL3 of the fnalibs used here reports `SDL_HINT_GPU_DRIVER direct3d12
+  unsupported`, so with `SDL_GPU_DRIVER=direct3d12` the SDL_GPU device is never created; that
+  is why the spike printed nothing. FNA3D then falls back to its own D3D11 driver. Vulkan is
+  the default. Rechecked through the game's own path (`OpenMagicka --check-effects`: the
+  `ShaderLibrary` loads each effect, patches it, creates it on the render thread, sets the
+  global parameters and applies every pass): 50 of 51 effects on Vulkan and on D3D11
+  (`FNA3D_FORCE_DRIVER=D3D11`); `ArcaneEffect` is skipped (§1.5).
 - The spike draws without textures and with zero parameters: "draws" means "the pipeline was
   built and drawing did not crash", not "the picture matches the original". Visual comparison
   is the job of the viewer (OM-22).

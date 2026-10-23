@@ -27,6 +27,21 @@ public class EffectPatcherTests
     }
 
     [Fact]
+    public void Parse_ReadsParameterNamesSemanticsAndTheSharedFlag()
+    {
+        var effect = new Fx2TestBuilder().Matrix("View", 1, "VIEW").Matrix("World", 0).State(ZEnable, 1).Build();
+
+        var parameters = Fx2Effect.Parse(effect).Parameters;
+
+        Assert.Equal(["Sampler0", "View", "World"], parameters.Select(p => p.Name));
+        Assert.Equal(("VIEW", true, Fx2ParameterClass.MatrixRows, Fx2ParameterType.Float),
+            (parameters[1].Semantic, parameters[1].IsShared, parameters[1].Class, parameters[1].Type));
+        Assert.False(parameters[2].IsShared);
+        Assert.Equal((Fx2ParameterClass.Object, Fx2ParameterType.Sampler), (parameters[0].Class, parameters[0].Type));
+        Assert.Equal(effect, EffectPatcher.Patch(effect).Bytecode);      // nothing to patch
+    }
+
+    [Fact]
     public void BorderAddressing_BecomesClamp()
     {
         var effect = new Fx2TestBuilder()

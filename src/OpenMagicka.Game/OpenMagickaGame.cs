@@ -1,6 +1,9 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using OpenMagicka.Content;
+using OpenMagicka.Content.Xnb;
 using OpenMagicka.Engine;
+using OpenMagicka.Engine.Rendering;
 using OpenMagicka.Engine.Threading;
 
 namespace OpenMagicka.Game;
@@ -17,14 +20,56 @@ public sealed class GameFrame
 
 /// <summary>
 /// Top-level game. For now a window whose background colour cycles on the logic thread's tick
-/// and is interpolated on the render thread, which shows the threading model at work.
+/// and is interpolated on the render thread, which shows the threading model at work. With the
+/// game's content it warms up all original effects in the background (--check-effects: then exits).
 /// </summary>
 public sealed class OpenMagickaGame : ThreadedGame<GameFrame>
 {
-    public OpenMagickaGame()
+    private readonly GameOptions options;
+    private ShaderLibrary? shaders;
+
+    public OpenMagickaGame(GameOptions options)
         : base(() => new GameFrame())
     {
+        ArgumentNullException.ThrowIfNull(options);
+        this.options = options;
         Window.Title = "OpenMagicka";
+    }
+
+    /// <summary>For --check-effects: 1 until the check has passed (closing the window early is a failure).</summary>
+    public int ExitCode { get; private set; }
+
+    protected override void LoadContent()
+    {
+        base.LoadContent();
+        if (options.ContentDirectory is not { } content)
+        {
+            return;
+        }
+        ExitCode = options.CheckEffects ? 1 : 0;
+        var loader = new ContentLoader(new ContentFileSystem(content), XnbReaderRegistry.Magicka);
+        shaders = new ShaderLibrary(new ShaderSource(loader), GpuWork);
+        var library = shaders;
+        Task.Run(() => EffectWarmup.Run(library, GpuWork)).ContinueWith(task =>
+        {
+            if (task.IsCanceled)
+            {
+                return;   // the game closed first
+            }
+            var report = task.IsCompletedSuccessfully ? task.Result : new EffectWarmupReport([], [], [$"warmup: {task.Exception?.GetBaseException().Message}"]);
+            Console.WriteLine(report.Summary);
+            if (options.CheckEffects)
+            {
+                ExitCode = report.ExitCode;
+                RequestExit();
+            }
+        }, TaskScheduler.Default);
+    }
+
+    protected override void UnloadContent()
+    {
+        shaders?.Dispose();
+        base.UnloadContent();
     }
 
     protected override ISimulation<GameFrame> CreateSimulation() => new Simulation(this);
