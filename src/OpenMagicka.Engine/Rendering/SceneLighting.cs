@@ -14,6 +14,21 @@ public sealed record PointLighting(Vector3 Position, float Radius, Vector3 Diffu
     public Matrix World => Matrix.CreateScale(Radius) * Matrix.CreateTranslation(Position);
 }
 
+/// <summary>
+/// A spot light (intensity already applied) at <see cref="Position"/> shining along <see cref="Direction"/>
+/// (normalised) up to <see cref="Range"/>, within <see cref="Cutoff"/> radians of its axis.
+/// </summary>
+public sealed record SpotLighting(
+    Vector3 Position, Vector3 Direction, float Range, float Cutoff, float Sharpness, bool Attenuation, Vector3 Diffuse, Vector3 Ambient, float Specular)
+{
+    /// <summary>
+    /// Turns the cone's axis (-Z, see <see cref="LightVolumes.Cone"/>) along the light and moves it to
+    /// the light; the shader applies the range itself. Up is the world's, or world forward (-Z) when the light
+    /// points nearly straight up or down, as in the original.
+    /// </summary>
+    public Matrix World => Matrix.CreateWorld(Position, Direction, MathF.Abs(Vector3.Dot(Direction, Vector3.Up)) >= 0.9f ? Vector3.Forward : Vector3.Up);
+}
+
 /// <summary>Linear fog as the composition pass takes it.</summary>
 public sealed record SceneFog(bool Enabled, float Start, float End, Vector3 Color);
 
@@ -41,6 +56,17 @@ public static class SceneLighting
         ArgumentNullException.ThrowIfNull(lights);
         return lights.Where(l => l.Type == LevelLightType.Point && float.IsFinite(l.Range) && l.Range > 0)
             .Select(l => new PointLighting(l.Position, l.Range, l.DiffuseColor, l.AmbientColor, l.SpecularAmount))
+            .ToArray();
+    }
+
+    /// <summary>The level's spot lights at intensity 1, as a level starts; lights without a finite reach, a direction or an angle are left out.</summary>
+    public static IReadOnlyList<SpotLighting> SpotLights(IEnumerable<LevelLightContent> lights)
+    {
+        ArgumentNullException.ThrowIfNull(lights);
+        return lights.Where(l => l.Type == LevelLightType.Spot && float.IsFinite(l.Range) && l.Range > 0
+                && l.Direction.LengthSquared() > 0 && float.IsFinite(l.Direction.LengthSquared()) && l.CutoffAngle > 0 && l.CutoffAngle <= MathHelper.PiOver2)
+            .Select(l => new SpotLighting(l.Position, Vector3.Normalize(l.Direction), l.Range, l.CutoffAngle, l.Sharpness, l.UseAttenuation,
+                l.DiffuseColor, l.AmbientColor, l.SpecularAmount))
             .ToArray();
     }
 

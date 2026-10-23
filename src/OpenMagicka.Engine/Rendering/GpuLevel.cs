@@ -41,11 +41,12 @@ public sealed class GpuLevel : IDisposable
     private readonly BoundingFrustum frustum = new(Matrix.Identity);
 
     private GpuLevel(string asset, GpuBatch[] batches, Dictionary<string, Texture> textures, BoundingBox bounds, IReadOnlyList<string> warnings,
-        DirectionalLighting sun, IReadOnlyList<PointLighting> pointLights)
+        DirectionalLighting sun, IReadOnlyList<PointLighting> pointLights, IReadOnlyList<SpotLighting> spotLights)
     {
         this.asset = asset;
         Sun = sun;
         PointLights = pointLights;
+        SpotLights = spotLights;
         this.batches = batches;
         this.textures = textures;
         Bounds = bounds;
@@ -62,6 +63,9 @@ public sealed class GpuLevel : IDisposable
 
     /// <summary>The level's point lights; none for models.</summary>
     public IReadOnlyList<PointLighting> PointLights { get; }
+
+    /// <summary>The level's spot lights; none for models.</summary>
+    public IReadOnlyList<SpotLighting> SpotLights { get; }
 
     public int BatchCount => batches.Length;
 
@@ -144,7 +148,7 @@ public sealed class GpuLevel : IDisposable
         var lights = file.Root is LevelModelContent lit ? lit.Lights : [];
         var sun = SceneLighting.Sun(lights);
         return new GpuLevel(modelAsset, [.. batchTasks.Select(t => t.Result)], textures, LevelGeometry.FramingBounds(content), warnings, sun,
-            SceneLighting.PointLights(lights));
+            SceneLighting.PointLights(lights), SceneLighting.SpotLights(lights));
     }
 
     /// <summary>Every texture a batch's material references.</summary>

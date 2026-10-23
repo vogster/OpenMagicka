@@ -291,6 +291,7 @@ them; what the engine must reproduce is how each pass is fed (from the original'
 | G-buffer | `RenderDeferredEffect` technique by material: `ReflectionMap` set → `SingleLayerReflection` (2) or, with a second diffuse texture, `DualLayerReflection` (3); otherwise `SingleLayer` (0) or `DualLayer` (1). Depth test LessEqual | material (below) |
 | Light | into Secondary cleared to 0, blend One / InvSrcColor. `DirectionalLightEffect` technique 0 with shadows, 1 without, on the fullscreen quad | `SourceTexture0` = Normal, `SourceTexture1` = Depth, `SourceTexture3` = shadow map; `LightDirection`, `DiffuseColor`/`AmbientColor`/`SpecularAmount` × intensity |
 | Point lights | `PointLightEffect` technique 0 with shadows, 1 without, into Secondary with the same blend; one draw per light whose sphere is in view. Effect states: no depth test or write, cull CCW | Mesh: a unit sphere with its 42 vertices on the sphere (an icosahedron subdivided once, 80 triangles, clockwise from outside), `World` = scale(range) × translation(position); `LightPosition`, `LightRadius` = range, `DiffuseColor`/`AmbientColor`/`SpecularAmount` × intensity, `NormalMap` = Normal, `DepthMap` = Depth, `HalfPixel` |
+| Spot lights | `SpotLightEffect`: technique 1 with attenuation, 3 without (0 and 2 add shadows), same blend and states; one draw per light in view | Mesh below; `World` = the light's orientation (forward = direction; up = world up, or world forward (-Z) when the light points within about 26° of vertical) and position, without the range; `LightPosition`, `LightDirection`, `LightRange`, `LightCutoffAngle` (radians), `LightSharpness`, colours × intensity, `NormalMap`, `DepthMap`, `HalfPixel` |
 | Composition | `DeferredShadingEffect` fullscreen into Main | `SourceTexture0` = Main, `1` = Normal, `2` = Depth, `4` = Secondary (light); `FogEnable`/`FogStart`/`FogEnd`/`FogColor` |
 
 - Material parameters of `RenderDeferredEffect`: `World`, `Alpha`, `Sharpness`, `VertexColorEnabled`,
@@ -319,9 +320,20 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   centres. Under FNA's convention pixel and texel centres already match, so the shift lands on
   texel edges and point sampling picks neighbouring rows (lines of wrong depth); OpenMagicka sets
   it to zero (`HalfPixel` = 0, `DestinationDimensions` = ∞).
-- Spot lights (`SpotLightEffect`, 39 in the shipped levels) are not drawn yet: the effect has no
-  `World` parameter, so how its cone (16 sides, 4 rings, apex at the light) is placed must still be read from
-  its vertex shader.
+- Spot light mesh: a cone with its apex at the origin and its base at z = -1, 16 sides, the base
+  a disk of 5 circles (radius 1, 0.8, …, 0.2), 4 bands, around a centre: 82 vertices, 160 triangles. The vertex shader bends it to the
+  light: a vertex at radial distance r from the axis is turned r × `LightCutoffAngle` away from -Z
+  and pushed out to the unit sphere (the base becomes a cap of the sphere), then scaled by
+  `LightRange` and placed by `World`. On the axis that bend divides 0 by 0, which Direct3D 9 took
+  as 0 but current GPUs make NaN, dropping the triangles; OpenMagicka moves the apex and the base
+  centre a hair off the axis.
+- Additive objects: the original reads the material's tint as RGB and sets `ColorTint` = (tint, 1).
+- **Open:** the original effects read vertex elements the meshes do not have (an additive mesh, for
+  example, has no colour while `AdditiveEffect` reads one). Direct3D 9 tolerated that. Under FNA,
+  D3D11 refuses to build the input layout ("Could not compile input layout"), so the deferred
+  view needs Vulkan for now, and on Vulkan the additive light shafts and windows come out saturated
+  green whatever their tint (a white colour stream supplied for the missing element did not change
+  it, so the cause is still unknown).
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
   texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1), and `DestinationDimensions` = target size.
 - A level's directional light comes from its light list (intensity 1 unless it varies); the

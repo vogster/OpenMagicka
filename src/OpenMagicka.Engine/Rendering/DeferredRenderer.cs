@@ -12,7 +12,7 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
 /// a depth prepass into an R32F target, the G-buffer (Main + Normal, after RestoreDepth), the
 /// sun into a light accumulator, the composition with fog, then additive objects, and the result
-/// shown on the back buffer, with the level's sun and point lights. Not yet: shadows, spot lights, decals, sky map, particles,
+/// shown on the back buffer, with the level's sun, point and spot lights. Not yet: shadows, decals, sky map, particles,
 /// post effects (OM-24 to OM-27). The original composes into Main while reading it; here Main is
 /// copied first, since sampling and writing one target is undefined on modern APIs.
 /// Render thread only.
@@ -22,7 +22,7 @@ public sealed class DeferredRenderer : IDisposable
     public static readonly string[] EffectNames =
         [
             "RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect",
-            "SkinnedModelDeferredEffect", "PointLightEffect",
+            "SkinnedModelDeferredEffect", "PointLightEffect", "SpotLightEffect",
         ];
 
     /// <summary>
@@ -42,6 +42,10 @@ public sealed class DeferredRenderer : IDisposable
 
     /// <summary>How close to a light's sphere the camera may come before its inner side is drawn: more than any near plane the viewer uses.</summary>
     private const float NearMargin = 12;
+
+    /// <summary>Spot light techniques without shadows: with and without distance attenuation.</summary>
+    private const int SpotAttenuated = 1;
+    private const int SpotUnattenuated = 3;
     private static readonly Vector4 NormalClear = new(0.5f, 0.75f, 0.5f, 0.5f);
 
     /// <summary>Light accumulation: the original adds lights as One / InvSrcColor (a screen-like sum).</summary>
@@ -66,7 +70,9 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
     private readonly GameEffect point;
-    private readonly SphereMesh sphere;
+    private readonly GameEffect spot;
+    private readonly LightMesh sphere;
+    private readonly LightMesh cone;
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
@@ -79,14 +85,14 @@ public sealed class DeferredRenderer : IDisposable
 
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
-        (deferred, clear, restoreDepth, sun, shading, additive, skinned, point) =
-            (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6], effects[7]);
+        (deferred, clear, restoreDepth, sun, shading, additive, skinned, point, spot) =
+            (effects[0], effects[1], effects[2], effects[3], effects[4], effects[5], effects[6], effects[7], effects[8]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
         if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || sun.Effect.Techniques.Count <= WithoutShadows
             || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Depth || bindPose.Length == 0
-            || point.Effect.Techniques.Count <= WithoutShadows)
+            || point.Effect.Techniques.Count <= WithoutShadows || spot.Effect.Techniques.Count <= SpotUnattenuated)
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
         }
@@ -94,12 +100,14 @@ public sealed class DeferredRenderer : IDisposable
         try
         {
             sprites = new SpriteBatch(device);
-            sphere = new SphereMesh(device);
+            sphere = new LightMesh(device, LightVolumes.Sphere());
+            cone = new LightMesh(device, LightVolumes.Cone());
         }
         catch
         {
             quad.Dispose();
             sprites?.Dispose();
+            sphere?.Dispose();
             throw;
         }
     }
@@ -122,7 +130,7 @@ public sealed class DeferredRenderer : IDisposable
         EnsureTargets(device);
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
-        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned, point })
+        foreach (var effect in new[] { deferred, clear, restoreDepth, sun, shading, additive, skinned, point, spot })
         {
             effect.Globals.Apply(globals);
         }
@@ -160,6 +168,7 @@ public sealed class DeferredRenderer : IDisposable
         sun.Effect.CurrentTechnique = sun.Effect.Techniques[WithoutShadows];
         DrawFullscreen(device, sun, LightBlend);
         DrawPointLights(device, level.PointLights, globals.CameraPosition);
+        DrawSpotLights(device, level.SpotLights, globals.CameraPosition);
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);
@@ -250,11 +259,45 @@ public sealed class DeferredRenderer : IDisposable
             parameters.SetValue("DiffuseColor", lamp.Diffuse);
             parameters.SetValue("AmbientColor", lamp.Ambient);
             parameters.SetValue("SpecularAmount", lamp.Specular);
-            var near = Vector3.Distance(camera, lamp.Position) < lamp.Radius + NearMargin;
-            sphere.Draw(device, point.Effect, near ? RasterizerState.CullClockwise : RasterizerState.CullCounterClockwise);
+            sphere.Draw(device, point.Effect, Cull(camera, lamp.Position, lamp.Radius));
         }
         device.RasterizerState = RasterizerState.CullNone;
     }
+
+    /// <summary>Each spot light whose reach is in view, as its cone, drawn like the point lights.</summary>
+    private void DrawSpotLights(GraphicsDevice device, IReadOnlyList<SpotLighting> lights, Vector3 camera)
+    {
+        device.BlendState = LightBlend;
+        device.DepthStencilState = DepthStencilState.None;
+        var parameters = new FnaEffectParameters(spot.Effect);
+        parameters.SetValue("NormalMap", normal);
+        parameters.SetValue("DepthMap", depth);
+        parameters.SetValue("HalfPixel", NoHalfPixel);
+        cone.Bind(device);
+        foreach (var lamp in lights)
+        {
+            if (!frustum.Intersects(new BoundingSphere(lamp.Position, lamp.Range)))
+            {
+                continue;
+            }
+            spot.Effect.CurrentTechnique = spot.Effect.Techniques[lamp.Attenuation ? SpotAttenuated : SpotUnattenuated];
+            parameters.SetValue("World", lamp.World);
+            parameters.SetValue("LightPosition", lamp.Position);
+            parameters.SetValue("LightDirection", lamp.Direction);
+            parameters.SetValue("LightRange", lamp.Range);
+            parameters.SetValue("LightCutoffAngle", lamp.Cutoff);
+            parameters.SetValue("LightSharpness", lamp.Sharpness);
+            parameters.SetValue("DiffuseColor", lamp.Diffuse);
+            parameters.SetValue("AmbientColor", lamp.Ambient);
+            parameters.SetValue("SpecularAmount", lamp.Specular);
+            cone.Draw(device, spot.Effect, Cull(camera, lamp.Position, lamp.Range));
+        }
+        device.RasterizerState = RasterizerState.CullNone;
+    }
+
+    /// <summary>The outer side of a light volume, or the inner one when the camera is in or near it.</summary>
+    private static RasterizerState Cull(Vector3 camera, Vector3 light, float reach) =>
+        Vector3.Distance(camera, light) < reach + NearMargin ? RasterizerState.CullClockwise : RasterizerState.CullCounterClockwise;
 
 
     private void DrawAdditive(GraphicsDevice device, GpuLevel level, Func<Content.Xna.ExternalReference?, Texture?> textures)
@@ -272,7 +315,7 @@ public sealed class DeferredRenderer : IDisposable
             parameters.SetValue("World", batch.World);
             parameters.SetValue("TextureScale", Vector2.One);
             parameters.SetValue("TextureOffset", Vector2.Zero);
-            parameters.SetValue("ColorTint", material.ColorTint);
+            parameters.SetValue("ColorTint", new Vector4(material.ColorTint, 1));   // the original reads the tint with alpha 1
             parameters.SetValue("VertexColorEnabled", material.VertexColorEnabled);
             parameters.SetValue("TextureEnabled", texture is not null);
             parameters.SetValue("Texture", texture);
@@ -352,6 +395,7 @@ public sealed class DeferredRenderer : IDisposable
         quad.Dispose();
         sprites.Dispose();
         sphere.Dispose();
+        cone.Dispose();
     }
 }
 
