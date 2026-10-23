@@ -1,0 +1,13 @@
+# contains the ChillaDesk access token
+.mcp.json
+
+# FNA native libraries: tools/fetch_fnalibs.sh
+lib/fnalibs/
+
+bin/
+obj/
+.vs/
+.idea/
+*.user
+TestResults/
+__pycache__/

@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenMagicka.Engine\OpenMagicka.Engine.csproj" />
+    <ProjectReference Include="..\OpenMagicka.Net\OpenMagicka.Net.csproj" />
+  </ItemGroup>
+
+</Project>

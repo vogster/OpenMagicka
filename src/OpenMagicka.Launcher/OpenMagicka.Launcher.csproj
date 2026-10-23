@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>OpenMagicka</AssemblyName>
+    <FnaLibs>$(RootDir)lib/fnalibs/</FnaLibs>
+    <HostArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</HostArch>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenMagicka.Game\OpenMagicka.Game.csproj" />
+  </ItemGroup>
+
+  <!-- FNA native libraries, fetched by tools/fetch_fnalibs.sh. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <None Include="$(FnaLibs)x64/*.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(FnaLibs)D3D12/*.dll" Link="D3D12/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'X64'">
+    <None Include="$(FnaLibs)lib64/*" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'Arm64'">
+    <None Include="$(FnaLibs)libaarch64/*" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="$(FnaLibs)osx/*.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="CheckFnaLibs" BeforeTargets="Build" Condition="!Exists('$(FnaLibs)')">
+    <Error Text="FNA native libraries are missing: run tools/fetch_fnalibs.sh" />
+  </Target>
+
+</Project>

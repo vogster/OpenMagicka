@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/lib/" />
+  <Folder Name="/lib/FNA/">
+    <Project Path="lib/FNA/FNA.Core.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/OpenMagicka.Content/OpenMagicka.Content.csproj" />
+    <Project Path="src/OpenMagicka.Engine/OpenMagicka.Engine.csproj" />
+    <Project Path="src/OpenMagicka.Game/OpenMagicka.Game.csproj" />
+    <Project Path="src/OpenMagicka.Launcher/OpenMagicka.Launcher.csproj" />
+    <Project Path="src/OpenMagicka.Net/OpenMagicka.Net.csproj" />
+    <Project Path="src/OpenMagicka.Server/OpenMagicka.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenMagicka.Tests/OpenMagicka.Tests.csproj" />
+  </Folder>
+</Solution>

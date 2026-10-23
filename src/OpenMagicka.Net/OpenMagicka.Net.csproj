@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- No FNA dependency: shared by the game client and the dedicated lobby/relay server. -->
+
+</Project>
