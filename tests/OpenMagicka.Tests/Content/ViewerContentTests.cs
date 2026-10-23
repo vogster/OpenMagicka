@@ -23,4 +23,16 @@ public class ViewerContentTests(ITestOutputHelper output)
         Assert.Equal((141, 874), (catalog.Scenes.Count, catalog.Models.Count));
         Assert.Empty(catalog.Problems);
     }
+
+    [GameContentFact]
+    public void EverySceneSky_IsAPictureTheViewerCanLoad()
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var loader = new OpenMagicka.Content.ContentLoader(files, XnbReaderRegistry.Magicka);
+        var skies = OpenMagicka.Game.Viewer.SceneCatalog.Load(files).Scenes.Select(s => s.Settings?.SkyMap).OfType<OpenMagicka.Content.Levels.SkyMapSettings>().ToList();
+
+        Assert.All(skies, sky => OpenMagicka.Engine.Rendering.TextureFormats.ToFna(
+            Assert.IsType<OpenMagicka.Content.Xna.Texture2DContent>(loader.LoadUncached(sky.Texture).Root).Format));
+        Assert.Equal(19, skies.Count);     // of the 21 scene files with a sky, 19 are in the levels
+    }
 }

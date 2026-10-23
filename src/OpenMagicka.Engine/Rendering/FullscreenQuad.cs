@@ -20,13 +20,16 @@ internal sealed class FullscreenQuad : IDisposable
         });
     }
 
-    /// <summary>Draws a fullscreen effect with <paramref name="blend"/> and no depth test.</summary>
-    public void Draw(GraphicsDevice device, GameEffect effect, BlendState blend)
+    /// <summary>
+    /// Draws a fullscreen effect with <paramref name="blend"/>, no depth test unless <paramref name="depth"/>
+    /// says otherwise, and the target's size as <paramref name="destination"/> for an effect that needs it.
+    /// </summary>
+    public void Draw(GraphicsDevice device, GameEffect effect, BlendState blend, DepthStencilState? depth = null, Vector2? destination = null)
     {
         device.BlendState = blend;
-        device.DepthStencilState = DepthStencilState.None;
-        // The effects only use the size for the half-pixel shift (0.5 / size); an infinite size makes it zero.
-        new FnaEffectParameters(effect.Effect).SetValue("DestinationDimensions", new Vector2(float.PositiveInfinity));
+        device.DepthStencilState = depth ?? DepthStencilState.None;
+        // Most effects only use the size for the half-pixel shift (0.5 / size); an infinite size makes it zero.
+        new FnaEffectParameters(effect.Effect).SetValue("DestinationDimensions", destination ?? new Vector2(float.PositiveInfinity));
         device.SetVertexBuffer(vertices);
         foreach (var pass in effect.Effect.CurrentTechnique.Passes)
         {

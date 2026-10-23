@@ -354,8 +354,14 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   `FNA3D_FORCE_DRIVER=OpenGL` unless the user chose a driver (on macOS that means Apple's
   deprecated OpenGL instead of Metal until the translations are fixed). Both faults are MojoShader's; they
   are for a human to report upstream.
+- Sky: when the scene has a `SkyMap` (its texture and a colour; 19 scenes of the levels), `SkyMapEffect` is drawn
+  over Main right after the composition, before the additive objects: the fullscreen quad at the
+  far plane, depth test LessEqual against Main's depth without writing it (the effect's own states),
+  so it shows only where nothing was drawn. `SourceTexture0` = the picture, `SourceDimensions` = its
+  size, `Color`; the effect fits the picture to the screen's height and centres it, so here
+  `DestinationDimensions` must be the real target size.
 - Fullscreen quad: a 4-vertex triangle strip of `VertexPositionTexture`, positions (±1.5, ±1.5, 1) with
-  texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1); `DestinationDimensions` is set to ∞ (see the half-pixel shift above).
+  texture coordinates −0.25…1.25 (so (±1, ±1) maps to 0…1); `DestinationDimensions` is set to ∞ (see the half-pixel shift above), except for the sky.
 - A level's directional light comes from its light list (intensity 1 unless it varies); the
   original composes into Main while reading it; OpenMagicka renders the composition into a separate
   target, since sampling and writing one texture is undefined on modern APIs.

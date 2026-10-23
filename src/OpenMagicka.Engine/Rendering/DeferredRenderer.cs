@@ -19,8 +19,8 @@ public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighti
 /// RestoreDepth), the lights into a light accumulator (<see cref="LightPass"/>), the composition
 /// with fog, then additive objects, and the result shown on the back buffer. Shadow maps are drawn
 /// first: the sun's, then the shadow-casting point and spot lights' (<see cref="LightShadows"/>).
-/// Water and lava are drawn with the opaque objects (<see cref="LiquidMaterial"/>). Not yet: decals,
-/// sky map, particles, post effects (OM-25 to OM-27). The original
+/// Water and lava are drawn with the opaque objects (<see cref="LiquidMaterial"/>), the scene's sky
+/// after the composition. Not yet: decals, particles, post effects (OM-25 to OM-27). The original
 /// composes into Main while reading it; here Main is copied first, since sampling and writing one
 /// target is undefined on modern APIs. Render thread only.
 /// </summary>
@@ -29,7 +29,7 @@ public sealed class DeferredRenderer : IDisposable
     public static readonly string[] EffectNames =
         [
             "RenderDeferredEffectWOVT", "ClearEffect", "RestoreDepthEffect", "DirectionalLightEffect", "DeferredShadingEffect", "AdditiveEffect",
-            "SkinnedModelDeferredEffect", "PointLightEffect", "SpotLightEffect", "RenderDeferredLiquidEffect", "LavaEffect",
+            "SkinnedModelDeferredEffect", "PointLightEffect", "SpotLightEffect", "RenderDeferredLiquidEffect", "LavaEffect", "SkyMapEffect",
         ];
 
     /// <summary>
@@ -39,6 +39,12 @@ public sealed class DeferredRenderer : IDisposable
     public const float FarPlane = 500;
 
     private static readonly Vector4 NormalClear = new(0.5f, 0.75f, 0.5f, 0.5f);
+
+    /// <summary>The sky's depth test: behind everything drawn, without writing depth.</summary>
+    private static readonly DepthStencilState SkyDepth = new()
+    {
+        DepthBufferEnable = true, DepthBufferWriteEnable = false, DepthBufferFunction = CompareFunction.LessEqual,
+    };
 
     /// <summary>The shadow map is cleared far beyond any caster, so where nothing was drawn is lit.</summary>
     private static readonly Vector4 NoCaster = new(1e6f);
@@ -58,6 +64,7 @@ public sealed class DeferredRenderer : IDisposable
     private readonly GameEffect skinned;
     private readonly GameEffect water;
     private readonly GameEffect lava;
+    private readonly GameEffect sky;
     private readonly LightPass lights;
     private readonly LightShadows lightShadows = new();
     private readonly Matrix[] bindPose;
@@ -75,13 +82,14 @@ public sealed class DeferredRenderer : IDisposable
     private DeferredRenderer(GraphicsDevice device, IReadOnlyList<GameEffect> effects)
     {
         (deferred, clear, restoreDepth, shading, additive, skinned) = (effects[0], effects[1], effects[2], effects[4], effects[5], effects[6]);
-        (water, lava) = (effects[9], effects[10]);
+        (water, lava, sky) = (effects[9], effects[10], effects[11]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
         if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Shadow
             || water.Effect.Techniques.Count <= LiquidMaterial.Shadow || lava.Effect.Techniques.Count <= LiquidMaterial.LavaShadow
-            || bindPose.Length == 0)
+            || bindPose.Length == 0
+            || !new[] { "SourceTexture0", "SourceDimensions", "Color", "DestinationDimensions" }.All(new FnaEffectParameters(sky.Effect).Contains))
         {
             throw new InvalidDataException("the deferred effects do not have the expected techniques");
         }
@@ -122,7 +130,7 @@ public sealed class DeferredRenderer : IDisposable
         var shadow = DrawSunShadow(device, level, frame);
         lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
-        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava }.Concat(lights.Effects))
+        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects))
         {
             effect.Globals.Apply(globals);
         }
@@ -167,6 +175,7 @@ public sealed class DeferredRenderer : IDisposable
         shade.SetValue("FogEnd", frame.Fog.End);
         shade.SetValue("FogColor", frame.Fog.Color);
         quad.Draw(device, shading, BlendState.Opaque);
+        DrawSky(device, level);
         DrawAdditive(device, level, level.TextureFor);
 
         UnbindTextures(device);
@@ -275,6 +284,24 @@ public sealed class DeferredRenderer : IDisposable
             drawn++;
         }
         return drawn;
+    }
+
+    /// <summary>
+    /// The scene's sky picture where nothing was drawn: a fullscreen pass at the far plane, tested
+    /// LessEqual against Main's depth without writing it. The effect fits the picture to the screen's
+    /// height, so it needs the real target size.
+    /// </summary>
+    private void DrawSky(GraphicsDevice device, GpuLevel level)
+    {
+        if (level.SkyMap is not { } map)
+        {
+            return;
+        }
+        var parameters = new FnaEffectParameters(sky.Effect);
+        parameters.SetValue("SourceTexture0", map);
+        parameters.SetValue("SourceDimensions", new Vector2(map.Width, map.Height));
+        parameters.SetValue("Color", level.SkyColor);
+        quad.Draw(device, sky, BlendState.Opaque, SkyDepth, new Vector2(main!.Width, main.Height));
     }
 
     private void DrawAdditive(GraphicsDevice device, GpuLevel level, Func<Content.Xna.ExternalReference?, Texture?> textures)

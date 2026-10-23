@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using OpenMagicka.Content;
+using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Content.PolygonHead;
 using OpenMagicka.Content.XnAnimation;
@@ -41,12 +42,14 @@ public sealed class GpuLevel : IDisposable
     private readonly BoundingFrustum frustum = new(Matrix.Identity);
 
     private GpuLevel(string asset, GpuBatch[] batches, Dictionary<string, Texture> textures, BoundingBox bounds, IReadOnlyList<string> warnings,
-        DirectionalLighting sun, IReadOnlyList<PointLighting> pointLights, IReadOnlyList<SpotLighting> spotLights)
+        DirectionalLighting sun, IReadOnlyList<PointLighting> pointLights, IReadOnlyList<SpotLighting> spotLights, Texture2D? skyMap, Vector3 skyColor)
     {
         this.asset = asset;
         Sun = sun;
         PointLights = pointLights;
         SpotLights = spotLights;
+        SkyMap = skyMap;
+        SkyColor = skyColor;
         this.batches = batches;
         this.textures = textures;
         Bounds = bounds;
@@ -67,6 +70,12 @@ public sealed class GpuLevel : IDisposable
     /// <summary>The level's spot lights; none for models.</summary>
     public IReadOnlyList<SpotLighting> SpotLights { get; }
 
+    /// <summary>The scene's sky picture, drawn behind everything (null when the scene has none or it failed to load).</summary>
+    public Texture2D? SkyMap { get; }
+
+    /// <summary>The sky's tint (1, 1, 1 when the scene sets none).</summary>
+    public Vector3 SkyColor { get; }
+
     public int BatchCount => batches.Length;
 
     /// <summary>Textures that could not be read; their batches are drawn without them.</summary>
@@ -78,7 +87,8 @@ public sealed class GpuLevel : IDisposable
             ? texture
             : null;
 
-    public static async Task<GpuLevel> Load(ContentLoader loader, string modelAsset, RenderQueue<GraphicsDevice> gpu)
+    /// <param name="sky">The scene's sky map, loaded with the level's textures.</param>
+    public static async Task<GpuLevel> Load(ContentLoader loader, string modelAsset, RenderQueue<GraphicsDevice> gpu, SkyMapSettings? sky = null)
     {
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(gpu);
@@ -98,6 +108,7 @@ public sealed class GpuLevel : IDisposable
         var warnings = new List<string>();
         var images = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in content.SelectMany(References).Select(r => ContentFileSystem.Combine(modelAsset, r.Path)).OfType<string>()
+            .Concat(sky is null ? [] : [sky.Texture])
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
@@ -150,8 +161,13 @@ public sealed class GpuLevel : IDisposable
         }
         var lights = file.Root is LevelModelContent lit ? lit.Lights : [];
         var sun = SceneLighting.Sun(lights);
+        if (sky is not null && textures.TryGetValue(sky.Texture, out var skyTexture) && skyTexture is not Texture2D)
+        {
+            warnings.Add($"{sky.Texture}: the sky map is not a 2D texture");
+        }
         return new GpuLevel(modelAsset, [.. batchTasks.Select(t => t.Result)], textures, LevelGeometry.FramingBounds(content), warnings, sun,
-            SceneLighting.PointLights(lights), SceneLighting.SpotLights(lights));
+            SceneLighting.PointLights(lights), SceneLighting.SpotLights(lights),
+            sky is not null ? textures.GetValueOrDefault(sky.Texture) as Texture2D : null, sky?.Color ?? Vector3.One);
     }
 
     /// <summary>Every texture a batch's material references.</summary>

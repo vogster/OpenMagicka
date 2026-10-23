@@ -205,8 +205,8 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         if (loading is null && wanted != shownScene)
         {
             loadingScene = wanted;
-            var model = catalog.Items[wanted].Model;
-            loading = Task.Run(() => GpuLevel.Load(loader, model, GpuWork));
+            var (model, sky) = (catalog.Items[wanted].Model, catalog.Items[wanted].Settings?.SkyMap);
+            loading = Task.Run(() => GpuLevel.Load(loader, model, GpuWork, sky));
         }
     }
 
