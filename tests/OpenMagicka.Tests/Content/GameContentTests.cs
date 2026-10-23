@@ -364,6 +364,52 @@ public class GameContentTests(ITestOutputHelper output)
         ], shared.Keys);
     }
 
+    /// <summary>
+    /// The three passes with alpha test (docs/engine/RISK_CHECKS.md §1.1) are never drawn: nothing
+    /// but the effect's own file names ChasmEffect, and the skinned techniques that have them are
+    /// reached only through a model material that asks for them, which none does.
+    /// </summary>
+    [GameContentFact]
+    public void NoContent_ReachesThePassesWithAlphaTest()
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var techniques = new SortedDictionary<byte, int>();
+        var chasm = new List<string>();
+        var withoutSharedMaterial = new List<string>();
+        var scanned = 0;
+        foreach (var path in files.ListFiles("", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            scanned++;
+            var xnb = XnbFile.Read(files.ReadAllBytes(path));
+            // A reader, an external reference or any other string that names the effect.
+            if (!path.EndsWith("Shaders/ChasmEffect.xnb", StringComparison.OrdinalIgnoreCase)
+                && (xnb.Objects.Span.IndexOf("ChasmEffect"u8) >= 0 || xnb.Objects.Span.IndexOf("chasmeffect"u8) >= 0
+                    || xnb.TypeReaders.Any(r => r.Name.Contains("Chasm", StringComparison.OrdinalIgnoreCase))))
+            {
+                chasm.Add(path);
+            }
+            if (!xnb.TypeReaders.Any(r => r.Key == "SkinnedModelBasicEffectReader"))
+            {
+                continue;
+            }
+            var materials = XnbContent.Load(xnb, XnbReaderRegistry.Magicka).SharedResources.OfType<OpenMagicka.Content.XnAnimation.SkinnedModelBasicEffectContent>().ToList();
+            if (materials.Count == 0)
+            {
+                withoutSharedMaterial.Add(path);   // a material kept elsewhere in the file would be missed
+            }
+            foreach (var material in materials)
+            {
+                techniques[material.Technique] = techniques.GetValueOrDefault(material.Technique) + 1;
+            }
+        }
+        output.WriteLine($"{scanned} files; " + string.Join(", ", techniques.Select(t => $"technique {t.Key}: {t.Value} materials")));
+
+        Assert.Empty(chasm);
+        Assert.Empty(withoutSharedMaterial);
+        Assert.Empty(techniques.Keys.Select(t => (int)t).Intersect(OpenMagicka.Engine.Rendering.SkinnedDeferredMaterial.AlphaTested));
+        Assert.Equal([(0, 333), (2, 3)], techniques.Select(t => ((int)t.Key, t.Value)));   // 2 (additive): two ghosts and a troll spirit
+    }
+
     [GameContentFact]
     public void EveryLevelModel_TurnsIntoDrawableBatches()
     {

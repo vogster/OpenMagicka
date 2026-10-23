@@ -32,7 +32,21 @@ effects use four of them: `ALPHATESTENABLE` (18 effects), `ALPHAFUNC`, `ALPHAREF
 default behaviour of modern APIs anyway. It is turned on in 3 passes
 (`ChasmEffect/AnimatedModelShadow`, `SkinnedModelDeferredEffect/AnimatedModelAlpha` and
 `/AnimatedModelOccluded`) with the rule `alpha > 0`: only fully transparent pixels are
-discarded. These passes need their own replacement (discard in the shader) — not done yet.
+discarded. **The game never draws these passes**, so they get no replacement:
+- No content file but the effect's own names `ChasmEffect` (no reader, no reference), and the game
+  never creates one.
+- The game reaches the skinned techniques 1 (`AnimatedModelAlpha`) and 5 (`AnimatedModelOccluded`)
+  only through the technique byte of a model's material. Of the game's 336 skinned materials, 333
+  have technique 0 and 3 (two ghosts and a troll spirit) have technique 2 (additive). Characters
+  and physics entities replace the byte with Default or Additive when they draw; spell mines use
+  it as it is.
+
+A content test (`NoContent_ReachesThePassesWithAlphaTest`) keeps this true. Our renderer draws
+skinned models with Default, Depth and Shadow only; once it honours the material's technique
+byte, modded content that selects one of these passes would write its fully transparent pixels
+instead of discarding them. The fix would then be patched into the pixel shader: a `texkill` on
+the output alpha minus 0.5/255 (the test compares the 8-bit alpha, so `> 0` keeps alpha ≥ 1/255;
+`texkill` discards a pixel only when a component is below 0).
 
 **Patch:** state entries (16 bytes) are removed from the structure part of the fx_2_0 file and
 the pass state count is decreased. Every offset points into the data blob before the structure,

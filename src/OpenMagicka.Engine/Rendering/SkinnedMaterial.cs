@@ -17,6 +17,19 @@ public static class SkinnedDeferredMaterial
     public const int Depth = 3;
     public const int Shadow = 4;
 
+    /// <summary><c>AnimatedModelAlpha</c>: alpha-blended, with alpha test.</summary>
+    public const int Alpha = 1;
+
+    /// <summary><c>AnimatedModelOccluded</c>: with alpha test.</summary>
+    public const int Occluded = 5;
+
+    /// <summary>
+    /// The techniques whose passes the original draws with alpha test (alpha &gt; 0), which XNA 4.0
+    /// does not have. A model's material picks them through its technique byte; no material of the
+    /// game does, so they are not drawn and the test is not replaced (docs/engine/RISK_CHECKS.md §1.1).
+    /// </summary>
+    public static IReadOnlyList<int> AlphaTested { get; } = [Alpha, Occluded];
+
     /// <summary>The textures the material uses: each map whose flag is set.</summary>
     public static IEnumerable<ExternalReference> References(SkinnedModelBasicEffectContent material)
     {
