@@ -11,6 +11,12 @@ namespace OpenMagicka.Content;
 /// </summary>
 internal static class LegacyXml
 {
+    /// <summary>
+    /// Nesting limit. The game's files nest a few levels; XmlNode.InnerText recurses and would
+    /// overflow the stack on hostile input long before the parser complains.
+    /// </summary>
+    public const int MaxDepth = 256;
+
     public static XmlDocument Load(Stream stream, string what)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -25,12 +31,30 @@ internal static class LegacyXml
             using var reader = XmlReader.Create(stream, settings);
             var document = new XmlDocument { XmlResolver = null };
             document.Load(reader);
+            CheckDepth(document, what);
             return document;
         }
         catch (Exception e) when (e is XmlException or ArgumentException)
         {
             // XmlDocument reports a bad declaration (version="2.0") as an ArgumentException.
             throw new InvalidDataException($"{what} is not valid XML: {e.Message}", e);
+        }
+    }
+
+    private static void CheckDepth(XmlDocument document, string what)
+    {
+        var stack = new Stack<(XmlNode Node, int Depth)>();
+        stack.Push((document, 0));
+        while (stack.TryPop(out var entry))
+        {
+            if (entry.Depth > MaxDepth)
+            {
+                throw new InvalidDataException($"{what} nests deeper than {MaxDepth} levels");
+            }
+            foreach (XmlNode child in entry.Node.ChildNodes)
+            {
+                stack.Push((child, entry.Depth + 1));
+            }
         }
     }
 

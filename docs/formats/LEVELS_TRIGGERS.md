@@ -103,10 +103,25 @@ Dungeons: `Challenges/ch_dungeons_ch1/ch2`). Challenges and versus are all `*.lv
 | `AdditionalItems` / `Item` | 3 / 3 | `item` (item asset), `bone` | extra items attached to avatars |
 
 Notes:
+- The game's reader needs a top-level `<Level>` element (names compared ignoring case). Element
+  and attribute names are compared ignoring case. An element given twice: the last value wins
+  (for `Start` attribute by attribute), except `Scenes`, `AllowedAvatars` and `AdditionalItems`,
+  whose entries accumulate. Inside `Scenes` every node except comments must be a `Scene`
+  element, or loading fails. Avatar names are lowered. An empty `Scene`, `PreferredAvatar`,
+  `Avatar` or `Dialogs` makes the original fail (whitespace-only text counts as empty).
+- Paths (`Scene`, `Dialogs`, and in scenes `Model`, `SkyMap`, cloud `texture`) are combined with
+  the file's directory. Trailing spaces and dots are dropped, as Windows does when the original
+  opens the file: `Tsar_Mountaindale.lvl` has
+  `<Scene>Tsar_Mountaindale\tmd_s1.xml  </Scene>`.
+- `Start`: `scene` is lowered (it is hashed), `area` is not. An `AdditionalItems/Item` without
+  both `item` and `bone` is dropped.
 - The menu reads `.lvl` with a streaming parser (only Name/Description/ShortDescription/Loading/
   Scenes/PreferredAvatar/AllowedAvatars, plus `<model>` and `<ruleset type>` of each scene).
   On launch the level is read in full (DOM), with a different set of elements (Start, Dialogs,
-  AdditionalItems). Both parsers silently ignore unknown elements.
+  AdditionalItems). Both parsers silently ignore unknown elements. The menu fails when `Name`,
+  `Description` or `Loading` is missing or empty, or there is no scene. Its scan of `<Scenes>`
+  runs to the end of the file, so `Name`, `Description` and `Loading` count only before the
+  first `<Scenes>` (in every shipped level `Scenes` is the last element).
 - Content integrity: the SHA-256 of the `.lvl`, all scene XML and their `.xnb` models are XORed into a "combined
   hash" (DLC licensing/anti-cheat + level matching over the network). Not needed for OpenMagicka.
 - The chapter ruleset is taken from the first scene with a non-null `<ruleset type>`; in the menu `versus`
@@ -116,24 +131,29 @@ Notes:
 
 ## 4. Scene XML
 
-Root `<Scene>` (attributes `forceNavMesh` ×29, `forceCamera` ×12 — bool). Children are read in
-order; **an unknown top-level element → exception** (comments are skipped).
+Root `<Scene>` (attributes `forceNavMesh` ×29, `forceCamera` ×12 — bool; other attributes are
+ignored). Children are read in order; **an unknown top-level element or a text node →
+exception** (comments are skipped). Scene name = file name without extension, lowered; the
+scene ID is its hash. Triggers and OnInteract points share one table keyed by the hash of
+their id/locator: two with the same key → exception (a trigger without id has key 0).
+Repeated settings elements: the last value wins (attribute by attribute).
 
 | Element | Used | Attributes / content | Semantics |
 |---|---|---|---|
-| `Model` | 142 | text: model name | `LevelModel` = `<scene dir>/<name in lower>.xnb`; required |
+| `Model` | 142 | text: model name | `LevelModel` = `<scene dir>/<name>.xnb` (as written; the shipped names are lower case); required |
 | `Trigger` | 2519 | see §5 | trigger |
 | `OnInteract` | 286 | see §5.5 | interactable point |
-| `Wave` | 316 | children are action blocks (§7.1); attribute `value` (×36) is ignored | Survival wave; allowed only **after** `<Ruleset type="survival">`, otherwise an "unknown element" exception |
+| `Wave` | 316 | children are action blocks (§7.1); attribute `value` (×36) is ignored | Survival wave; allowed only **after** `<Ruleset type="survival">`, otherwise an "unknown element" exception. Waves belong to the ruleset object: a later `<Ruleset>` with a known type replaces it and drops the waves read so far |
 | `Reverb` | 116 | `roomType` (enum RoomType, a number is allowed), `mix` (float) | reverb |
 | `Indoor` | 103 | bool text | interior (affects weather/lighting) |
-| `Bloom` | 90 | `threshold`, `multiplier` (or the typo `multiplyer`), `blur` | post-effect |
-| `Fog` | 49 | `start`, `end`, `color` = `r,g,b[,a]` (a defaults to 1) | fog; the element's presence enables it |
-| `Clouds` | 33 | `intensity`, `scale` (`s` or `sx,sy`), `movement` (`x,y`), `texture` (path from scene), `worldRelative` (bool) | cloud projection onto the directional light |
+| `Bloom` | 90 | `threshold` (0.8), `multiplier` or the typo `multiplyer` (1; whichever comes last), `blur` (2.5) | post-effect |
+| `Fog` | 49 | `start`, `end`, `color` = `r,g,b[,a]` (a defaults to 1; fewer than 3 numbers → exception, more than 4 are not read); all 0 when absent | fog; the element's presence enables it |
+| `Clouds` | 33 | `intensity`, `scale` (`s` or `sx,sy`, other counts → exception), `movement` (exactly `x,y`), `texture` (path from scene), `worldRelative` (bool); all 0/none by default | cloud projection onto the directional light |
+| `RimLight` | 0 | `glow` (0.8), `power` (1.5), `bias` (0.2) | rim lighting of characters |
 | `Ruleset` | 32 | `type` = survival / timedobjective / versus (+ own attributes, §7) | mode rules |
 | `KillPlanePosition` | 21 | float text (default −50) | horizontal plane: everything below it is destroyed |
-| `SkyMap` | 19 | text: texture (path from scene); `color` = `r,g,b` (case-sensitive!) | sky |
-| `Filter` | 1 | `brightness`, `contrast`, `saturation` | color correction |
+| `SkyMap` | 19 | text: texture (path from scene); `color` = `r,g,b` (attribute name case-sensitive!; at least 3 numbers, further ones not read). Each `SkyMap` element resets the colour to 1,1,1 first | sky |
+| `Filter` | 1 | `brightness`, `contrast`, `saturation` (all 1) | color correction |
 | `Magnify` | 0 | float text | initial camera zoom |
 
 ## 5. Trigger model
@@ -144,13 +164,14 @@ order; **an unknown top-level element → exception** (comments are skipped).
 |---|---|---|---|---|
 | `id` | 2518 | string → lower → hash | 0 | trigger key; the game has one trigger without an id |
 | `autorun` | 1556 | bool | **true** | check conditions every frame |
-| `repeat` | 2444 | float **or** bool | `false` | `false` = −1 (once); `true` = 0 (every frame while conditions hold); number N ≥ 0 = cooldown of N seconds |
+| `repeat` | 2444 | float **or** bool | `false` | `false` = −1 (once); `true` = 0 (every frame while conditions hold); number N ≥ 0 = cooldown of N seconds. The number is read with NumberStyles.Number (thousands separators, no exponent); anything that is neither a number nor a bool is logged and means −1 |
 
 Any other attribute on `<trigger>` → exception. Values in the game (on `<trigger>`): `repeat="false"` ×1643,
 `"true"` ×616, number (0.5–32 s) ×185; `autorun="false"` ×1208, `"true"` ×348.
 
 Children: `<if>` (0..n), `<then>` (1). Other children are silently ignored. If `<then>` is given
-several times, the last one wins.
+several times, the last one wins. Without `<then>` the trigger has no actions and the original
+fails when the scene initializes its triggers; OpenMagicka rejects it when loading.
 
 ### 5.2 Conditions: `<if>`
 
@@ -174,8 +195,11 @@ several times, the last one wins.
   actions of the chosen group, then the regular ones — regardless of position in the XML.
 - `<looped>` (×18): its contents (actions and nested `<random>`) are included **only if
   the current campaign save is "looped"** (a replay playthrough); decided when the scene loads.
-- Comments are allowed inside `<then>`/`<if>`/`<looped>`, but **not** inside `<random>`
-  (there a comment is taken as an action tag → load error).
+- Comments are allowed directly inside `<then>`, `<OnInteract>` and `<if>`, but **not** inside
+  `<random>` or `<looped>` (there a comment is taken as an action tag → load error). A text node
+  where an action or condition is expected is a load error too.
+- Plain actions inside `<looped>` join the plain actions in document order, and its `<random>`
+  groups join the others; a variant is a random group followed by all plain actions.
 
 ### 5.4 When and how it runs
 
@@ -225,8 +249,10 @@ Attributes (strict — an unknown attribute → exception):
 | `locator` | 286 | name of the point locator (lower); interaction id = hash |
 | `type` | 286 | InteractType: None, Pick_Up, Use, Next, Push, Pull, Boost, Examine, Talk, Interact, Activate, Attack, BreakFree — icon/label |
 | `enabled` | 0 | bool, default true; toggled by `enablePoi`/`disablePoi` |
-| `animHighlight` | 223 | comma-separated list of AnimatedLevelPart paths (`a/b/c`) to highlight |
-| `physHighlight` | 6 | list of physics object ids to highlight |
+| `animHighlight` | 223 | comma-separated list of AnimatedLevelPart paths (`a/b/c`) to highlight; lowered, spaces removed |
+| `physHighlight` | 6 | list of physics object ids to highlight; lowered, spaces removed |
+
+Without `locator` the key is 0, like a trigger without id.
 
 Children are actions (same syntax as inside `<then>`, including `random`/`looped`). There are no conditions;
 autorun is off. It fires when the player interacts and the cursor ray/segment passes
@@ -316,7 +342,9 @@ is how encounters that repeat after death are made.
   they effectively **do nothing**).
 - Block: `area` (area name; `any`/none — a random one from spawnAreas, chosen at wave start and
   **forcibly substituted** into all actions of the block that have an `Area` property),
-  `delay` (delay from wave start). Children are actions; `<random>` is forbidden (exception).
+  `delay` (float, delay from wave start). Children are actions read as in `<then>`. More than
+  one variant is an exception: one `<random>` group is allowed, two are not (random groups in
+  `<looped>` count only in a looped campaign). A text node directly under `<Wave>` fails.
 - A wave ends when all blocks have finished and in area `any` there are no more characters of factions
   EVIL|WILD|DEMON than "luggage" items. Then a 5 s pause and the next
   wave; after the last one — victory. The wave HP bar = total HP of spawned units.
@@ -616,6 +644,9 @@ message → error); the `<text>` tag name is not checked (any element = a line).
 
 ## 13. Recommendations for OpenMagicka
 
+- Safety limits beyond the original: XML nesting is limited to 256 levels (the original's
+  `InnerText` would overflow the stack), reference expansion in strings is bounded (see
+  [Engine architecture](../engine/ARCHITECTURE.md) §10).
 - Parser: XML DOM, case-insensitive name comparison, a "tag → action factory" table
   with an attribute schema (from §9/§10); unknown attributes — a warning, not an error.
 - Store string keys (lower) instead of hashes; the §2.1 hash is needed only for importing

@@ -1,5 +1,3 @@
-using System.Collections.Frozen;
-using System.Collections.ObjectModel;
 using Microsoft.Xna.Framework;
 
 namespace OpenMagicka.Content.Particles;
@@ -141,8 +139,9 @@ public sealed record EmitterContent(
     int NrOfParticles,
     IReadOnlyDictionary<EmitterParameter, ParameterCurve> Parameters)
 {
-    public IReadOnlyDictionary<EmitterParameter, ParameterCurve> Parameters { get; init; } =
-        Parameters as FrozenDictionary<EmitterParameter, ParameterCurve> ?? Parameters.ToFrozenDictionary();
+    private readonly IReadOnlyDictionary<EmitterParameter, ParameterCurve> parameters = ReadOnly.Dictionary(Parameters);
+
+    public IReadOnlyDictionary<EmitterParameter, ParameterCurve> Parameters { get => parameters; init => parameters = ReadOnly.Dictionary(value); }
 
     public float Evaluate(EmitterParameter parameter, float time) =>
         Parameters.TryGetValue(parameter, out var curve) ? curve.Evaluate(time)
@@ -177,5 +176,7 @@ public sealed record VisualEffectContent(
     IReadOnlyList<EmitterContent> Emitters,
     EffectLightContent? Light)
 {
-    public IReadOnlyList<EmitterContent> Emitters { get; init; } = new ReadOnlyCollection<EmitterContent>([.. Emitters]);
+    private readonly IReadOnlyList<EmitterContent> emitters = ReadOnly.List(Emitters);
+
+    public IReadOnlyList<EmitterContent> Emitters { get => emitters; init => emitters = ReadOnly.List(value); }
 }

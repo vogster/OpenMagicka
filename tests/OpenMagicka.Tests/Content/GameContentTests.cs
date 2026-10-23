@@ -204,6 +204,31 @@ public class GameContentTests(ITestOutputHelper output)
             emitters.Count(e => e.Kind == OpenMagicka.Content.Particles.EmitterKind.Pulse), effects.Count(e => e.Light is not null)));
     }
 
+    [GameContentFact]
+    public void EveryLevel_AndEveryScene_ItReferences_Loads()
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!);
+        var levelPaths = files.ListFiles("Levels", recursive: true).Where(p => p.EndsWith(".lvl", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var levels = levelPaths.Select(p => OpenMagicka.Content.Levels.LevelReader.Read(new MemoryStream(files.ReadAllBytes(p)), p)).ToArray();
+        var scenePaths = levels.SelectMany(l => l.Scenes).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var scenes = scenePaths.Select(p => OpenMagicka.Content.Levels.SceneReader.Read(new MemoryStream(files.ReadAllBytes(p)), p)).ToArray();
+
+        output.WriteLine($"{levels.Length} levels, {scenes.Length} scenes, {scenes.Sum(s => s.Triggers.Count)} triggers, "
+            + $"{scenes.Sum(s => s.Interactables.Count)} interactables, {scenes.Sum(s => s.Waves.Count)} waves");
+        Assert.Equal(48, levels.Length);
+        Assert.Equal(141, scenes.Length);
+        Assert.Equal((2516, 285, 316), (scenes.Sum(s => s.Triggers.Count), scenes.Sum(s => s.Interactables.Count), scenes.Sum(s => s.Waves.Count)));
+        Assert.All(levels.Where(l => l.Dialogs is not null), l => Assert.True(files.Exists(l.Dialogs!), l.Dialogs));
+        Assert.All(scenes, s => Assert.True(files.Exists(s.Model + ".xnb"), s.Model));
+        Assert.Equal((17, 3, 12), (scenes.Count(s => s.Ruleset?.Type == OpenMagicka.Content.Levels.RulesetType.Survival),
+            scenes.Count(s => s.Ruleset?.Type == OpenMagicka.Content.Levels.RulesetType.TimedObjective),
+            scenes.Count(s => s.Ruleset?.Type == OpenMagicka.Content.Levels.RulesetType.Versus)));
+
+        // The one scene no level uses has an attribute the original rejects.
+        var orphan = "Levels/Havindr/havindr_s5HBF.xml";
+        Assert.Throws<InvalidDataException>(() => OpenMagicka.Content.Levels.SceneReader.Read(new MemoryStream(files.ReadAllBytes(orphan)), orphan));
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {
