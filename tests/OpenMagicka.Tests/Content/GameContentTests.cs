@@ -119,6 +119,39 @@ public class GameContentTests(ITestOutputHelper output)
         Assert.Empty(missing);
     }
 
+    [GameContentFact]
+    public void EveryOriginalEffect_IsPatchedIntoAnFnaCompatibleForm()
+    {
+        var loader = new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var shaders = Path.Combine(loader.Files.Root, "Shaders");
+        var patched = 0;
+        foreach (var path in Directory.GetFiles(shaders, "*.xnb", SearchOption.AllDirectories))
+        {
+            var asset = Path.GetRelativePath(loader.Files.Root, path)[..^4];
+            var effect = Assert.IsType<OpenMagicka.Content.Xna.EffectContent>(loader.Load(asset).Root);
+            var result = OpenMagicka.Content.Effects.EffectPatcher.Patch(effect.Bytecode);
+            var parsed = OpenMagicka.Content.Effects.Fx2Effect.Parse(result.Bytecode);
+
+            Assert.DoesNotContain(parsed.Passes.SelectMany(p => p.States),
+                s => OpenMagicka.Content.Effects.EffectPatcher.IsUnsupportedRenderState(s.Operation));
+            Assert.DoesNotContain(parsed.SamplerStates, s => OpenMagicka.Content.Effects.EffectPatcher.IsUnsupportedSamplerState(s.Operation, s.Value));
+            foreach (var resource in parsed.Resources.Where(r => r.Technique >= 0))
+            {
+                foreach (var preshader in OpenMagicka.Content.Effects.Preshader.Find(resource.Code))
+                {
+                    var (allocated, needed) = OpenMagicka.Content.Effects.Preshader.TempUsage(preshader);
+                    Assert.True(allocated >= needed, $"{asset}: preshader needs {needed} temps, gets {allocated}");
+                }
+            }
+            if (!ReferenceEquals(result.Bytecode, effect.Bytecode))
+            {
+                patched++;
+            }
+        }
+        output.WriteLine($"{patched} effects patched");
+        Assert.Equal(20, patched);
+    }
+
     /// <summary>Loads every file; a missing reader is only allowed when its name passes the filter.</summary>
     private Dictionary<string, int> LoadAll(XnbReaderRegistry registry, Func<string, bool> allowedMissing)
     {
