@@ -408,6 +408,40 @@ In the world (OM-71):
 - Water without steam formally triggers "electrification" (`Electrocute`), but in `Character` this function
   is empty (it really works only for electric barriers).
 
+In the world (OM-71):
+- **Force.**
+  - **Timing.** The spray runs up to 4 s. Each frame its build-up rises by 4 × the frame time, up
+    to 1, and the frame's base range is `R × build-up`.
+  - **Origin and direction.** It leaves from the cast source along the caster's facing. (A cast
+    from the staff would follow the staff's tip, but a Force spray outside panic is never treated
+    as from the staff.)
+  - **The free fraction `f`.** A ray of the frame's range from the origin is cut at the level, and
+    then at each shield it crosses (each shield multiplies the fraction again).
+  - **What it reaches.** It looks at every damageable entity within the frame's range of the caster
+    (none hidden behind a shield), the caster left out:
+    - a shield is hit when the arc test passes over the frame's range;
+    - anything else when it passes over the reach `range × 0.1 × range × f`;
+    - the arc test is the spray's angle (π/10 either side), within 5 m of height.
+  - **The hit.** It takes the Force collection with magnitudes ×0.25, struck from the origin. It
+    then waits 0.25 s before the spray can hit it again (a frame-by-frame countdown, as the
+    original's: 16 frames at 60 Hz).
+  - **The end.** It stops after its 4 s, or by the base rules (§4.1) once its 0.5 s minimum has
+    passed. Turning is ×0.6.
+- **Area.** At once, a full blast of radius `BlastSize·10` around the caster, the caster left out.
+  The effect ends on its next frame.
+- **Self.** At once, the Self collection on the caster, from its own position. The effect ends
+  after 0.2 s.
+- **Weapon.** At once, an arc strike from the weapon's tip along the facing: radius 6, angle π/2,
+  each entry ×`1 − (distance − radius)/6`, no line of sight. The effect ends after 0.2 s.
+- **Greased.** For Force, Area and Weapon, a greased caster takes the first fire entry among the
+  collection's first four, from the cast source.
+- **Cues.** Each element of the spell starts its effect. Force uses `spray_<element>1` at the cast
+  source, following the spray. Weapon uses `weapon_spray_<element>` (status elements and steam) at
+  the weapon. Self uses `self_<element>` at the caster. All of them end with the effect.
+- **With other systems.** Freezing liquids, the floor decals and `fire_scourge` come with liquids
+  and decals (OM-66). The point light, the spell's sound and the rumble come with the renderer,
+  audio and input.
+
 ### 5.3 Projectile (Earth/Ice)
 
 **Force** (chargeable):
@@ -561,6 +595,25 @@ from attacks with the Damage/Status flags (`amount × magnitude`), others are re
   `radius/3`, 0.3 s.
 - `GroundBlast(radius)`: no falloff, does not hit levitating targets, shake 2 / 0.9 s.
 - Both call `Liquid.Freeze` in a circle (cold freezes water).
+
+In the world (OM-71), for a damage collection:
+- **Who is reached.** Every damageable entity within the radius of the centre: none hidden behind
+  a shield, none ethereal, and the excluded one left out. A ground blast also leaves out the
+  levitating.
+- **Distance.** It is measured along the line from the centre to the entity, up to where that line
+  first meets the entity's surface, minus the entity's radius once more. This is as the original:
+  the radius comes off twice. A distance below 0 counts as 0.
+- **Line of sight.** The line, up to the surface, must not cross the level.
+- **Falloff.** A target at a distance up to the radius takes the collection with its magnitudes ×
+  the falloff (a full blast; none for Arcane or Life, and none for a ground blast). It is struck
+  from the centre.
+- **Cues** (from the owner, or the blast's source when it has none: a missile, a barrel). A camera
+  shake, at radius/3 for 0.3 s (a full blast) or 2 for 0.9 s (a ground blast).
+  Each element of the collection also raises a blast cue, which carries how far the blast reaches
+  in each of eight directions before the level or a shield cuts it. A ground blast ignores both.
+  The renderer draws the element's blast and its decal from that cue; a full blast with Arcane or
+  Life draws the arcane blast.
+- **With other systems.** Liquid freezing (OM-66) and the ground blast's ice spikes (phase 3).
 
 ---
 

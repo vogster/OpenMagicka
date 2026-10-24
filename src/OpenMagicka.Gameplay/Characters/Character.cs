@@ -142,11 +142,25 @@ public sealed partial class Character : Entity
     /// </summary>
     internal Vector3 EntryNormal(Segment segment, Vector3 fallback)
     {
+        if (CapsuleEntry(segment) is not { } inside)
+        {
+            return fallback - Position;
+        }
+        var entry = segment.At(inside);
+        Segment.DistanceSquared(Axis, new Segment(entry, Vector3.Zero), out var s, out _);
+        return entry - Axis.At(s);
+    }
+
+    /// <summary>Where along the segment it enters the capsule (never when ethereal).</summary>
+    public override float? Entry(Segment segment) => IsEthereal ? null : CapsuleEntry(segment);
+
+    private float? CapsuleEntry(Segment segment)
+    {
         var radius = Body.Shape.Radius;
         Segment.DistanceSquared(Axis, segment, out _, out var closest);
         if (Distance(segment.At(closest)) > radius)
         {
-            return fallback - Position;
+            return null;
         }
         var (outside, inside) = (0f, closest);                                 // the distance falls along the segment up to its closest point
         if (Distance(segment.At(0)) <= radius)
@@ -158,9 +172,7 @@ public sealed partial class Character : Entity
             var middle = (outside + inside) / 2;
             (outside, inside) = Distance(segment.At(middle)) > radius ? (middle, inside) : (outside, middle);
         }
-        var entry = segment.At(inside);
-        Segment.DistanceSquared(Axis, new Segment(entry, Vector3.Zero), out var s, out _);
-        return entry - Axis.At(s);
+        return inside;
 
         float Distance(Vector3 point) => MathF.Sqrt(Segment.DistanceSquared(Axis, new Segment(point, Vector3.Zero), out _, out _));
     }

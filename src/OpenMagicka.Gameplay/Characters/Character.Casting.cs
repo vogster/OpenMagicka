@@ -78,6 +78,9 @@ public sealed partial class Character
     /// <summary>Added to an area push's radius (a special ability's).</summary>
     public float AdditionalPushRadius { get; set; }
 
+    /// <summary>Where weapon spells strike from: the slot-0 weapon's tip, else the character.</summary>
+    public Vector3 WeaponSource => HeldItem(0) is { } weapon ? weapon.Tip : Position;
+
     /// <summary>Where spells leave from: the spell source's tip, else the character.</summary>
     public Vector3 CastSource => SpellSource >= 0 && HeldItem(SpellSource) is { } source ? source.Tip : Position;
 

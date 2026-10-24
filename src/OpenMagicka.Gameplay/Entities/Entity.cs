@@ -59,6 +59,13 @@ public abstract class Entity
     /// <summary>Takes a hit from <paramref name="attacker"/>, struck from <paramref name="attackPosition"/>; things that cannot be hurt ignore it.</summary>
     public virtual Combat.DamageResult Damage(Combat.DamageEntry damage, Entity? attacker, Vector3 attackPosition) => Combat.DamageResult.None;
 
+    /// <summary>A whole attack, entry by entry; Deflected only if every entry was.</summary>
+    public virtual Combat.DamageResult Damage(IReadOnlyList<Combat.DamageEntry> entries, Entity? attacker, Vector3 attackPosition)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        return Combat.DamageRules.Combine([.. entries.Select(e => Damage(e, attacker, attackPosition))]);
+    }
+
     /// <summary>Whether a segment, thickened by <paramref name="radius"/>, touches the entity (a melee sweep).</summary>
     public bool SegmentIntersect(Segment segment, float radius) => SegmentIntersect(segment, radius, out _);
 
@@ -77,6 +84,27 @@ public abstract class Entity
         var towards = segment.At(s) - Position;
         hit = Position + (towards.LengthSquared() > 1e-12f ? Vector3.Normalize(towards) * Radius : Vector3.Zero);
         return touches;
+    }
+
+    /// <summary>
+    /// Where along the segment (0 to 1) it first enters the entity's shape, a sphere of its radius by
+    /// default; null when it never does.
+    /// </summary>
+    public virtual float? Entry(Segment segment)
+    {
+        var from = segment.Origin - Position;
+        var (a, b, c) = (segment.Delta.LengthSquared(), Vector3.Dot(from, segment.Delta), from.LengthSquared() - Radius * Radius);
+        if (c <= 0)
+        {
+            return 0;
+        }
+        var root = b * b - a * c;
+        if (a <= 1e-12f || root < 0)
+        {
+            return null;
+        }
+        var t = (-b - MathF.Sqrt(root)) / a;
+        return t is >= 0 and <= 1 ? t : null;
     }
 
     /// <summary>One frame of the entity's own logic.</summary>

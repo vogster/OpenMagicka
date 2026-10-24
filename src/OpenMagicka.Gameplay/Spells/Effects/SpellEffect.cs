@@ -117,6 +117,7 @@ public static class SpellEffects
     public static SpellEffect? For(SpellType type) => type switch
     {
         SpellType.Push => new PushEffect(),
+        SpellType.Spray => new SprayEffect(),
         _ => null,
     };
 }

@@ -8,13 +8,6 @@ namespace OpenMagicka.Gameplay.Characters;
 
 public sealed partial class Character
 {
-    /// <summary>A whole attack, entry by entry; Deflected only if every entry was.</summary>
-    public DamageResult Damage(IReadOnlyList<DamageEntry> entries, Entity? attacker, Vector3 attackPosition)
-    {
-        ArgumentNullException.ThrowIfNull(entries);
-        return DamageRules.Combine([.. entries.Select(e => Damage(e, attacker, attackPosition))]);
-    }
-
     /// <summary>
     /// One entry of damage, docs/engine/ENTITIES_AI.md §2.2: steps 1–5 here (immunity,
     /// entanglement, self-shield, pushes and knockdowns, blocking), steps 6–10 in
