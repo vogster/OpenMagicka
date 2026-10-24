@@ -51,7 +51,7 @@ public sealed partial class CharacterBody
 
     public PhysicsBody Body { get; }
 
-    public CharacterShape Shape { get; }
+    public CharacterShape Shape { get; private set; }
 
     /// <summary>From the centre of the capsule down to the feet (negative).</summary>
     public float HeightOffset => -(Shape.Radius + 0.5f * Shape.Length);
@@ -162,6 +162,20 @@ public sealed partial class CharacterBody
         pendingVelocity += Vectors.ThrowIfNotFinite(velocity, nameof(velocity));
         IsPushed = true;
         leavingGround |= pendingVelocity.Y > liftOff;
+    }
+
+    /// <summary>
+    /// A new capsule (a crouch), its bottom kept where it was; not during a step. Growing back under a
+    /// low ceiling starts inside it, as the original.
+    /// </summary>
+    public void Reshape(float radius, float length)
+    {
+        var shape = Shape with { Radius = radius, Length = length };
+        shape.Validate();
+        var drop = (Shape.Length - length) / 2 + (Shape.Radius - radius);
+        Body.Reshape(new CapsuleShape(radius, length));
+        Body.Position -= new Vector3(0, drop, 0);
+        Shape = shape;
     }
 
     /// <summary>Jumps with the given velocity; only from the ground, and only when allowed to move.</summary>

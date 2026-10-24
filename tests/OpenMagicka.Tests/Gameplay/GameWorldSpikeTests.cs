@@ -5,6 +5,7 @@ using OpenMagicka.Content.Xnb;
 using OpenMagicka.Engine.Characters;
 using OpenMagicka.Engine.Physics;
 using OpenMagicka.Gameplay;
+using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Characters;
 using OpenMagicka.Gameplay.Characters.States;
 using OpenMagicka.Gameplay.Combat;
@@ -46,12 +47,15 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         Assert.Empty(failures);
     }
 
+    /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
+    private const int MadeActions = 9754;
+
     [GameContentFact]
     public void EveryCharacterTemplate_HasItsAnimations()
     {
         var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
         var failures = new List<string>();
-        int templates = 0, animations = 0, actions = 0, sets = 0;
+        int templates = 0, animations = 0, actions = 0, sets = 0, made = 0;
         foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
         {
             if (loader.LoadUncached(path[..^4]).Root is not CharacterTemplateContent template)
@@ -59,10 +63,20 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
                 continue;
             }
             templates++;
+            AnimationAction? Counted(AnimationActionContent content)
+            {
+                var action = CharacterAnimationActions.Create(content);
+                made += action is null ? 0 : 1;
+                if (content is JumpAction { MinRange: null } or JumpAction { MaxRange: null })
+                {
+                    failures.Add($"{template.Id}: a jump without its range");             // §4.2 counts on every vanilla jump having both ends
+                }
+                return action;
+            }
             try
             {
                 var missing = new List<string>();
-                var built = CharacterAnimationSets.From(loader, path[..^4], template, missing: missing);
+                var built = CharacterAnimationSets.From(loader, path[..^4], template, Counted, missing);
                 failures.AddRange(missing.Select(m => $"{template.Id}: missing {m}"));
                 sets += built.Sets.Count(s => s is not null);
                 animations += template.AnimationSets.Sum(s => s.Animations.Count);
@@ -73,10 +87,11 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
                 failures.Add($"{template.Id}: {e.Message}");
             }
         }
-        output.WriteLine($"{templates} templates, {sets} animation sets, {animations} animations, {actions} actions; {failures.Count} failed");
+        output.WriteLine($"{templates} templates, {sets} animation sets, {animations} animations, {actions} actions ({made} made); {failures.Count} failed");
         failures.Take(20).ToList().ForEach(output.WriteLine);
         Assert.Equal(338, templates);
         Assert.Equal((1090, 16475, 16264), (sets, animations, actions));        // as ENTITIES_AI §4.1 records
+        Assert.Equal(MadeActions, made);                                          // the kinds of §4.2 that work now
         Assert.Equal(8, failures.Count);
         Assert.All(failures, f => Assert.StartsWith("a_basic_character: missing", f));   // a base template: its clips are not in its skeleton
     }
@@ -104,7 +119,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             var standing = character.State == CharacterStates.Idle;
             if (!standing && character.State == CharacterStates.Dead)
             {
-                felledByTheFall++;                                                   // the landing killed it
+                felledByTheFall++;                                                   // the landing killed it, or its knockdown clip's suicide
                 standing = true;
             }
             else if (!standing && character.State == CharacterStates.KnockDown && character.Animator!.Clock.IsLooping)
@@ -125,7 +140,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         stuck.Take(30).ToList().ForEach(output.WriteLine);
         Assert.Equal(338, count);
         Assert.Empty(stuck);
-        Assert.Equal((3, 0), (felledByTheFall, lyingForever));
+        Assert.Equal((9, 0), (felledByTheFall, lyingForever));                   // 3 by the landing, 6 warriors by their knockdown clip
     }
 
     [GameContentFact]

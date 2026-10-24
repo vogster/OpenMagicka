@@ -43,7 +43,7 @@ public sealed class PhysicsWorld : IDisposable
     public bool IsStepping { get; private set; }
 
     /// <summary>Bodies and meshes cannot change while the engine walks them.</summary>
-    private void ThrowIfStepping()
+    internal void ThrowIfStepping()
     {
         ThrowIfDisposed();
         if (IsStepping)
@@ -151,7 +151,7 @@ public sealed class PhysicsWorld : IDisposable
         }
     }
 
-    private static J.RigidBodyShape ToJitter(BodyShape shape) => shape switch
+    internal static J.RigidBodyShape ToJitter(BodyShape shape) => shape switch
     {
         SphereShape s => new J.SphereShape(Positive(s.Radius, nameof(s.Radius))),
         BoxShape b => new J.BoxShape(Positive(b.Size.X, "Size.X"), Positive(b.Size.Y, "Size.Y"), Positive(b.Size.Z, "Size.Z")),

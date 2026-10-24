@@ -36,7 +36,21 @@ public sealed class PhysicsBody
 
     internal bool BelongsTo(PhysicsWorld world) => ReferenceEquals(owner, world);
 
-    public BodyShape Shape { get; }
+    public BodyShape Shape { get; private set; }
+
+    /// <summary>Swaps the body's shape, keeping its mass, position and velocity; not during a step.</summary>
+    public void Reshape(BodyShape shape)
+    {
+        ArgumentNullException.ThrowIfNull(shape);
+        var live = Body;
+        owner.ThrowIfStepping();
+        var collider = PhysicsWorld.ToJitter(shape);
+        var old = live.Shapes.ToList();
+        live.AddShape(collider, MassInertiaUpdateMode.Preserve);
+        live.RemoveShapes(old, MassInertiaUpdateMode.Preserve);
+        live.SetActivationState(true);
+        Shape = shape;
+    }
 
     public bool IsRemoved { get; internal set; }
 

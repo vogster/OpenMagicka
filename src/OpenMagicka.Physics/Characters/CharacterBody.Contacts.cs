@@ -40,12 +40,16 @@ public sealed partial class CharacterBody
 
     private ContactResponse OnContact(in Contact contact)
     {
+        var other = contact.OtherBody?.Listener is Contacts { Owner: var character } ? character : null;
+        if (contact.OtherMesh is null && (Conditions.IsIntangible || other is { Conditions.IsIntangible: true }))
+        {
+            return ContactResponse.Ignore;                                 // only the level stops an intangible character
+        }
         if (GapAfterStep(contact) > ContactTolerance)
         {
             return ContactResponse.Collide;                                // leaving it this step: no rules
         }
         var closing = Vector3.Dot(Body.Velocity, -contact.Normal);          // moving into the other shape
-        var other = contact.OtherBody?.Listener is Contacts { Owner: var character } ? character : null;
         var response = ContactResponse.Collide;
         if (other is not null)
         {

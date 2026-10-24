@@ -28,6 +28,7 @@ public sealed partial class Character
         {
             return DamageResult.None;
         }
+        RemoveInvisibility();
         if (damage.Attack.HasFlag(AttackProperties.Entanglement) && !Statuses.Has(StatusEffects.Burning))
         {
             if (ReferenceEquals(attacker, this))
@@ -49,7 +50,7 @@ public sealed partial class Character
         }
         result |= Pushes(damage, attackPosition);
         var blocked = Block(ref damage, attackPosition);
-        var outcome = DamageRules.Hit(blocked ? damage with { Attack = damage.Attack & AttackProperties.Status } : damage, Target);
+        var outcome = DamageRules.Hit(blocked ? damage with { Attack = damage.Attack & AttackProperties.Status } : damage, AsDamageTarget);
         result |= outcome.Result | (blocked ? DamageResult.Deflected : DamageResult.None);
         Statuses = outcome.Statuses;
         CastInterrupted |= outcome.InterruptsCast;
@@ -70,7 +71,7 @@ public sealed partial class Character
         return result;
     }
 
-    private DamageTarget Target => new(HitPoints, MaxHitPoints, Statuses, Defences, Template.HitTolerance, Template.BleedRate,
+    private DamageTarget AsDamageTarget => new(HitPoints, MaxHitPoints, Statuses, Defences, Template.HitTolerance, Template.BleedRate,
         CanHaveStatus: !IsEthereal, BloodAndGore: BloodAndGore);
 
     /// <summary>Step 4: a knockback (40°, falls), or a push (10°) and a knockdown by tolerance.</summary>
@@ -123,7 +124,7 @@ public sealed partial class Character
     /// </summary>
     private bool Block(ref DamageEntry damage, Vector3 attackPosition)
     {
-        if (Blocker is null || !damage.Attack.HasFlag(AttackProperties.Damage) || (damage.Element & (Elements.Earth | Elements.Lightning)) == 0
+        if (BlockSlot < 0 || Blocker is null || !damage.Attack.HasFlag(AttackProperties.Damage) || (damage.Element & (Elements.Earth | Elements.Lightning)) == 0
             || !Blocker.TryBlock(damage, attackPosition, out var blocked))
         {
             return false;
@@ -164,6 +165,7 @@ public sealed partial class Character
         {
             return;
         }
+        RemoveInvisibility();
         if (SelfShield is { IsActive: true } shield)
         {
             amount = shield.AbsorbOverTime(amount, element);

@@ -28,6 +28,7 @@ public sealed record CharacterShape(float Radius, float Length, float Mass, floa
 /// <summary>What gameplay tells the body about its character before each step.</summary>
 /// <param name="IsPlayer">Players are never walked through by heavier characters.</param>
 /// <param name="IgnoresImpacts">No impact damage, as during scripted falls.</param>
+/// <param name="IsIntangible">Passes through everything but the level, and nothing but the level stops it (ethereal).</param>
 /// <param name="IsOnGrease">Grease lasts only for the tick it is reported.</param>
 /// <param name="TurnSpeed">The template's turn speed; the share of the way turned per second.</param>
 /// <param name="FlyGround">For a flying character, the nav-mesh height below it.</param>
@@ -40,6 +41,7 @@ public sealed record CharacterConditions(
     bool IsLevitating = false,
     bool IsOnGrease = false,
     bool IgnoresImpacts = false,
+    bool IsIntangible = false,
     float TurnSpeed = 10,
     float? FlyGround = null)
 {

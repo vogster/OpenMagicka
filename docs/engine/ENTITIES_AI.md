@@ -402,6 +402,66 @@ skeleton. Across the 338 vanilla templates that is 1,090 sets, 16,475 animations
 only the base template `a_basic_character` names clips its skeleton lacks (8 animations, left out;
 the original would fail on loading it). The first clip is `idle`, started at once.
 
+### 4.2 What each action does
+
+Most actions in the data end at 0: they run once when their start is reached and end on the next
+frame. Uses across the vanilla templates are given in brackets. "Each frame" means every frame of
+the window; "once" means the first frame only.
+
+- **`Move`** (376): each frame, the body's extra force is the action's velocity turned from the
+  character's frame (−Z forward, +X to its right, +Y up) into the world, times the animation speed
+  at that moment (the previous frame's, as actions run before the speed is worked out again).
+- **`Jump`** (8, all `move_jump_begin`): once, for a non-player character only. The aim is the
+  target's position plus half its velocity; with no target it is the facing direction times the
+  middle of the range, taken as a point (not as an offset from the character), as the original.
+  The jump distance is the **squared** distance to the aim × 1.1, clamped to the range, as the
+  original (all 8 vanilla jumps give both ends of the range). The direction is the unit vector to the aim. The body is allowed to move, then the
+  character jumps along it at the elevation. A ballistic jump to a point `d` away flat and `h` up
+  at elevation `θ` takes the speed `√(g·d² / (2·(d·tan θ − h)·cos² θ))`; it does nothing when that
+  is not a number, when entangled or when dead.
+- **`Crouch`** (199): once, the capsule becomes the action's radius and length (each at least
+  0.01) if it differs, keeping the feet where they are; at the end it goes back to the template's.
+- **`Ethereal`** (25): once. With speed 0 the transparency is set at once; otherwise the character
+  becomes ethereal or solid and its transparency eases towards the alpha at that speed. Becoming
+  ethereal removes burning, wet, frozen, cold, poison, healing, grease and steam. The transparency
+  eases each frame by `(target − alpha) × speed × dt`.
+- **`Invisible`** (9): once, invisible for good (the self-shield goes), or only hidden from
+  rendering with "no effect"; at the end, visible again. Damage that gets past the dead and
+  immortal checks, attacking, a kill and an overkill end invisibility; so does any status tick,
+  healing ones included, as the original.
+- **`Immortal`** (54): each frame, immortal for 3 s (set, not added); without "collide" the
+  character also passes through everything but the level for 0.15 s. At the end, the immortality
+  goes at once.
+- **`RemoveStatus`** (9): once, the named status stops.
+- **`Suicide`** (22): each frame, an overkill, or a kill that dies at once (not through the death
+  clip). The dead state still follows, through the common checks. Six goblin and dwarf warrior
+  templates carry one in `hit_stun_begin`, so a knockdown kills them, as in the original.
+- **`Block`** (84): each frame, the item in that slot blocks. The block slot is cleared at the start
+  of every frame before the actions run, so blocking lasts exactly the window. Only Earth or
+  Lightning damage is blocked, and only while a slot is set.
+- **`BreakFree`** (180): once, an entangled character tears the vines by the magnitude (as Earth
+  damage to the entanglement); a gripped one breaks free (with grips).
+- **`PlaySound`** (4,288), **`PlayEffect`** (1,511), **`Footstep`** (2,928) and **`CameraShake`**
+  (62) are for presentation. They fire once each: a sound cue from a bank at the character; an
+  effect at a bone, which with "attach" follows the bone until the action ends; a footstep chosen by
+  the ground material and the character's mass, only on the ground and not levitating; a camera
+  shake at the character's position.
+- **With items:** `DealDamage` (1,997), `SpawnMissile` (1,787), `Gunfire` (335), `SpecialAbility`
+  (84), `WeaponVisibility` (767), `DetachItem` (17), `SetItemAttach` (unused).
+- **With spells:** `CastSpell` (1,371).
+- **With grips:** `Grip` (48), `DamageGrip` (48), `ReleaseGrip` (24), `ThrowGrip` (15),
+  `OverkillGrip` (15).
+- **With the frog:** `Tongue` (1).
+
+Passing through means that a character which is ethereal, or within an `Immortal` action's 0.15 s,
+neither stops nor is stopped by anything but the level (and liquids).
+
+In OpenMagicka the actions are in `OpenMagicka.Gameplay.Animation.Actions`. Presentation actions
+raise a `Cue` on the character for the engine (sound, effect and its end, footstep, camera shake).
+`CharacterAnimationActions` (Engine) makes them from the template data. The action types that wait
+for a later system are left out until it lands. Invisibility counts down in OpenMagicka; in the
+original the buff that grants it times it.
+
 ---
 
 ## 5. Character state machine (CharacterStates)
@@ -520,9 +580,10 @@ stateDiagram-v2
 
 ### 5.4 The state machine in the character's frame
 
-Where it runs (the order of §2.5, with animation): the animation clock moves and the current clip's
-actions run (skipped once a corpse's timer is below −10 and its clip has finished with no blend);
-the speed multiplier and the animation speed reset to 1; the self-shield updates; **the state
+Where it runs (the order of §2.5, with animation): the action timers count down and the block slot
+is cleared; the animation clock moves and the current clip's actions run (skipped once a corpse's
+timer is below −10 and its clip has finished with no blend); the transparency eases; the speed
+multiplier and the animation speed reset to 1; the self-shield updates; **the state
 updates and may hand over to another** (the old one's exit, then the new one's entry; the old one is
 kept as the previous state); then the zap (it multiplies both speeds), the timers, regeneration and
 statuses follow. Last, the animation speed is scaled: in `Move` (and `Panic`) by the body's speed as

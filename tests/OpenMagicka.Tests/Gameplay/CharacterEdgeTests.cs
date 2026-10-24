@@ -123,7 +123,7 @@ public class CharacterEdgeTests
     {
         using var world = World();
         var knight = Spawn(world);
-        knight.Blocker = new FixedBlock(150);
+        (knight.Blocker, knight.BlockSlot) = (new FixedBlock(150), 0);
 
         knight.Damage(Hurt(Elements.Earth, 100, 2), null, Vector3.Zero);           // 150 < 200: not full, but 100 − 150 → 0
 
@@ -179,7 +179,7 @@ public class CharacterEdgeTests
         Assert.Throws<ArgumentOutOfRangeException>(() => goblin.Entangle(float.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => goblin.KnockDown(float.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.Spawn(Goblin with { MaxHitPoints = 0 }, Vector3.Zero));
-        goblin.Blocker = new FixedBlock(float.NaN);
+        (goblin.Blocker, goblin.BlockSlot) = (new FixedBlock(float.NaN), 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => goblin.Damage(Hurt(Elements.Earth, 10), null, Vector3.Zero));
     }
 

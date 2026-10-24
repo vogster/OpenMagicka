@@ -45,6 +45,9 @@ public abstract class Entity
 
     public abstract float Radius { get; }
 
+    /// <summary>How fast the entity moves (a jump at it leads it); still things stand still.</summary>
+    public virtual Vector3 Velocity => Vector3.Zero;
+
     public abstract bool IsDead { get; }
 
     /// <summary>The manager takes the entity out at the end of the frame.</summary>

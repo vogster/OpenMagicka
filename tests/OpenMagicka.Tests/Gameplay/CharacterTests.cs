@@ -282,7 +282,7 @@ public class CharacterTests
     {
         using var world = World();
         var knight = Spawn(world);
-        knight.Blocker = new Shield(blocks: 1000);
+        (knight.Blocker, knight.BlockSlot) = (new Shield(blocks: 1000), 0);
 
         var result = knight.Damage(new DamageEntry(AttackProperties.Damage | AttackProperties.Status, Elements.Earth | Elements.Water, 100, 1), null, Vector3.Zero);
 

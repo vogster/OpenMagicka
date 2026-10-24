@@ -94,6 +94,20 @@ public sealed partial class StatusSet
         return new StatusSet(copy, DryTimer);
     }
 
+    /// <summary>The set with the given statuses ended.</summary>
+    public StatusSet Without(StatusEffects types)
+    {
+        var copy = Copy();
+        for (var i = 0; i < copy.Length; i++)
+        {
+            if ((copy[i].Type & types) != StatusEffects.None)
+            {
+                copy[i] = default;
+            }
+        }
+        return new StatusSet(copy, DryTimer);
+    }
+
     /// <summary>A dead character keeps no status.</summary>
     public StatusSet Cleared() => new(new StatusEffect[StatusEffect.Count], DryTimer);
 

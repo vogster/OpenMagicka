@@ -5,7 +5,8 @@ internal sealed class AttackState : CharacterState
 {
     protected internal override void Enter(Character character)
     {
-        character.IsEthereal = false;                                         // attacking makes the character solid (and visible)
+        character.Ethereal(false, 1, 1);                                      // attacking makes the character solid and visible
+        character.RemoveInvisibility();
         character.GoToAnimation(character.NextAttackAnimation ?? "idle", 0.075f);
         character.NextAttackAnimation = null;
     }

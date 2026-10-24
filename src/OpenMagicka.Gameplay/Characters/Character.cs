@@ -74,7 +74,7 @@ public sealed partial class Character : Entity
 
     public ISelfShield? SelfShield { get; set; }
 
-    /// <summary>The item blocking, while the character blocks.</summary>
+    /// <summary>The blocking item; it blocks only while a block action holds <see cref="BlockSlot"/> (which picks no item until equipment comes).</summary>
     public IBlocker? Blocker { get; set; }
 
     /// <summary>A player's avatar: heavier characters never walk through it.</summary>
@@ -90,6 +90,8 @@ public sealed partial class Character : Entity
     public override Vector3 Position => Body.Body.IsRemoved ? lastPosition : Body.Body.Position;
 
     public override float Radius => Template.Radius;
+
+    public override Vector3 Velocity => Body.Body.IsRemoved ? Vector3.Zero : Body.Body.Velocity;
 
     public override bool IsDead => Dead;
 
@@ -177,6 +179,7 @@ public sealed partial class Character : Entity
     /// <summary>Kills (a kill plane, a script): at once without a state machine, through the death clip with one.</summary>
     public void Kill()
     {
+        RemoveInvisibility();
         HitPoints = MathF.Min(HitPoints, 0);
         DieUnlessDying();
     }
@@ -184,6 +187,7 @@ public sealed partial class Character : Entity
     /// <summary>Shatters: no corpse, no revival.</summary>
     public void OverKill()
     {
+        RemoveInvisibility();
         if (!IsOverkilled)
         {
             IsOverkilled = true;
@@ -230,6 +234,7 @@ public sealed partial class Character : Entity
             IsEntangled = IsEntangled,
             IsKnockedDown = IsKnockedDown,
             CanBeKnockedDown = CanBeKnockedDown,
+            IsIntangible = IsIntangible,
             TurnSpeed = frozen ? 0 : Template.TurnSpeed,
         };
     }
@@ -243,7 +248,10 @@ public sealed partial class Character : Entity
         }
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);
         immortalTime -= dt;
+        CountDownActionTimers(dt);
+        BlockSlot = -1;                                                       // a block action sets it again within its window
         Animate(dt);
+        UpdateLooks(dt);
         Body.SpeedMultiplier = 1;
         SelfShield?.Update(this, dt);
         if (State is not null)
@@ -276,6 +284,10 @@ public sealed partial class Character : Entity
         if (LastAttacker is not null && !ReferenceEquals(LastAttacker.Manager, Manager))
         {
             LastAttacker = null;                                              // it left the level
+        }
+        if (Target is not null && !ReferenceEquals(Target.Manager, Manager))
+        {
+            Target = null;
         }
         if (LastAttacker is not null && Statuses.Active == StatusEffects.None)
         {

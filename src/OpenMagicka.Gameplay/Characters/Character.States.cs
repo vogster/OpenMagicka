@@ -87,12 +87,13 @@ public sealed partial class Character
     public bool IsPlaying(string name) => string.Equals(CurrentAnimation, name, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Hands over to another state (the old one's exit, then the new one's entry); null, the same state or
-    /// a dead character does nothing. An entry may hand over again; an exit must not.
+    /// Hands over to another state (the old one's exit, then the new one's entry); null or the same state
+    /// does nothing, and a dead character only goes into the dead state (one killed outside it, as by a
+    /// suicide action) or rises. An entry may hand over again; an exit must not.
     /// </summary>
     public void ChangeState(CharacterState? next)
     {
-        if (next is null || ReferenceEquals(next, State) || State is null || (Dead && next != CharacterStates.Ressurection))
+        if (next is null || ReferenceEquals(next, State) || State is null || (Dead && next != CharacterStates.Dead && next != CharacterStates.Ressurection))
         {
             return;
         }

@@ -12,7 +12,7 @@ namespace OpenMagicka.Engine.Characters;
 public static class CharacterAnimationSets
 {
     /// <param name="templateAsset">The template's asset path, which its skeleton reference is relative to.</param>
-    /// <param name="action">Makes an action from its content; null leaves it out.</param>
+    /// <param name="action">Makes an action from its content (null from it leaves the action out); by default <see cref="CharacterAnimationActions.Create"/>.</param>
     /// <param name="missing">Collects the animations left out because their clip is not in the skeleton.</param>
     public static CharacterAnimations From(ContentLoader loader, string templateAsset, CharacterTemplateContent template,
         Func<AnimationActionContent, AnimationAction?>? action = null, ICollection<string>? missing = null)
@@ -20,6 +20,7 @@ public static class CharacterAnimationSets
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(templateAsset);
         ArgumentNullException.ThrowIfNull(template);
+        action ??= CharacterAnimationActions.Create;
         var clips = Clips(loader, templateAsset, template);
         var sets = template.AnimationSets.Select(set => set.Animations.Count == 0 ? null : new AnimationSet(set.Animations
             .Where(named => clips.ContainsKey(named.Clip.ClipName) || Missing(missing, $"{named.Animation} ({named.Clip.ClipName})"))
@@ -29,7 +30,7 @@ public static class CharacterAnimationSets
                 named.Clip.Speed,
                 named.Clip.BlendTime,
                 named.Clip.Loop,
-                [.. named.Clip.Actions.Select(a => action?.Invoke(a)).OfType<AnimationAction>()]))))
+                [.. named.Clip.Actions.Select(action).OfType<AnimationAction>()]))))
             .ToList();
         return new CharacterAnimations(sets);
     }

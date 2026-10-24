@@ -12,20 +12,24 @@ namespace OpenMagicka.Tests.Gameplay;
 public class StateMachineTests
 {
     /// <summary>Every clip the states ask for; the looping ones loop.</summary>
-    internal static CharacterAnimations Clips(params string[] without)
-    {
-        (string Name, float Duration, bool Loop)[] clips =
-        [
-            ("idle", 2, true), ("idle_wnd", 2, true), ("idle_agg", 2, true), ("move_walk", 1, true), ("move_run", 0.8f, true), ("move_wnd", 1, true),
-            ("hit", 0.4f, false), ("hit_stun_begin", 0.5f, false), ("hit_stun_end", 0.5f, false), ("hit_fly", 1, true), ("hit_slide", 1, true),
-            ("stunned", 1, true), ("spec_entangled", 1, true), ("move_jump_up", 0.3f, false), ("move_jump_down", 0.3f, false),
-            ("move_jump_end", 0.3f, false), ("die0", 1, false), ("die1", 1, false), ("revive", 0.6f, false), ("attack_melee0", 0.5f, false),
-            ("attack_melee1", 0.5f, false), ("block", 1, true), ("dash", 0.4f, false), ("spec_alert0", 0.5f, false), ("spec_alert1", 0.5f, false),
-            ("emote_confused0", 1, true),
-        ];
-        return new CharacterAnimations([new AnimationSet(clips.Where(c => !without.Contains(c.Name))
-            .Select(c => new CharacterAnimation(c.Name, new AnimationClip(c.Name, c.Duration), 1, 0, c.Loop, [])))]);
-    }
+    private static readonly (string Name, float Duration, bool Loop)[] Basics =
+    [
+        ("idle", 2, true), ("idle_wnd", 2, true), ("idle_agg", 2, true), ("move_walk", 1, true), ("move_run", 0.8f, true), ("move_wnd", 1, true),
+        ("hit", 0.4f, false), ("hit_stun_begin", 0.5f, false), ("hit_stun_end", 0.5f, false), ("hit_fly", 1, true), ("hit_slide", 1, true),
+        ("stunned", 1, true), ("spec_entangled", 1, true), ("move_jump_up", 0.3f, false), ("move_jump_down", 0.3f, false),
+        ("move_jump_end", 0.3f, false), ("die0", 1, false), ("die1", 1, false), ("revive", 0.6f, false), ("attack_melee0", 0.5f, false),
+        ("attack_melee1", 0.5f, false), ("block", 1, true), ("dash", 0.4f, false), ("spec_alert0", 0.5f, false), ("spec_alert1", 0.5f, false),
+        ("emote_confused0", 1, true),
+    ];
+
+    internal static CharacterAnimations Clips(params string[] without) => ClipsWith([], without);
+
+    /// <summary>The basic clips, those of <paramref name="extra"/> replacing any of the same name.</summary>
+    internal static CharacterAnimations ClipsWith(CharacterAnimation[] extra, params string[] without) =>
+        new([new AnimationSet([
+            .. Basics.Where(c => !without.Contains(c.Name) && !extra.Any(e => e.Name == c.Name))
+                .Select(c => new CharacterAnimation(c.Name, new AnimationClip(c.Name, c.Duration), 1, 0, c.Loop, [])),
+            .. extra])]);
 
     internal static Character Animated(GameWorld world, CharacterTemplate? template = null, Vector3? at = null, CharacterAnimations? clips = null)
     {

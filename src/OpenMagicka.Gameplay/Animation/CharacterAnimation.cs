@@ -9,9 +9,15 @@ namespace OpenMagicka.Gameplay.Animation;
 /// </summary>
 public abstract class AnimationAction(float start, float end)
 {
-    public float Start { get; } = start;
+    public float Start { get; } = Finite(start, nameof(start));
 
-    public float End { get; } = end;
+    public float End { get; } = Finite(end, nameof(end));
+
+    protected static float Finite(float value, string name) =>
+        float.IsFinite(value) ? value : throw new ArgumentOutOfRangeException(name, value, "must be finite");
+
+    protected static System.Numerics.Vector3 Finite(System.Numerics.Vector3 value, string name) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z) ? value : throw new ArgumentOutOfRangeException(name, value, "must be finite");
 
     /// <summary>Runs in a frame of the window; <paramref name="first"/> on the first one.</summary>
     public abstract void Run(Character owner, bool first);
