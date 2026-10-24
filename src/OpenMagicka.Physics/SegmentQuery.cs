@@ -46,7 +46,7 @@ internal sealed class SegmentQuery
     private bool Visit(IDynamicTreeProxy proxy)
     {
         if (proxy is not J.RigidBodyShape shape || (ignored is not null && ReferenceEquals(shape.RigidBody, ignored))
-            || (levelOnly && shape.RigidBody.Tag is not StaticMesh))
+            || (levelOnly && shape.RigidBody.Tag is not StaticMesh { IsLevel: true }))
         {
             return false;
         }

@@ -121,6 +121,7 @@ public static class SpellEffects
         SpellType.Projectile => new ProjectileEffect(),
         SpellType.Lightning => new LightningEffect(),
         SpellType.Beam => new BeamEffect(),
+        SpellType.Shield => new ShieldEffect(),
         _ => null,
     };
 }

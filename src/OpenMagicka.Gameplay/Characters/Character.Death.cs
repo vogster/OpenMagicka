@@ -45,6 +45,7 @@ public sealed partial class Character
         Dead = true;
         IsKnockedDown = false;
         ReleaseEntanglement();
+        RemoveSelfShield();                                                   // as the original: death takes the self-shield
     }
 
     private void Afterlife(float dt)

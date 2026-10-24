@@ -314,6 +314,10 @@ public sealed class Missile : Entity
         {
             return ContactResponse.Ignore;
         }
+        if (contact.OtherMesh is { Owner: Entity standing })
+        {
+            return Meet(standing);                                            // a shield standing in the world is hit as an entity
+        }
         if (contact.OtherMesh is not null)
         {
             if (!collided)
@@ -329,6 +333,11 @@ public sealed class Missile : Entity
             collisionSpeed = MathF.Max(collisionSpeed, Body.Velocity.LengthSquared());
             return ContactResponse.Collide;
         }
+        return Meet(entity);
+    }
+
+    private ContactResponse Meet(Entity entity)
+    {
         if ((ReferenceEquals(entity, Owner) && !CanHitOwner) || entity.IsDead || !entity.IsDamageable || entity is Character { IsEthereal: true }
             || (entity is Missile other && ReferenceEquals(other.Owner, Owner)) || passed.ContainsKey(entity))
         {

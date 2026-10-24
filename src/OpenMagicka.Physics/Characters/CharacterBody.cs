@@ -46,6 +46,7 @@ public sealed partial class CharacterBody
         Body.Restitution = 0;
         Body.AffectedByGravity = !shape.Flies;
         Body.Listener = new Contacts(this);
+        Body.PassesPassableMeshes = true;
         MaxSpeed = shape.Speed;
         LastPositionOnGround = position;
     }

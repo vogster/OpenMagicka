@@ -58,7 +58,8 @@ public sealed class PhysicsWorld : IDisposable
     /// (B − A) × (C − A) points to. Degenerate triangles are dropped.
     /// </summary>
     /// <param name="friction">The level's own surfaces use 1 (docs/engine/ARCHITECTURE.md §7.3).</param>
-    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles, float friction = 1)
+    /// <param name="isLevel">False for a solid thing that is not the level (level-only tests pass it); it can then be removed.</param>
+    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles, float friction = 1, bool isLevel = true)
     {
         ThrowIfStepping();
         NonNegative(friction, nameof(friction));
@@ -77,7 +78,7 @@ public sealed class PhysicsWorld : IDisposable
             (indices[3 * i], indices[3 * i + 1], indices[3 * i + 2]) = (t.A, t.B, t.C);
         }
         var shapes = NonDegenerate(points, indices);
-        var mesh = new StaticMesh(material, shapes.Count, friction);
+        var mesh = new StaticMesh(material, shapes.Count, friction, isLevel);
         if (shapes.Count > 0)
         {
             var body = world.CreateRigidBody();
@@ -85,8 +86,29 @@ public sealed class PhysicsWorld : IDisposable
             body.Friction = friction;
             body.Tag = mesh;
             body.AddShapes(shapes, MassInertiaUpdateMode.Preserve);
+            mesh.Body = body;
         }
         return mesh;
+    }
+
+    /// <summary>Takes a mesh that is not the level out of the world (a shield gone).</summary>
+    public void RemoveStaticMesh(StaticMesh mesh)
+    {
+        ThrowIfStepping();
+        ArgumentNullException.ThrowIfNull(mesh);
+        if (mesh.IsLevel)
+        {
+            throw new InvalidOperationException("the level stays");
+        }
+        if (mesh.IsRemoved)
+        {
+            return;
+        }
+        if (mesh.Body is { } body)
+        {
+            world.Remove(body);
+        }
+        (mesh.Body, mesh.IsRemoved) = (null, true);
     }
 
     private static List<J.TriangleShape> NonDegenerate(JVector[] points, int[] indices)
@@ -203,7 +225,7 @@ public sealed class PhysicsWorld : IDisposable
     /// nothing.
     /// </summary>
     /// <param name="ignore">A body the segment passes through, such as the caster.</param>
-    /// <param name="levelOnly">Only the static meshes count.</param>
+    /// <param name="levelOnly">Only the level's static meshes count.</param>
     public SegmentHit? CastSegment(Vector3 start, Vector3 end, PhysicsBody? ignore = null, bool levelOnly = false)
     {
         ThrowIfDisposed();

@@ -749,6 +749,67 @@ from attacks with the Damage/Status flags (`amount × magnitude`), others are re
   `1.5·m`, duration `15 + 5·m` s, where `m = max(1, max magnitude of these elements)`.
   Removes the previous bubble (if armor was not applied) and the previous aura.
 
+In the world (OM-71), shields and self-shields:
+- **A shield entity** (disc, sphere or wall):
+  - **Hit points.** It has at most 5000 and loses 10 every 0.1 s; it goes when they are gone.
+  - **Shape.**
+    - A disc is a sphere shell of radius 5.5 within π/4 of its facing.
+    - A sphere is the whole shell.
+    - A wall is a box 0.4 thick and 6 high, running 12 along its facing, centred on its position.
+  - **In the world** it is solid: characters and missiles meet it as they meet the level, a shell
+    from either side. Segment tests (sprays, beams, lightning, line of sight through shields) meet
+    the shell's first crossing within its cap, or the wall's box.
+  - **Damage.** It takes attacks that carry Damage or Status: `amount × magnitude` comes off its
+    hit points when that is not negative. It deflects anything else. A missile that meets it hits
+    it, firing the missile's Hit events with the shield as the target.
+  - **Overlap.** A new shield that overlaps an older one kills the older at once, and itself 0.25 s
+    later. While that timer runs, or once it is out of hit points, characters pass through it;
+    missiles and spells still meet it. An older shield already out of hit points does not count.
+    - Two shells overlap when their flat circles cross within both caps.
+    - Two walls overlap when their 12-long flat lines come within 0.5.
+    - A wall and a shell overlap when the wall's line crosses the shell within its cap.
+- **The casts** (a pure shield; the effect lives its 0.5 s minimum, or until its clip ends;
+  turning is ×0.1):
+  - **Force:** a disc with 800 hit points, 3.5 behind the caster, facing along its facing.
+  - **Area:** a sphere with 1000 hit points at the caster.
+  - **Weapon:** when the cast clip's action ends, or the effect stops first, a wall with 800 hit
+    points, `radius + 7.5` ahead of the caster, along its facing.
+- **The bubble** (a pure Self cast).
+  - **Casting.** It replaces any self-shield. Casting it while a bubble is up only takes the
+    bubble down.
+  - **Hit points.** 500, losing 100 a second.
+  - **What it stops.** An attack that carries Damage or Status takes `amount × magnitude` (when not
+    negative) from the bubble, and none of it gets through: the attack is deflected. A physical
+    attack (Earth or Ice) becomes a knockback of the same amount with magnitude 0.698.
+  - **Over time.** Damage over time also comes off the bubble (healing too, through a Shield
+    element). As the original, it still reaches the character.
+  - **Beams** reflect off a character in a bubble.
+- **Armour** (Self with Earth or Ice):
+  - **Casting.** It replaces any self-shield. Its hit points are 1500 with Earth, else 900, and they
+    do not decay. While it is up, the wearer's mass is 1001; its template's mass comes back when it
+    goes.
+  - **Speed.** Each frame the wearer's speed multiplier is set to `0.9 − (0.075·E + 0.025·I)`.
+  - **Ice armour** strikes as it forms: Earth and Piercing, 275 × `max(1, I + E)`, all around within
+    3, as an arc strike that spares the wearer.
+  - **What it stops.** A Damage attack that is physical first loses 10 (Earth armour without Ice)
+    or 70 (else; as the original, Earth and Ice armour has Earth's hit points but this 70),
+    then is multiplied by `1 − (0.05·I + 0.15·E)`.
+    - The armour takes `amount × magnitude`.
+    - What goes beyond its hit points gets through as the new amount (a hit). Otherwise the attack
+      is deflected.
+    - A knockback without Damage loses its amount and magnitude. Other attacks pass.
+  - **Over time.** Healing does not get through. Fire over time is multiplied by `1 + I` and comes
+    off the armour, and it still reaches the character.
+- **Either self-shield** goes when its hit points are gone, or when its wearer dies.
+- **The ward** (Self with Lightning, Arcane, Life, Steam, Water, Cold or Fire): one aura for each of
+  those elements in the spell.
+  - Each aura gives every character within `1.5·m` (the caster too) a resistance buff that makes it
+    immune to that element.
+  - It lasts `15 + 5·m` s, where m is the largest magnitude among the spell's elements, at least 1.
+  - Before the auras start, the ward ends the caster's earlier self-cast auras, and its
+    self-shield (as the original, armour too) unless this cast also made armour.
+  - Making a bubble or armour ends the self-cast auras too.
+
 ### 5.7 Magick: see section 10.
 
 ### 5.8 Blasts (`Blast`)

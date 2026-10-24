@@ -94,6 +94,9 @@ public sealed class ActiveAura
 
     /// <summary>Time to the next pulse; the first pulse comes on the first frame.</summary>
     internal float Pulse { get; set; }
+
+    /// <summary>Cast by its owner on itself (a ward): a later self-shield or ward ends it.</summary>
+    public bool SelfCasted { get; init; }
 }
 
 /// <summary>A buff on a character: its time left, and for damage its clock and who gave it. Changes in place.</summary>

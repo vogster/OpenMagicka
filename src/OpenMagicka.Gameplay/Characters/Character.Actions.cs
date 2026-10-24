@@ -60,7 +60,7 @@ public sealed partial class Character
         invisibleTime = MathF.Max(0, NotNaN(seconds, nameof(seconds)));
         if (invisibleTime > 0)
         {
-            SelfShield = null;
+            RemoveSelfShield();
         }
     }
 

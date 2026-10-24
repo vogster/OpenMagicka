@@ -54,6 +54,9 @@ public sealed class PhysicsBody
 
     public bool IsRemoved { get; internal set; }
 
+    /// <summary>Goes through a <see cref="StaticMesh.Passable"/> mesh (a character through a shield going down).</summary>
+    public bool PassesPassableMeshes { get; set; }
+
     public Vector3 Position
     {
         get => Body.Position.ToNumerics();
@@ -82,6 +85,17 @@ public sealed class PhysicsBody
     }
 
     public float Mass => Body.Mass;
+
+    /// <summary>A new mass, its inertia following (armour makes a character heavy).</summary>
+    public void SetMass(float mass)
+    {
+        owner.ThrowIfStepping();
+        if (!(mass > 0) || !float.IsFinite(mass))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mass), mass, "must be positive");
+        }
+        Body.SetMassInertia(mass);
+    }
 
     /// <summary>A contact's friction is the geometric mean of both surfaces' (0 slides on anything).</summary>
     public float Friction

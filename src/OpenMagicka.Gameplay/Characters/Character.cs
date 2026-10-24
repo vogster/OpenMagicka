@@ -297,6 +297,7 @@ public sealed partial class Character : Entity
         UpdateLooks(dt);
         Body.SpeedMultiplier = 1;
         SelfShield?.Update(this, dt);
+        SyncShieldMass();
         CountDownMeleeBoost(dt);
         if (State is not null)
         {

@@ -22,6 +22,12 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
             return false;
         }
         var (ownerA, ownerB) = (shapeA.RigidBody.Tag, shapeB.RigidBody.Tag);
+        if ((ownerA is StaticMesh { Passable: true } && ownerB is PhysicsBody { PassesPassableMeshes: true })
+            || (ownerB is StaticMesh { Passable: true } && ownerA is PhysicsBody { PassesPassableMeshes: true }))
+        {
+            world.RegisterContact(shapeA.ShapeId, shapeB.ShapeId, shapeA.RigidBody, shapeB.RigidBody, in pointA, in pointB, in normal, ContactData.SolveMode.Full);
+            return false;                                                     // a shield going down lets characters through
+        }
         var push = normal.ToNumerics();
         var a = Ask(ownerA as PhysicsBody, ownerB, -push, pointA.ToNumerics(), penetration);
         var b = Ask(ownerB as PhysicsBody, ownerA, push, pointB.ToNumerics(), penetration);
