@@ -127,7 +127,7 @@ public sealed partial class Character
         get
         {
             var boosts = Boost(1, auras);
-            if (ItemIn(ResistanceSlot) is { } item)
+            if (HeldItem(ResistanceSlot) is { } item)
             {
                 boosts = Boost(boosts, item.Auras);
             }
@@ -173,7 +173,7 @@ public sealed partial class Character
     {
         foreach (var slot in equipment)
         {
-            var held = slot.Item?.Auras;
+            var held = slot.Item is { IsAttached: true } item ? item.Auras : null;
             for (var i = 0; i < (held?.Count ?? 0); i++)
             {
                 Run(held![i], dt);                                           // their time means nothing while held

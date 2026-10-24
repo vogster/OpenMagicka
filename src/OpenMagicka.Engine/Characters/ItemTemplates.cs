@@ -8,7 +8,7 @@ namespace OpenMagicka.Engine.Characters;
 /// <summary>The content reader's item as the rules need it (docs/engine/ENTITIES_AI.md §8.1.1).</summary>
 public static class ItemTemplates
 {
-    /// <param name="model">The item's model, whose bones give its points (§4.3); null puts them at its origin.</param>
+    /// <param name="model">The item's model, whose bones give its points (§4.3) and whose vertices its bounds (§8.1.5); null puts the points at its origin.</param>
     /// <param name="projectile">The model of its missile, whose first mesh gives the missile's size (§8.1.4).</param>
     public static Gameplay.Items.ItemTemplate From(ItemContent content, Content.Xna.ModelContent? model = null, Content.Xna.ModelContent? projectile = null)
     {
@@ -30,7 +30,8 @@ public static class ItemTemplates
             Events(content.Melee.Conditions),
             [.. content.Auras.Select(BuffTemplates.Aura)],
             Gameplay.Items.Guns.IsGun((Gameplay.Items.WeaponClass)content.WeaponClass) ? Gun(content.Ranged) : null,
-            content.Ranged.RangedConditions.Count > 0 ? Ranged(content, projectile) : null);
+            content.Ranged.RangedConditions.Count > 0 ? Ranged(content, projectile) : null,
+            Bounds(model));
         template.Validate();
         return template;
     }
@@ -44,6 +45,37 @@ public static class ItemTemplates
         item.Ranged.ProjectileModel is { } model && item.Ranged.RangedConditions.Count > 0 && (Gameplay.Items.WeaponClass)item.WeaponClass != Gameplay.Items.WeaponClass.Heavy
             ? loader.LoadReference(itemAsset, model).Root as Content.Xna.ModelContent
             : null;
+
+    /// <summary>
+    /// The bounds of the first part of the first mesh: as the original, its vertex count read from the
+    /// start of the buffer at its declaration's stride. Null without a model or a mesh to read.
+    /// </summary>
+    internal static Gameplay.Items.ItemBounds? Bounds(Content.Xna.ModelContent? model)
+    {
+        if (model is not { Meshes: [{ VertexBuffer: { } buffer, Parts: [var part, ..] }, ..] } || part.NumVertices <= 0)
+        {
+            return null;
+        }
+        if (part.VertexDeclarationIndex < 0 || part.VertexDeclarationIndex >= model.VertexDeclarations.Count)
+        {
+            throw new InvalidDataException($"an item's mesh part uses declaration {part.VertexDeclarationIndex} of {model.VertexDeclarations.Count}");
+        }
+        var declaration = model.VertexDeclarations[part.VertexDeclarationIndex];
+        var position = declaration.Elements.FirstOrDefault(e => e.Usage == Content.Xna.VertexElementUsageXna31.Position && e.Format == Content.Xna.VertexElementFormatXna31.Vector3)
+            ?? throw new InvalidDataException("an item's model has no positions");
+        if ((long)(part.NumVertices - 1) * declaration.Stride + position.Offset + 12 > buffer.Data.Length)
+        {
+            throw new InvalidDataException($"an item's model has {part.NumVertices} vertices of {declaration.Stride} bytes in {buffer.Data.Length} bytes");
+        }
+        var (min, max) = (new System.Numerics.Vector3(float.MaxValue), new System.Numerics.Vector3(float.MinValue));
+        for (var v = 0; v < part.NumVertices; v++)
+        {
+            var at = v * declaration.Stride + position.Offset;
+            var point = new System.Numerics.Vector3(BitConverter.ToSingle(buffer.Data, at), BitConverter.ToSingle(buffer.Data, at + 4), BitConverter.ToSingle(buffer.Data, at + 8));
+            (min, max) = (System.Numerics.Vector3.Min(min, point), System.Numerics.Vector3.Max(max, point));
+        }
+        return new Gameplay.Items.ItemBounds(min, max);
+    }
 
     /// <summary>
     /// A named bone's transform with each parent's multiplied in before it, as the original (the

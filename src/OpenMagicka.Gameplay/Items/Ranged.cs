@@ -77,7 +77,7 @@ public static class Ranged
     }
 
     /// <summary>A direction in a frame, without its translation or scale.</summary>
-    private static Vector3 Turn(Vector3 local, Matrix4x4 frame)
+    internal static Vector3 Turn(Vector3 local, Matrix4x4 frame)
     {
         var (right, up, back) = (Axis(frame.M11, frame.M12, frame.M13), Axis(frame.M21, frame.M22, frame.M23), Axis(frame.M31, frame.M32, frame.M33));
         return local.X * right + local.Y * up + local.Z * back;

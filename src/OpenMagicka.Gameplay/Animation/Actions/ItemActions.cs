@@ -12,7 +12,7 @@ public sealed class DealDamage(float start, float end, int slot, DamageTargets t
 
     public override void Run(Character owner, bool first)
     {
-        if (owner.ItemIn(Slot) is not { } item)
+        if (owner.HeldItem(Slot) is not { } item)
         {
             return;
         }
@@ -41,7 +41,7 @@ public sealed class Gunfire(float start, float end, int slot, float accuracy) : 
 
     public override void Run(Character owner, bool first)
     {
-        if (first && owner.ItemIn(Slot) is { } item)
+        if (first && owner.HeldItem(Slot) is { } item)
         {
             Guns.Begin(owner, item, Accuracy);
         }
@@ -68,9 +68,25 @@ public sealed class SpawnMissile(float start, float end, int slot, System.Numeri
 
     public override void Run(Character owner, bool first)
     {
-        if (first && owner.ItemIn(Slot) is { } item)
+        if (first && owner.HeldItem(Slot) is { } item)
         {
             Ranged.Launch(owner, item, Velocity, ItemAligned);
+        }
+    }
+}
+
+/// <summary>The item in a slot is let go, with a velocity in the holder's frame (docs/engine/ENTITIES_AI.md §8.1.5).</summary>
+public sealed class DetachItem(float start, float end, int slot, System.Numerics.Vector3 velocity) : AnimationAction(start, end)
+{
+    public int Slot { get; } = slot is >= 0 and < Character.Slots ? slot : throw new ArgumentOutOfRangeException(nameof(slot), slot, "not a slot");
+
+    public System.Numerics.Vector3 Velocity { get; } = Finite(velocity, nameof(velocity));
+
+    public override void Run(Character owner, bool first)
+    {
+        if (first)
+        {
+            owner.Release(Slot, Ranged.Turn(Velocity, owner.RootMatrix()));
         }
     }
 }

@@ -40,6 +40,9 @@ public sealed class Item
 
     public WeaponClass WeaponClass => Template.WeaponClass;
 
+    /// <summary>In its holder's hand; a released item stays in its slot, detached, and does nothing there (§8.1.5).</summary>
+    public bool IsAttached { get; private set; } = true;
+
     /// <summary>Drawn on its bone; an animation can hide it.</summary>
     public bool IsVisible { get; set; } = true;
 
@@ -102,8 +105,11 @@ public sealed class Item
         (LastTip, Tip, placed) = (placed ? Tip : tip, tip, true);
     }
 
-    /// <summary>Taken into a hand: the next place starts afresh.</summary>
-    internal void Held() => placed = false;
+    /// <summary>Taken into a hand: attached, and the next place starts afresh.</summary>
+    internal void Held() => (placed, IsAttached) = (false, true);
+
+    /// <summary>Let go: it no longer acts from its slot.</summary>
+    internal void Detach() => IsAttached = false;
 
     /// <summary>The item's timers run down (its holder's call, each frame).</summary>
     internal void Tick(float dt)

@@ -330,7 +330,10 @@ public sealed partial class Character : Entity
         }
         foreach (var slot in equipment)
         {
-            slot.Item?.Tick(dt);
+            if (slot.Item is { IsAttached: true } item)
+            {
+                item.Tick(dt);                                                // a released item is left as it was
+            }
         }
         PlaceItems();
         if (!Dead)

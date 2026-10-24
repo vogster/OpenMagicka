@@ -70,6 +70,9 @@ public sealed partial class Character
 
     public Item? ItemIn(int slot) => equipment[CheckSlot(slot)].Item;
 
+    /// <summary>The slot's item while it is in hand: a released one does nothing from its slot (§8.1.5).</summary>
+    public Item? HeldItem(int slot) => ItemIn(slot) is { IsAttached: true } item ? item : null;
+
     /// <summary>Puts an item in a slot (replacing what was there) on the given bone.</summary>
     public void Equip(int slot, Item item, string bone, Vector3 rotation = default)
     {
@@ -105,7 +108,7 @@ public sealed partial class Character
     {
         foreach (var slot in equipment)
         {
-            if (slot.Item is { } item)
+            if (slot.Item is { IsAttached: true } item)
             {
                 Guns.Update(this, item, dt);
             }
@@ -113,7 +116,7 @@ public sealed partial class Character
     }
 
     public bool HasPassiveAbility(PassiveAbility ability) =>
-        ability != PassiveAbility.None && equipment.Any(s => s.Item?.Template.PassiveAbility == ability);
+        ability != PassiveAbility.None && equipment.Any(s => s.Item is { IsAttached: true } item && item.Template.PassiveAbility == ability);
 
     /// <summary>Whether an attack from this position comes from in front, within the block angle (none from the character's own spot).</summary>
     internal bool FacesForBlock(Vector3 attackPosition)

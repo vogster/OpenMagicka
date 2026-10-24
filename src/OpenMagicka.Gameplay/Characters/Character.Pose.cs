@@ -80,7 +80,10 @@ public sealed partial class Character
     {
         foreach (var slot in equipment)
         {
-            slot.Item?.Place(slot.Bone >= 0 ? slot.Attach * skinned[slot.Bone] : root);
+            if (slot.Item is { IsAttached: true } item)
+            {
+                item.Place(slot.Bone >= 0 ? slot.Attach * skinned[slot.Bone] : root);
+            }
         }
     }
 }

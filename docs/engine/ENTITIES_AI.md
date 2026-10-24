@@ -449,7 +449,7 @@ the window; "once" means the first frame only.
   the ground material and the character's mass, only on the ground and not levitating; a camera
   shake at the character's position.
 - **With items:** `DealDamage` (1,997), `SpawnMissile` (1,787), `Gunfire` (335), `SpecialAbility`
-  (84), `DetachItem` (17), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
+  (84), `DetachItem` (17, §8.1.5), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
 - **With spells:** `CastSpell` (1,371).
 - **With grips:** `Grip` (48), `DamageGrip` (48), `ReleaseGrip` (24), `ThrowGrip` (15),
   `OverkillGrip` (15).
@@ -1181,6 +1181,66 @@ a filled slot; 55 of them throw a missile. 38 of those missiles end within 3 s; 
 they fell, since their data has no Timer or Remove to end them. The templates that throw nothing are mostly
 wizards whose `attack_melee0` throws from a slot whose item has no ranged events, which throws
 nothing, as in the original.
+
+### 8.1.5 Items in the world (`DetachItem`, drops, pickups)
+
+**An item lying in the world** is a box sized by the item model's bounds, mass 50, centred where
+the model's bounds are centred. Its friction is 1 and its bounciness 0. Characters pass through
+it (it only lies on the level and props). The bounds are those of the first part of the first
+mesh: its first vertices from the start of the buffer, as the original reads them. An item with
+no model never leaves its slot.
+
+**Release** (a slot lets go of its item, where the item is now):
+- A pickable item leaves a copy of itself in the world.
+- An item that is not pickable is itself placed in the world.
+
+Either way, the slot keeps its item, but detached:
+- A detached item no longer strikes, fires, spreads its auras or counts for passives.
+- Its holder no longer moves it or runs its timers down.
+- It still counts for the block value and the animation set, as the original.
+- Its effects, sounds, gun burst and light stop.
+
+The item in the world starts still, at the item's place: its bounds' centre turned with the item
+(scale dropped). The original keeps the item's turn for the box too; OpenMagicka does not yet turn
+the box, so it starts upright. An item no one can pick up goes after 15 s in the world; a pickable
+one lies until it is taken.
+
+**Keeping items on the level** (OpenMagicka's own; the game's thin boxes fall through a level
+in one step otherwise):
+- A box whose centre would start past the level, seen from its holder, starts on the level
+  instead, lifted by half its depth along the level's normal.
+- A box whose centre crossed the level in a step goes back to where it was, still.
+- An item that falls 50 m below the origin goes, as missiles do.
+- Lying boxes use no continuous collision: in Jitter it let a box tipping over flat fall through
+  the floor.
+
+**On the game's data:**
+- 379 of the 454 items have a model, and every model gives bounds.
+- Two models are flat, and some are only a point (they get a 1 cm box).
+- All 286 armed templates are mortal. On death, 224 of them drop 389 items, 121 of them pickable,
+  and every one comes to rest on the floor by its holder.
+
+**When releases happen:**
+- On entering the dead state, a character that is not undying releases every filled slot.
+- **`DetachItem`** (§4.2, 17 uses): on its first frame, if the slot holds an item, it releases it
+  and gives the action's velocity, turned from the holder's frame, to the slot's own item. So only
+  an item that is not pickable (the one placed in the world itself) flies; a pickable item's copy
+  lies still, as the original. The original also marks the item as detached by the animation; a
+  released item is already detached, so the mark changes nothing and OpenMagicka leaves it out.
+
+**Picking up** (an avatar's pick-up, with input):
+- **Which item.** It looks for a pickable item lying within 2.5 m (counting the item's radius),
+  in one pass over the list. The first one that lies within the avatar's radius (flat) wins, or,
+  when looking ahead, the first one in front (dot of the facing and the flat way to it above 0).
+  When not looking ahead, simply the first wins.
+- **Where it goes.** A staff goes to slot 1 and anything else to slot 0. A bound item in that slot
+  refuses the swap.
+- **The swap.** The item in the slot and the one on the ground trade places. The picked item is
+  equipped, and the old one is dropped from where it was held. An old item already released
+  (its copy lies elsewhere) is not dropped again.
+- **The animation.** The avatar attacks with `pickup_staff` or `pickup_weapon`.
+- **Later systems.** The level script's on-pickup trigger and the "obtained" text come with
+  scripts and the HUD; Versus despawns come with that rule set.
 
 ### 8.2 Events: ConditionCollection / EventCollection
 

@@ -36,6 +36,7 @@ public static class CharacterAnimationActions
             DealDamageAction a => new Actions.DealDamage(start, end, a.Weapon, (Gameplay.Items.DamageTargets)(byte)a.Targets),
             GunfireAction a => new Actions.Gunfire(start, end, a.Weapon, a.Accuracy),
             SpawnMissileAction a => new Actions.SpawnMissile(start, end, a.Weapon, ThrowVelocity(a), a.ItemAligned),
+            DetachItemAction a => new Actions.DetachItem(start, end, a.Item, new System.Numerics.Vector3(a.Velocity.X, a.Velocity.Y, a.Velocity.Z)),
             _ => null,
         };
     }

@@ -6,6 +6,10 @@ internal sealed class DeadState : CharacterState
     protected internal override void Enter(Character character)
     {
         character.ReleaseEntanglement();
+        if (!character.IsUndying)
+        {
+            character.ReleaseAll();                                           // the dead drop what they held
+        }
         (character.Body.AllowMove, character.Body.AllowRotate) = (false, false);
         var second = character.HasAnimation("die1") && character.NextRandom() > 0.5;
         character.GoToAnimation(second ? "die1" : "die0", 0.05f);

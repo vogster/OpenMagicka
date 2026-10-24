@@ -39,7 +39,7 @@ public class CharacterAnimationActionsTests
             new ImmortalAction(0, 0.75f, false), new SuicideAction(0, 0, true), new BlockAction(0, 1, 0),
             new BreakFreeAction(0.8f, 0, 1, 0), new FootstepAction(0.3f, 0), new RemoveStatusAction(0.5f, 0, "wet"), new WeaponVisibilityAction(0, 0, 0, true),
             new DealDamageAction(0, 1, 0, DamageTargets.Enemy), new GunfireAction(0, 1, 0, 1),
-            new SpawnMissileAction(0, 0, 0, default, false),
+            new SpawnMissileAction(0, 0, 0, default, false), new DetachItemAction(0, 0, 0, default),
         ];
 
         Assert.All(kinds, k => Assert.NotNull(CharacterAnimationActions.Create(k)));
@@ -67,7 +67,7 @@ public class CharacterAnimationActionsTests
         [
 
             new CastSpellAction(0, 0, null), new SpecialAbilityAction(0, 0, 0, null),
-            new DetachItemAction(0, 0, 0, default), new SetItemAttachAction(0, 0, 0, "hand"), new GripAction(0, 1, GripType.Hold, 1, 1, "a", "b", false),
+            new SetItemAttachAction(0, 0, 0, "hand"), new GripAction(0, 1, GripType.Hold, 1, 1, "a", "b", false),
             new DamageGripAction(0, 0, false, []), new ReleaseGripAction(0, 0), new ThrowGripAction(0, 0), new OverkillGripAction(0, 0),
             new TongueAction(0, 0, 5),
         ];
