@@ -41,6 +41,13 @@ public sealed class EntityManager
     /// <summary>The scene is indoors (its <c>Indoor</c> flag): no sky for the weather magicks.</summary>
     public bool Indoors { get; set; }
 
+    /// <summary>The level's navigation; null for a level without one (then points are used as they are).</summary>
+    public Navigation.NavMesh? NavMesh { get; set; }
+
+    /// <summary>The nav mesh's nearest point a walker with these abilities may stand on, or the point itself.</summary>
+    public Vector3 Walkable(Vector3 point, Navigation.NavMovement abilities = Navigation.NavMovement.Default) =>
+        NavMesh?.NearestOr(point, abilities) ?? point;
+
     /// <summary>Where the level finds the characters it makes at run time (summons); null for none.</summary>
     public Characters.IBestiary? Bestiary { get; set; }
 

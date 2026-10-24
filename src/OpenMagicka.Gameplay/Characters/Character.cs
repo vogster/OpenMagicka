@@ -277,6 +277,7 @@ public sealed partial class Character : Entity
             IsIntangible = IsIntangible,
             IsLevitating = IsLevitating,
             TurnSpeed = frozen ? 0 : Template.TurnSpeed * castTurn,
+            FlyGround = Body.Shape.Flies && Manager?.NavMesh?.Nearest(Position) is { } below ? below.Point.Y : Body.Conditions.FlyGround,
         };
     }
 

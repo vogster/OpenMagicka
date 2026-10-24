@@ -44,8 +44,8 @@ public sealed class Levitate() : Magick(MagickType.Levitate, SelfClip)
 }
 
 /// <summary>
-/// Teleport: the caster appears 10 ahead, on the floor under that point (MAGICKS.md §3.4); with no
-/// floor within 4 below it, the magick does nothing.
+/// Teleport: the caster appears 10 ahead, at the nav mesh's nearest point (water allowed), on the
+/// floor under it (MAGICKS.md §3.4); with no floor within 4 below, the magick does nothing.
 /// </summary>
 public sealed class Teleport() : Magick(MagickType.Teleport, SelfClip)
 {
@@ -66,6 +66,7 @@ public sealed class Teleport() : Magick(MagickType.Teleport, SelfClip)
         {
             return false;
         }
+        point = character.Manager?.Walkable(point, Navigation.NavMovement.Water) ?? point;
         if (character.World.CastSegment(point, point - Vector3.UnitY * Depth, levelOnly: true) is not { } floor)
         {
             return false;                                                     // as the original, silently

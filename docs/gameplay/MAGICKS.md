@@ -134,11 +134,11 @@ An avatar's boost button does the first of these that applies:
 
 ### 3.4 Teleport (`cast_magick_self`, instant)
 
-- **Destination.** 10 ahead along the facing.
+- **Destination.** 10 ahead along the facing, moved to the nav mesh's nearest point (water
+  allowed).
 - **Landing.** The caster lands 0.1 above the floor found within 4 below that point. Its vines go.
 - **Failure.** With no floor there, nothing happens, without a sound.
-- **Walls.** As the original, it can pass walls. The original first takes the nav mesh's nearest
-  walkable point to the destination; until the nav mesh (OM-39) it uses the point itself.
+- **Walls.** As the original, it can pass walls.
 - **Triggers.** Trigger areas the jump crosses see the caster enter them (comes with triggers).
 - **Sounds.** `magick_teleporta` where it leaves, `magick_teleportb` where it arrives.
 
@@ -149,7 +149,7 @@ An avatar's boost button does the first of these that applies:
   to is skipped.
 - **Failure.** With no such player, or no room in the level for the effect and the new wizard,
   it fails.
-- **The spot** is 4 ahead of the caster. After 0.25 s the player's wizard rises there, unless it
+- **The spot** is the nav mesh's nearest point to 4 ahead of the caster. After 0.25 s the player's wizard rises there, unless it
   rose meanwhile some other way:
   - a new wizard from the old one's template, clips and script name, on the floor (at the spot
     itself with no floor);
@@ -157,7 +157,6 @@ An avatar's boost button does the first of these that applies:
   - the corpse goes.
 - **Light.** The god rays fade out over 3 s more; they come with the renderer.
 - **Not yet:**
-  - The nav mesh's nearest point to the spot (OM-39).
   - Versus revival rules.
   - Dropping the old weapons (the original gives the new wizard none).
 - **Sounds.** `magick_revive_cast` on the cast; `magick_revive` when the wizard rises.
@@ -364,8 +363,8 @@ Napalm, and in §5 Thunder Storm.
     is struck, the caster too;
   - the blow is Thunder Bolt's, from 20 above the target;
   - with nothing there, the bolt lands on the spot.
-  - The original first moves the spot to the nav mesh's nearest point; until the nav mesh (OM-39)
-    the spot is used as it is, at the caster's height.
+  - The spot is first moved to the nav mesh's nearest point, whatever the triangle asks (any
+    movement).
 - **Presentation** as Thunder Bolt's, the camera shaking 1.2; `magick_thunderstorm` while it lasts.
 
 ### 5.4 Time Warp (`cast_magick_self`)
@@ -424,15 +423,23 @@ Napalm, and in §5 Thunder Storm.
 
 ### 5.8 Tornado (`cast_magick_direct`)
 
-- **The whirlwind.** A column of radius 2.5 and length 6, 4 ahead of the caster. It lasts 15 s,
-  and a kill ends it within a second.
+- **The whirlwind.** A column of radius 2.5 and length 6, at the nav mesh's nearest point to 4
+  ahead of the caster. It lasts 15 s, and a kill ends it within a second.
 - **Wandering.**
-  - It heads for a point 5–15 away within ±π/4 of its way. When within 1 of it, it picks another.
-  - Its speed is `|4·sin t|`, with t the time left.
+  - It picks a point 5–15 away within ±π/4 of its way, at its own height, and a path to it
+    (ENTITIES_AI.md §11). It heads for the path's corners; with none left it picks again.
+  - As the original, it takes the corners two at a time: when within 1 of one, that one and the
+    next go, and it heads for the next only for a frame before turning to the one after. It so
+    cuts the corners in between (it is no physics body, and goes through walls).
+  - Likewise a new path's first corner (or, with no full path, the point itself) is aimed at for
+    one frame only.
+  - Its speed is `|4·sin t|`, with t the time left. Its way is normalised with its rise, so it is
+    slower going up or down.
   - It eases its height toward the floor within 3 below, at a rate of 1 per second.
-  - The original walks to the point along the nav mesh. Until the nav mesh (OM-39) it goes
-    straight, and picks again when a wall stands in the way (four tries, else it turns back).
-- **A push** sends it 10 along the push's way, short of a wall in ours (it is no physics body).
+  - Without a nav mesh it goes straight, and picks again when a wall stands in the way (four
+    tries, else it turns back).
+- **A push** sends it along a path to 10 along the push's way (on the flat; the original's way
+  rises with the push). Without a nav mesh, it stops short of a wall.
 - **The blow.** Each damageable thing it touches (not missiles; the caster too), at most once a
   second: Earth 800 Knockback, magnitude 2, from the point of its surface facing the thing.
 - **Presentation.** `magick_tornado_rumble`, `magick_tornado`, `magick_tornado_hit` at each blow.
@@ -539,11 +546,12 @@ fears and friendship between characters go by these.
 - **The bestiary.** A level finds the templates it makes at run time by asset name, with their
   clips. The engine's comes from the game files (attached to a level with level play); a missing
   or broken asset makes nothing.
-- **Without a nav mesh** (OM-39), every "nearest walkable point" below is a ground probe.
+- **Spots.** Each spot below is first moved to the nav mesh's nearest point (ENTITIES_AI.md
+  §11.2); without a nav mesh the point is used as it is.
 
 ### 7.1 Raise Dead (`cast_magick_direct`)
 
-- **The spot.** 4 ahead of the caster, on the ground (a probe 3 down).
+- **The spot.** 4 ahead of the caster, on the nav mesh, then on the ground (a probe 3 down).
 - **The rising** lasts 8.1 s. One zombie (`data/characters/zombie`) rises at once and one every
   2 s after, five in all. Each stands at a random spot within ±1.5 of the centre (a probe 10
   down), faces a random way, plays `spawn` (only the clip: it does not go through the rising
@@ -614,10 +622,12 @@ fears and friendship between characters go by these.
 
 ### 7.5 Portal (`cast_area_fireworks`)
 
-- **The gates.** A level has two, orange and blue. Each cast opens a gate 2 ahead of the caster
-  (a probe from 2 above, 4 down; 1.5 above the floor). With two gates up, the older one moves
-  there and keeps its colour. The first gate is orange.
-- **Failure.** With no floor there, it fails. The original wants a walkable point within 5.
+- **The gates.** A level has two, orange and blue. Each cast opens a gate at the nav mesh's
+  nearest point (water and moving parts allowed) to 2 ahead of the caster, 1.5 above the floor
+  under it (a probe from 2 above, 4 down; with no floor, at the point itself). With two gates up,
+  the older one moves there and keeps its colour. The first gate is orange.
+- **Failure.** With the nav mesh more than 5 away, it fails. Without a nav mesh, it needs the
+  floor under the spot.
 - **Connection.** The gates are connected while both are up and within 30 of each other.
 - **Going through.** While connected, a character or missile that touches a gate (an upright
   capsule, radius 0.5, 2 tall) comes out of the other one. Its offset from the gate it touched,

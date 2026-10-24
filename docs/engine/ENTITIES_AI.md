@@ -1539,11 +1539,16 @@ needs a behavior description based on observation and on the code.
 
 ## 11. Navigation (`Magicka.PathFinding`)
 
+Code: `OpenMagicka.Gameplay.Navigation` (`NavMesh`, `NavSurface`); a level's from
+`OpenMagicka.Engine.Navigation.LevelNavigation` (OM-39).
+
 ### 11.1 Where the navmesh comes from
 
 - The **static navmesh** is stored inside `LevelModel` (the scene geometry `.xnb`, `LevelModelReader`). It is prepared by the editor and
   serialized whole; it is not built at runtime.
 - **Animated navmeshes** belong to `AnimatedLevelPart` (elevators, bridges, platforms), each with its own transform / invTransform matrix.
+  Ours are placed at the part's rest pose (the first keyframe times the parent's), as the parts' render batches; a part whose rest pose is
+  not finite is left out with its children. The 132 scenes hold 94 of them.
 - The scene flag `ForceNavMesh` (a scene XML attribute) and the spawn flags `ForceNavMesh` / `ForceCamera` force the AI not to leave the navmesh
   and the camera.
 
@@ -1551,35 +1556,76 @@ Navmesh block format: uint16 vertex count, then vertices (vec3); uint16 triangle
 vertices A, B, C (uint16), neighbors across edges AB, BC, CA (uint16, 0xFFFF = no neighbor), transition costs CostAB, CostBC, CostCA (float),
 `MovementProperties` (byte).
 
-uint16 indices → at most 65535 triangles per mesh. A triangle with `Dynamic` is a boundary triangle: it can connect to
-animated meshes.
+- uint16 indices → at most 65535 triangles per mesh.
+- A triangle with `Dynamic` is a boundary triangle: it can connect to animated meshes.
+- **Costs.** CostAB is the cost of crossing the triangle between its edges AB and BC; CostBC between BC and CA; CostCA between CA and AB.
+- **Winding.** The triangles face down by the right hand (clockwise seen from above). The funnel's left and right rest on it. 29 triangles of
+  the levels' own meshes are wound the other way; across one, the funnel opens, and a path may cut across what is not walkable (2 legs in
+  5,240 test paths). This is kept, as the original.
 
 ### 11.2 Nearest point search
 
-An octree over triangles (`NavMeshOctree`). Traversal culls nodes by distance to the AABB and filters by properties:
-a triangle is walkable if its properties are `Default` **or** intersect with the character's capabilities. Animated meshes are checked
-in their local space, and the result is transformed to world space.
+- The nearest point on any triangle a walker may stand on: a triangle is walkable if its properties are `Default` **or** share a flag with
+  the walker's.
+- The original runs it over an octree; ours over a tree of boxes. The answer is the same exact nearest point; of two equally near triangles
+  we take the lower index (the original takes the first in its octree's order).
+- The level's own mesh never moves; moving it is refused.
+- Animated meshes are searched in their own space, with the best squared distance so far as the limit, and the point is placed back in the
+  world.
+- The result is the squared distance. With no walkable triangle, there is no point (the original returns its start value and an invalid
+  triangle).
 
 ### 11.3 A*
 
 - Node = triangle, key = (mesh << 16 | triangle); mesh 0xFFFF = static.
-- The open list is a binary heap (`TriangleHeap`, by `TotalCost`), the closed list is a dictionary, plus a dictionary of best costs.
+- The open list is a binary heap (`TriangleHeap`, by `TotalCost`), the closed list is a dictionary, plus a dictionary of best costs. Ours
+  orders exactly as the original's heap, ties included; it grows where the original's would overflow at 512.
 - Start and goal are the triangles nearest to the positions.
-- Character capabilities are always extended with `Dynamic` and `Water`. A water triangle is walkable only if there is actually
-  liquid under it (a ray down through the level's liquids, ice is ignored); this accounts for water freezing and drying up.
-- Step cost: for the first step, the distance from the start point to the edge midpoint; after that, the precomputed cost
-  "entry edge → exit edge" from the data (`GetCostFrom`); a transition between meshes costs 0.5. On the goal triangle the
-  distance to the goal point is added.
-- Heuristic: **|dx| + 1.75·|dz|** (anisotropic, not admissible; the path is not guaranteed to be optimal).
-- Dynamic neighbors (static ↔ animated ↔ animated) are recomputed **on every search**: triangles with
-  `Dynamic`, distance between triangles ≤ 0.25 m (squared 0.0625), AABB with a 0.25 margin. Cost = distance between centers.
-- Path not found → the path is built to the node with the minimal `TotalCost` (a partial path "as close as possible").
+- Character capabilities are always extended with `Dynamic` and `Water`.
+- **Water.** A water triangle is walkable only over **ice**: a segment from 1 above its centre to 3 below must meet a level liquid's frozen
+  part (a liquid triangle with a corner frozen past half). Unfrozen water and dry ground do not count. The centre is taken in the
+  triangle's own mesh space, as the original, so on a moved part it is misplaced. Ours asks the level's liquids through `IceAlong`; with
+  none, no water triangle is walkable.
+- **Step cost:**
+  - for the first step, the distance from the start point to the edge midpoint;
+  - after that, the precomputed cost "entry edge → exit edge" from the data (`GetCostFrom`);
+  - a transition between meshes costs 0.5;
+  - on the goal triangle the distance to the goal point is added.
+  - Where the data has no such pair of edges the original throws; ours takes the distance from the triangle's centre.
+- Heuristic: **|dx| + 1.75·|dz|** (anisotropic, not admissible; the path is not guaranteed to be optimal, and the corridor may hug walls at
+  an angle).
+- **Joints.** Dynamic neighbors (static ↔ animated ↔ animated) are recomputed **on every search** (ours only when a part has moved
+  since, which gives the same joints):
+  - Two triangles with `Dynamic`, within 0.25 m of each other (squared 0.0625), their boxes widened by 0.25, join.
+  - Cost = distance between centres.
+  - The joint's "edge position" is the other triangle's centre, and both ways keep that same spot.
+  - Between two parts, that centre is placed in the world by the first part's transform, not its own: misplaced, as the original.
+  - Crossing a joint: the first step costs the distance from the start to the edge position, later ones the joint's cost. The joint's cost
+    is then added again. The cost so far is **not** carried over, so a path across a part starts its count afresh. No ice check is made
+    across a joint.
+- **Not found.** The path is built to the node with the least `TotalCost` seen (a partial path). On an even floor nothing totals less
+  than the start, so it is often the start alone.
+- **Guards.** A start that is not a number gives no path; the original only checks the start, and keeps its previous path.
 
 ### 11.4 Smoothing
 
-`StraightenPath` is a "funnel" algorithm (string pulling) over portals (edges) between triangles. Between meshes, the triangle
-center serves as the portal. The output is a list of `PathNode(Position, Properties)`; the node property is used in `AIStateMove`
-(Jump → jump, Dynamic → replanning every 0.333 s instead of 1 s).
+- `StraightenPath` is the "simple stupid funnel" (string pulling) over portals (edges) between triangles. Between meshes, the current
+  triangle's centre serves as both sides of the portal.
+- The path starts at the start's nearest point on its triangle and ends at the end's on its. The last portal is the end itself on both
+  sides, so the end is usually added as a corner and then once more: the path ends with the end twice.
+- The output is a list of `PathNode(Position, Properties)`, a corner's properties being its triangle's.
+- The node property is used in `AIStateMove` (Jump → jump, Dynamic → replanning every 0.333 s instead of 1 s).
+- The original then means to add a corner wherever the path enters a triangle with other properties. It compares each triangle with
+  itself, so it never does, and neither do we.
+
+### 11.5 Who uses it
+
+- **Nearest points:**
+  - Teleport (water allowed), Revive, Thunder Storm's spots (any properties), Tornado's start, the summons' spots, Death's arrival, and
+    the Portal (water and moving parts, within 5). Spawns follow with the triggers.
+  - A flying character hovers 2 above the nav mesh's nearest point under it.
+- **Paths:** the whirlwind's walk (MAGICKS.md §5.8); the AI's moves (§7.6, OM-40).
+- **Cost.** On the 132 scenes, 40 random paths each: 0.034 ms a search on average, 12.6 ms at worst.
 
 ---
 

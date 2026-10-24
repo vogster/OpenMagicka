@@ -167,7 +167,7 @@ public sealed class Weather : Entity, IMagickEffect
     {
         var distance = MathF.Sqrt((float)Caster.NextRandom()) * Spread;
         var angle = (float)Caster.NextRandom() * MathF.Tau;
-        var spot = Caster.Position + new Vector3(MathF.Cos(angle) * distance, 0, MathF.Sin(angle) * distance);
+        var spot = manager.Walkable(Caster.Position + new Vector3(MathF.Cos(angle) * distance, 0, MathF.Sin(angle) * distance), Navigation.NavMovement.All);
         Entity? target = null;
         var top = float.MinValue;
         foreach (var entity in manager.Query(spot, BoltReach, ignoreProtected: true, ignoreY: true))

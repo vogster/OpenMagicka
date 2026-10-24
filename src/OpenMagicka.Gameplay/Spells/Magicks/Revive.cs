@@ -26,7 +26,7 @@ public sealed class Revive() : Magick(MagickType.Revive, SelfClip)
             return Fail(caster);                                              // the effect and the new wizard need room
         }
         Sound(caster, CastSound);
-        manager.Add(new ReviveEffect(player, caster.World, caster.Position + caster.Body.Facing * Ahead, HitPointShare));
+        manager.Add(new ReviveEffect(player, caster.World, manager.Walkable(caster.Position + caster.Body.Facing * Ahead), HitPointShare));
         return true;
     }
 

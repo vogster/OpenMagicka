@@ -12,7 +12,7 @@ namespace OpenMagicka.Gameplay.Spells.Magicks;
 /// </summary>
 public sealed class Portal() : Magick(MagickType.Portal, "cast_area_fireworks")
 {
-    public const float Ahead = 2, Lift = 1.5f;
+    public const float Ahead = 2, Lift = 1.5f, Reach = 5;
 
     public override bool Execute(Character caster)
     {
@@ -20,10 +20,9 @@ public sealed class Portal() : Magick(MagickType.Portal, "cast_area_fireworks")
         {
             return Fail(caster);
         }
-        var at = caster.Position + caster.Body.Facing * Ahead;
-        if (caster.World.CastSegment(at + Vector3.UnitY * 2, at - Vector3.UnitY * 2, levelOnly: true) is not { } floor)
+        if (Spot(manager, caster, caster.Position + caster.Body.Facing * Ahead) is not { } spot)
         {
-            return Fail(caster);                                              // the original wants a walkable spot within 5
+            return Fail(caster);
         }
         var gates = PortalGate.Of(manager);
         var link = gates.Count > 0 ? gates[0].Link : new PortalLink();
@@ -37,8 +36,28 @@ public sealed class Portal() : Magick(MagickType.Portal, "cast_area_fireworks")
         {
             gates[0].Kill();                                                  // the older gate moves
         }
-        manager.Add(new PortalGate(link, colour, floor.Position + Vector3.UnitY * Lift));
+        manager.Add(new PortalGate(link, colour, spot));
         return true;
+    }
+
+    /// <summary>
+    /// The nav mesh's nearest point (water and moving parts allowed) within 5, then 1.5 above the
+    /// floor under it (looked for from 2 above, 4 down), or the point itself with no floor. Without
+    /// a nav mesh, the floor under the spot itself is needed.
+    /// </summary>
+    private static Vector3? Spot(EntityManager manager, Character caster, Vector3 at)
+    {
+        if (manager.NavMesh is { } nav)
+        {
+            if (nav.Nearest(at, Navigation.NavMovement.Water | Navigation.NavMovement.Dynamic) is not { } near || near.DistanceSquared > Reach * Reach)
+            {
+                return null;
+            }
+            at = near.Point;
+        }
+        return caster.World.CastSegment(at + Vector3.UnitY * 2, at - Vector3.UnitY * 2, levelOnly: true) is { } floor
+            ? floor.Position + Vector3.UnitY * Lift
+            : manager.NavMesh is null ? null : at;
     }
 }
 

@@ -12,7 +12,7 @@ namespace OpenMagicka.Gameplay.Spells.Magicks;
 /// </summary>
 public sealed class SummonDeath() : Magick(MagickType.SDeath, DirectClip)
 {
-    public const float SearchRadius = 40, Distance = 7;
+    public const float SearchRadius = 40, Distance = 7, MinimumDistance = 2;
 
     public const string Cry = "magick_summon_death";
 
@@ -24,11 +24,33 @@ public sealed class SummonDeath() : Magick(MagickType.SDeath, DirectClip)
             return Fail(caster);
         }
         var target = Victim(manager, caster) ?? caster;
-        var angle = ((float)caster.NextRandom() - 0.5f) * 2 * MathF.PI;
-        var from = target.Position + new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle)) * Distance;
+        if (Arrival(manager, caster, target.Position) is not { } from)
+        {
+            return Fail(caster);
+        }
         Sound(caster, Cry);
         manager.Add(new Reaper(caster.World, target, from));
         return true;
+    }
+
+    /// <summary>
+    /// Where Death comes from: 7 away at a random angle, on the nav mesh, and at least 2 from the
+    /// victim. Each try steps 7 on from the last (as the original); the original never gives up, we
+    /// do after 10 tries.
+    /// </summary>
+    private static Vector3? Arrival(EntityManager manager, Character caster, Vector3 victim)
+    {
+        var place = victim;
+        for (var tries = 0; tries < 10; tries++)
+        {
+            var angle = ((float)caster.NextRandom() - 0.5f) * 2 * MathF.PI;
+            place = manager.Walkable(place + new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle)) * Distance);
+            if (Vector3.DistanceSquared(place, victim) >= MinimumDistance * MinimumDistance)
+            {
+                return place;
+            }
+        }
+        return null;
     }
 
     /// <summary>

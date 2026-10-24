@@ -69,7 +69,7 @@ public sealed class SummonUndead() : Magick(MagickType.SUndead, DirectClip)
         {
             return true;                                                      // as the original: the cast counts, nothing rises
         }
-        var spot = Summoning.Floor(caster.World, caster.Position + caster.Body.Facing * Ahead, 0, 3);
+        var spot = Summoning.Floor(caster.World, manager.Walkable(caster.Position + caster.Body.Facing * Ahead), 0, 3);
         manager.Add(new UndeadRising(caster, spot));
         Sound(caster, Cry);
         return true;
@@ -121,7 +121,7 @@ public sealed class UndeadRising : Entity, IMagickEffect
         }
         spawnTimer += Interval;
         var off = new Vector3(((float)caster.NextRandom() - 0.5f) * Spread, 0, ((float)caster.NextRandom() - 0.5f) * Spread);
-        var ground = Summoning.Floor(caster.World, spot + off, 0, 10);
+        var ground = Summoning.Floor(caster.World, manager.Walkable(spot + off), 0, 10);
         var angle = (float)caster.NextRandom() * MathF.Tau;
         if (Summoning.Call(manager, caster.World, caster, Asset, ground, new Vector3(MathF.Sin(angle), 0, -MathF.Cos(angle))) is { } zombie)
         {
@@ -143,7 +143,7 @@ public sealed class SummonElemental() : Magick(MagickType.SElemental, DirectClip
         {
             return true;
         }
-        var spot = Summoning.Floor(caster.World, caster.Position + caster.Body.Facing * Ahead, 1, 10);
+        var spot = Summoning.Floor(caster.World, manager.Walkable(caster.Position + caster.Body.Facing * Ahead), 1, 10);
         manager.Add(new ElementalEgg(caster.World, spot, caster.Body.Facing, caster, (int)(caster.NextRandom() * int.MaxValue)));
         manager.RaiseCue(caster, new WorldEffectCue(Effect, spot, caster.Body.Facing));
         Sound(caster, Cry);
@@ -288,7 +288,7 @@ public sealed class SummonPhoenix() : Magick(MagickType.SPhoenix, DirectClip)
             return true;
         }
         var off = new Vector3(((float)caster.NextRandom() - 0.5f) * 4, 0, ((float)caster.NextRandom() - 0.5f) * 4);
-        var spot = Summoning.Floor(caster.World, caster.Position + off, 1, 3);
+        var spot = Summoning.Floor(caster.World, manager.Walkable(caster.Position + off), 1, 3);
         manager.Add(new PhoenixDescent(caster, spot));
         Sound(caster, Cry);
         return true;
@@ -361,7 +361,7 @@ public sealed class PhoenixDescent : Entity, IMagickEffect
             if (Revive.CanRise(player) && manager.Entities.Count + 2 <= EntityManager.Capacity)
             {
                 var turn = Matrix4x4.CreateRotationY(player.Id * MathF.Tau * 0.25f);
-                var place = Summoning.Floor(caster.World, spot + Vector3.TransformNormal(-Vector3.UnitZ, turn), 1, 3);
+                var place = Summoning.Floor(caster.World, manager.Walkable(spot + Vector3.TransformNormal(-Vector3.UnitZ, turn)), 1, 3);
                 manager.Add(new ReviveEffect(player, caster.World, place, 1));
             }
         }
