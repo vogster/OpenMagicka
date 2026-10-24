@@ -59,26 +59,36 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
             .Select(p => ItemTemplates.From((ItemContent)loader.LoadUncached(p[..^4]).Root!))
             .ToList();
-        var (equipped, slots, staffs) = (0, 0, 0);
-        using var world = CharacterTests.World();
+        var (equipped, slots, staffs, tipped) = (0, 0, 0, 0);
+        var far = new List<string>();
         foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
         {
             if (loader.LoadUncached(path[..^4]).Root is not CharacterTemplateContent content)
             {
                 continue;
             }
-            var character = new Character(CharacterTemplates.From(loader, path[..^4], content), world.Physics, new Vector3(0, 10, 0));
+            using var world = CharacterTests.World();
+            var character = new Character(CharacterTemplates.From(loader, path[..^4], content), world.Physics,
+                new Vector3(20, 0.5f + content.Stats.Radius + content.Stats.Length / 2, -30), animations: CharacterAnimationSets.From(loader, path[..^4], content));
+            world.Entities.Add(character);                                             // off the origin, where a lost item would be
+            CharacterTests.Run(world, 0.5f);
             var held = character.Equipment.Count(s => s.Item is not null);
             (equipped, slots, staffs) = (equipped + (held > 0 ? 1 : 0), slots + held, staffs + (character.SpellSource >= 0 ? 1 : 0));
-            world.Physics.Remove(character.Body.Body);
+            var reach = content.Stats.Radius + content.Stats.Length + 6;               // a horseman's lance reaches 5 m
+            far.AddRange(character.Equipment.Where(s => s.Item is { } item && (!(Vector3.Distance(item.Tip, character.Position) <= reach)
+                    || !(Vector3.Distance(item.Transform.Translation, character.BoneWorld(s.Bone).Translation) < 1e-3f)))   // NaN counts as far; the grip is on its bone
+                .Select(s => $"{content.Id}: {s.Item!.Template.Id} on {s.BoneName} at {s.Item.Tip} (body {character.Position})"));
+            tipped += character.Equipment.Count(s => s.Item?.Template.Attach0 is not null);
         }
         var classes = items.GroupBy(i => i.WeaponClass).OrderBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}");
         output.WriteLine($"{items.Count} items ({string.Join(", ", classes)}); {items.Count(i => i.BlockValue > 0)} block, {items.Count(i => i.PassiveAbility != 0)} with a passive");
-        output.WriteLine($"{equipped} templates hold {slots} items; {staffs} hold a staff");
+        output.WriteLine($"{equipped} templates hold {slots} items; {staffs} hold a staff; {tipped} held items have a tip; {far.Count} far from their holder");
+        far.Take(20).ToList().ForEach(output.WriteLine);
+        Assert.Empty(far);                                                         // the whole pose chain puts every held item at hand
         Assert.Equal(454, items.Count);
         Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
             items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
-        Assert.Equal((286, 591, 86), (equipped, slots, staffs));                  // as ENTITIES_AI §8.1.1 records
+        Assert.Equal((286, 591, 86, 291), (equipped, slots, staffs, tipped));      // as ENTITIES_AI §8.1.1 records
     }
 
     [GameContentFact]

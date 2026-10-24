@@ -1,8 +1,11 @@
 namespace OpenMagicka.Gameplay.Animation;
 
 /// <summary>A clip of a skeleton, as far as timing goes.</summary>
-public sealed record AnimationClip(string Name, float Duration)
+/// <param name="Channels">Each animated bone's keys by bone name (exact case, as the original), in time order; none for timing alone.</param>
+public sealed record AnimationClip(string Name, float Duration, IReadOnlyDictionary<string, IReadOnlyList<Keyframe>>? Channels = null)
 {
+    public IReadOnlyDictionary<string, IReadOnlyList<Keyframe>>? Channels { get; } = CheckChannels(Name, Channels);
+
     internal void Validate()
     {
         if (!(Duration > 0) || !float.IsFinite(Duration))
@@ -10,6 +13,30 @@ public sealed record AnimationClip(string Name, float Duration)
             throw new ArgumentOutOfRangeException(nameof(Duration), Duration, $"clip {Name} needs a positive duration");
         }
     }
+
+    /// <summary>Every channel has keys, in time order, with finite poses and rotations that are not zero.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<Keyframe>>? CheckChannels(string name, IReadOnlyDictionary<string, IReadOnlyList<Keyframe>>? channels)
+    {
+        foreach (var (bone, keys) in channels ?? new Dictionary<string, IReadOnlyList<Keyframe>>())
+        {
+            if (keys is null || keys.Count == 0)
+            {
+                throw new ArgumentException($"clip {name}: bone {bone} has no keys", nameof(channels));
+            }
+            for (var i = 0; i < keys.Count; i++)
+            {
+                var (time, pose) = (keys[i].Time, keys[i].Pose);
+                if (!float.IsFinite(time) || (i > 0 && time < keys[i - 1].Time) || !Finite(pose.Translation) || !Finite(pose.Scale)
+                    || !float.IsFinite(pose.Rotation.LengthSquared()) || pose.Rotation.LengthSquared() <= 0)
+                {
+                    throw new ArgumentException($"clip {name}: bone {bone} has a bad key {i}", nameof(channels));
+                }
+            }
+        }
+        return channels;
+    }
+
+    private static bool Finite(System.Numerics.Vector3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
 }
 
 /// <summary>What happened to the clock during an update.</summary>

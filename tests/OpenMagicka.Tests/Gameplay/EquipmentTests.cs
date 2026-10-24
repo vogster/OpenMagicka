@@ -40,7 +40,7 @@ public class EquipmentTests
 
         Assert.Same(Sword, one.ItemIn(0)!.Template);
         Assert.NotSame(one.ItemIn(0), two.ItemIn(0));
-        Assert.Equal("RightHand", one.Equipment[0].Bone);
+        Assert.Equal("RightHand", one.Equipment[0].BoneName);
         Assert.All(one.Equipment.Skip(1), s => Assert.Null(s.Item));
     }
 
@@ -245,6 +245,6 @@ public class EquipmentTests
         var goblin = world.Spawn(twice, new Vector3(4, 0.9f, 0));
 
         Assert.Same(Staff, goblin.ItemIn(0)!.Template);
-        Assert.Equal("b", goblin.Equipment[0].Bone);
+        Assert.Equal("b", goblin.Equipment[0].BoneName);
     }
 }

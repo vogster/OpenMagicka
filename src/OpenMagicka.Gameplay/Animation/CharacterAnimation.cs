@@ -68,7 +68,8 @@ public sealed class CharacterAnimations
 
     public const string Idle = "idle";
 
-    public CharacterAnimations(IReadOnlyList<AnimationSet?> sets)
+    /// <param name="skeleton">The bones the clips move; without one no bone has a place.</param>
+    public CharacterAnimations(IReadOnlyList<AnimationSet?> sets, Skeleton? skeleton = null)
     {
         ArgumentNullException.ThrowIfNull(sets);
         if (sets.Count == 0 || sets[Default]?.Find(Idle) is null)
@@ -76,9 +77,12 @@ public sealed class CharacterAnimations
             throw new ArgumentException("the default set needs an idle animation", nameof(sets));
         }
         Sets = sets;
+        Skeleton = skeleton;
     }
 
     public IReadOnlyList<AnimationSet?> Sets { get; }
+
+    public Skeleton? Skeleton { get; }
 
     public AnimationSet DefaultSet => Sets[Default]!;
 }

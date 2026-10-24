@@ -28,9 +28,11 @@ public sealed record EquipmentTemplate(int Slot, string Bone, Vector3 Rotation, 
 }
 
 /// <summary>One of a character's equipment slots; empty without an item.</summary>
-public sealed record EquipmentSlot(string? Bone, Vector3 Rotation, Item? Item)
+/// <param name="Bone">The bone's index in the skeleton (−1 without one).</param>
+/// <param name="Attach">The item's place relative to the bone's skinning transform (§4.3).</param>
+public sealed record EquipmentSlot(string? BoneName, Vector3 Rotation, Item? Item, int Bone, Matrix4x4 Attach)
 {
-    public static EquipmentSlot Empty { get; } = new(null, Vector3.Zero, null);
+    public static EquipmentSlot Empty { get; } = new(null, Vector3.Zero, null, -1, Matrix4x4.Identity);
 }
 
 /// <summary>A character's equipment (docs/engine/ENTITIES_AI.md §8.1.1).</summary>
@@ -74,8 +76,11 @@ public sealed partial class Character
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(bone);
         EquipmentTemplate.CheckRotation(rotation);
-        equipment[CheckSlot(slot)] = new EquipmentSlot(bone, rotation, item);
+        var (index, attach) = AttachPoint(bone, rotation);
+        equipment[CheckSlot(slot)] = new EquipmentSlot(bone, rotation, item, index, attach);
+        item.Held();
         EquipmentChanged();
+        item.Place(index >= 0 ? attach * skinned[index] : root);               // in hand at once; the others keep their sweep
     }
 
     /// <summary>Empties a slot; returns what it held.</summary>
@@ -108,7 +113,8 @@ public sealed partial class Character
     {
         foreach (var held in template.Equipment ?? [])
         {
-            equipment[CheckSlot(held.Slot)] = new EquipmentSlot(held.Bone, held.Rotation, new Item(held.Item));
+            var (index, attach) = AttachPoint(held.Bone, held.Rotation);
+            equipment[CheckSlot(held.Slot)] = new EquipmentSlot(held.Bone, held.Rotation, new Item(held.Item), index, attach);
         }
         EquipmentChanged();
     }

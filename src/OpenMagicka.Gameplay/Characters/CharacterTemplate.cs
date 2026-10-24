@@ -53,7 +53,8 @@ public sealed record CharacterTemplate(
     float UndieHitPoints = 0,
     bool IsEthereal = false,
     bool Flies = false,
-    IReadOnlyList<EquipmentTemplate>? Equipment = null)
+    IReadOnlyList<EquipmentTemplate>? Equipment = null,
+    float ModelScale = 1)
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
@@ -71,6 +72,10 @@ public sealed record CharacterTemplate(
         if (!(MaxHitPoints > 0) || !float.IsFinite(MaxHitPoints))
         {
             throw new ArgumentOutOfRangeException(nameof(MaxHitPoints), MaxHitPoints, "must be positive");
+        }
+        if (!(ModelScale > 0) || !float.IsFinite(ModelScale))
+        {
+            throw new ArgumentOutOfRangeException(nameof(ModelScale), ModelScale, "must be positive");
         }
         foreach (var (value, name) in new[] { (KnockdownTolerance, nameof(KnockdownTolerance)), (BleedRate, nameof(BleedRate)),
             (StunTime, nameof(StunTime)), (UndieTime, nameof(UndieTime)), (UndieHitPoints, nameof(UndieHitPoints)), (TurnSpeed, nameof(TurnSpeed)) })

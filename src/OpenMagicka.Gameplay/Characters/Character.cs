@@ -1,4 +1,5 @@
 using System.Numerics;
+using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Combat;
 using OpenMagicka.Gameplay.Entities;
 using OpenMagicka.Physics;
@@ -42,6 +43,12 @@ public sealed partial class Character : Entity
     {
         ArgumentNullException.ThrowIfNull(template);
         template.Validate();
+        skeleton = animations?.Skeleton;
+        if (skeleton is not null && template.Equipment?.FirstOrDefault(e => skeleton.IndexOf(e.Bone) < 0) is { } loose)
+        {
+            throw new ArgumentException($"{template.Id} has no bone {loose.Bone} to hold an item", nameof(template));   // before the body is in the world
+        }
+        (poses, placed, skinned) = skeleton is null ? ([], [], []) : (new BonePose[skeleton.Bones.Count], new Matrix4x4[skeleton.Bones.Count], new Matrix4x4[skeleton.Bones.Count]);
         this.world = world ?? throw new ArgumentNullException(nameof(world));
         Template = template;
         Body = new CharacterBody(world, position, new CharacterShape(template.Radius, template.Length, template.Mass, template.Speed, template.Flies));
@@ -58,6 +65,9 @@ public sealed partial class Character : Entity
             State = States.CharacterStates.Idle;
             State.Enter(this);
         }
+        root = RootMatrix();
+        UpdatePose();
+        PlaceItems();                                                         // bones and items have a place before the first frame
     }
 
     public CharacterTemplate Template { get; }
@@ -245,6 +255,7 @@ public sealed partial class Character : Entity
             throw new ArgumentOutOfRangeException(nameof(dt), dt, "the time step must be positive");
         }
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);
+        root = RootMatrix();
         immortalTime -= dt;
         CountDownActionTimers(dt);
         BlockSlot = -1;                                                       // a block action sets it again within its window
@@ -296,6 +307,7 @@ public sealed partial class Character : Entity
         {
             DieUnlessDying();
         }
+        PlaceItems();
     }
 
     private void Afterlife(float dt)

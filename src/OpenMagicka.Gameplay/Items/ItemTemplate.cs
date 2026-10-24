@@ -58,6 +58,8 @@ public enum PassiveAbility : byte
 
 /// <summary>What an item type brings to the rules (the subset of the item file they use so far).</summary>
 /// <param name="Resistances">For an avatar's slot-1 item, joined to the template's on every hit.</param>
+/// <param name="Attach0">Its tip or muzzle in the item's own frame (§4.3); null at the item's origin.</param>
+/// <param name="Attach1">Its second point (a gun's shells); null at the origin.</param>
 public sealed record ItemTemplate(
     string Id,
     WeaponClass WeaponClass = WeaponClass.Default,
@@ -69,7 +71,9 @@ public sealed record ItemTemplate(
     float MeleeRange = 0,
     bool MeleeMultiHit = false,
     bool Pickable = false,
-    bool Bound = false)
+    bool Bound = false,
+    System.Numerics.Matrix4x4? Attach0 = null,
+    System.Numerics.Matrix4x4? Attach1 = null)
 {
     /// <summary>Throws on a value the rules cannot use; loaders call it as they read.</summary>
     public void Validate()
@@ -113,4 +117,25 @@ public sealed class Item
 
     /// <summary>Drawn on its bone; an animation can hide it.</summary>
     public bool IsVisible { get; set; } = true;
+
+    /// <summary>Where the item is, as of the end of its holder's last frame.</summary>
+    public System.Numerics.Matrix4x4 Transform { get; private set; } = System.Numerics.Matrix4x4.Identity;
+
+    /// <summary>The tip (<c>attach0</c>) in the world as of the holder's last frame, and the frame before.</summary>
+    public System.Numerics.Vector3 Tip { get; private set; }
+
+    public System.Numerics.Vector3 LastTip { get; private set; }
+
+    private bool placed;
+
+    /// <summary>Moves the item (its holder's call, at the end of its frame); the first place after a new hold has no sweep.</summary>
+    internal void Place(System.Numerics.Matrix4x4 transform)
+    {
+        Transform = transform;
+        var tip = ((Template.Attach0 ?? System.Numerics.Matrix4x4.Identity) * transform).Translation;
+        (LastTip, Tip, placed) = (placed ? Tip : tip, tip, true);
+    }
+
+    /// <summary>Taken into a hand: the next place starts afresh.</summary>
+    internal void Held() => placed = false;
 }

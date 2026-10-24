@@ -463,6 +463,48 @@ raise a `Cue` on the character for the engine (sound, effect and its end, footst
 for a later system are left out until it lands. Invisibility counts down in OpenMagicka; in the
 original the buff that grants it times it.
 
+### 4.3 Skeleton pose (where bones and held items are)
+
+The rules need the skeleton's pose for held items (a weapon's sweep, §8.1.1), bone effects and
+casting points. It is worked out after the clip time moves and **before the actions run**, so they
+see this frame's pose.
+
+- **A bone's local pose** is a translation, a rotation and a scale. A bone with no channel in the
+  clip stays in its bind pose.
+- **Sampling.** In a channel, take the last keyframe at or before the clip time and the one after
+  it. After the last keyframe comes the first again: when looping, over the time left to the clip's
+  end; when not looping, the last keyframe holds. Between the two, the amount is (time − first
+  key's time) / gap, clamped to 0..1. Translation and scale are lerped. The rotation is a
+  normalised quaternion lerp that takes the shorter way: the game never changes XNAnimation's
+  linear modes, for keys or crossfades. A gap of 0 or less keeps the first key. The search finds
+  a key at the time if there is one (any of equal times), else the last before it, and the first
+  when the time is before them all (even when looping). Keys must be in time order with finite
+  values; channels with no keys are left out, and of two channels for one bone the first counts.
+- **During a crossfade** the old clip keeps playing. The incoming clip is taken at its **first
+  keyframe** only (its bind pose without a channel). The two are blended by
+  `crossfade time / crossfade duration`, clamped, as XNAnimation does.
+- **A local matrix** is the rotation with the translation, then each of its first three columns
+  scaled (the translation is not). Bone 0 is placed by the character's root matrix; every other bone by
+  its parent's result. Parents come before their children. The skinning transform of a bone is its
+  inverse bind pose × that result.
+- **The character's root matrix** is the model's scale × the body's orientation (right =
+  forward × up, up = +Y, forward = the facing), placed at the feet: the position plus the height
+  offset. It is taken at the start of the frame, the facing flattened. Each template model variant
+  has its own scale; OpenMagicka uses the first until spawns pick variants (a scale that is not
+  positive counts as 1). A new character is posed at once, so bones and items have a place before
+  its first frame.
+- **A held item** hangs from its slot's bone by the slot's attach matrix, built once:
+  `inverse(model scale) × Rx(r.X) × Ry(r.Y + π) × Rx(r.Z) × inverse(inverse bind pose of the bone)`.
+  The third turn is about X again, as the original; `r` is the slot's rotation. The item's world
+  matrix is the attach matrix × that bone's skinning transform. A slot's bone must exist in the
+  skeleton (the original refuses the template). Without a skeleton, held items sit at the root.
+- **An item's points** `attach0` (the tip or muzzle) and `attach1` come from the bones of the
+  same names in its model: the bone's transform with each parent's transform multiplied in
+  **before** it, as the original does. Held items move **at the end of the character's frame**. An
+  action that reads an item's tip therefore sees last frame's position, and its previous position
+  is from the frame before that. An item just taken in hand has no previous position: its first
+  place counts as both.
+
 ---
 
 ## 5. Character state machine (CharacterStates)
@@ -928,7 +970,9 @@ tracer speed, conditions), missile model, ranged conditions, scale, model, auras
 - **`WeaponVisibility`** (§4.2, 767 uses): each frame of its window, the item in that slot is shown
   or hidden. It is not undone at the end. An empty slot ignores it.
 
-In the vanilla data, 286 of the 338 templates hold 591 items, and 86 of them hold a staff. Of the
+In the vanilla data, 286 of the 338 templates hold 591 items, and 86 of them hold a staff; 291 of
+the held items have an `attach0` point, and every one sits within reach of its holder once posed (a
+horseman's lance tip is 5 m off). Of the
 454 items, 200 are Default, 92 are staffs and 48 are medium slashing weapons; 292 have a block value
 and 11 have a passive ability.
 

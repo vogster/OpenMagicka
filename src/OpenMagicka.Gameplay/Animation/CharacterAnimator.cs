@@ -88,10 +88,11 @@ public sealed class CharacterAnimator
             : (Animations.DefaultSet.Find(CharacterAnimations.Idle)!, CharacterAnimations.Default, true);
     }
 
-    /// <summary>Moves the clock, then runs the current clip's action windows.</summary>
+    /// <summary>Moves the clock, poses the skeleton, then runs the current clip's action windows.</summary>
     public void Update(float dt)
     {
         var events = Clock.Update(dt);
+        owner.UpdatePose();
         if (events.HasFlag(ClockEvents.Looped))
         {
             ClearMarks();
