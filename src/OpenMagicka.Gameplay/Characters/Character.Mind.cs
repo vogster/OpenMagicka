@@ -17,8 +17,8 @@ public sealed partial class Character
     private float charmTimer;
     private float confuseTimer;
 
-    /// <summary>Its factions now: the template's, unless confusion took them.</summary>
-    public Factions Factions => factions ?? Template.Factions;
+    /// <summary>Its factions now: a charmed NPC is Friendly; else the template's, unless confusion took them.</summary>
+    public Factions Factions => IsCharmed && !IsPlayer ? Factions.Friendly : factions ?? Template.Factions;
 
     public bool IsFeared => fearTimer > 0 && !Dead;
 
@@ -78,6 +78,7 @@ public sealed partial class Character
         if (!Template.Uncharmable)
         {
             (CharmOwner, charmTimer) = (by, seconds);
+            Mind?.DropToIdle();                                               // a charmed mind starts over on its new side
         }
     }
 

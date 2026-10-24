@@ -68,8 +68,10 @@ public sealed partial class Agent
                 var distance = away.Length();
                 if ((character.Factions & Owner.Factions) != 0)
                 {
-                    var near = distance < 1e-6f ? 1 : 1 - distance / AvoidanceRadius;
-                    friendly += Vector3.Normalize(away) * near * character.Danger;   // as the original: no way at all when they stand together
+                    if (distance >= 1e-6f)
+                    {
+                        friendly += away / distance * (1 - distance / AvoidanceRadius) * character.Danger;   // together: no way to shy
+                    }
                     continue;
                 }
                 var nearness = 1f;
@@ -79,13 +81,16 @@ public sealed partial class Agent
                     away /= distance;
                     var facing = character.Body.Facing;
                     var side = Vector3.Cross(away, new Vector3(0, Vector3.Cross(away, facing).Y > 0 ? 1 : -1, 0));
-                    side = Vector3.Normalize(side);
+                    side = side.LengthSquared() > 1e-12f ? Vector3.Normalize(side) : Vector3.Zero;   // straight above: no side
                     var reach = distance / AvoidanceRadius;
                     reach = reach * reach * (1 - reach) * 6.75f;                    // a bump peaking at two thirds of the radius
                     var looked = MathF.Pow(Math.Clamp(Vector3.Dot(away, facing), 0, 1), 0.25f);
                     sight += side * looked * reach;
                 }
-                enemy += Vector3.Normalize(away) * nearness * character.Danger;
+                if (distance >= 1e-6f)
+                {
+                    enemy += away * nearness * character.Danger;                  // away is the unit way here
+                }
                 continue;
             }
             var off = (here - entity.Position) with { Y = 0 };
@@ -130,6 +135,10 @@ public sealed partial class Agent
         {
             var toward = group[index].Position - here;
             var distance = toward.Length();
+            if (distance < 1e-6f)
+            {
+                continue;                                                     // one on the same spot gives no way
+            }
             separation += toward * (Profile.GroupSeparation / -distance);
             cohesion += toward * Profile.GroupCohesion;
         }

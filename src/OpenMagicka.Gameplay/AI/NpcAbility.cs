@@ -20,8 +20,19 @@ public abstract class NpcAbility
     public static NpcAbility For(AbilityTemplate template, int index) => template switch
     {
         CastSpellAbility spell => new CastSpellBehaviour(spell, index),
-        _ => new PendingAbility(template, index),
+        MeleeAbility melee => new MeleeBehaviour(melee, index),
+        RangedAbility ranged => new RangedBehaviour(ranged, index),
+        BlockAbility block => new BlockBehaviour(block, index),
+        DashAbility dash => new DashBehaviour(dash, index),
+        JumpAbility jump => new JumpBehaviour(jump, index),
+        ElementStealAbility steal => new ElementStealBehaviour(steal, index),
+        RemoveStatusAbility remove => new RemoveStatusBehaviour(remove, index),
+        SpecialAbilityAbility special => new SpecialAbilityBehaviour(special, index),
+        _ => new PendingAbility(template, index),                             // the grips, with OM-33's
     };
+
+    /// <summary>One of its clips at random.</summary>
+    protected string Pick(Agent agent) => Template.Animations[(int)(agent.Owner.NextRandom() * Template.Animations.Count) % Template.Animations.Count];
 
     /// <summary>
     /// How much it is wanted against the target: nothing when useless or cooling; else its
@@ -94,10 +105,10 @@ public abstract class NpcAbility
     {
     }
 
-    /// <summary>Does it; true when it went (it is then under way).</summary>
+    /// <summary>Does it; true when it went (it is then under way). One with no clip to play does nothing.</summary>
     public bool Execute(Agent agent)
     {
-        var done = Act(agent);
+        var done = (Template.Animations.Count > 0 || this is SpecialAbilityBehaviour || this is BlockBehaviour || this is JumpBehaviour) && Act(agent);
         if (done)
         {
             agent.BusyAbility = this;
@@ -139,7 +150,7 @@ public abstract class NpcAbility
     }
 }
 
-/// <summary>An ability whose doing comes with phase 4 of OM-40: it is never wanted until then.</summary>
+/// <summary>A grip's ability (grips come with OM-33): never wanted until then.</summary>
 internal sealed class PendingAbility(AbilityTemplate template, int index) : NpcAbility(template, index)
 {
     protected override bool IsUseful(Agent agent, in FuzzyArguments args) => false;
@@ -155,10 +166,42 @@ internal sealed class PendingAbility(AbilityTemplate template, int index) : NpcA
     protected override bool Act(Agent agent) => false;
 }
 
-/// <summary>Chanting a spell's elements, then casting it (§7.8); the chanting and the cast come with phase 4.</summary>
+/// <summary>
+/// Chanting a spell's elements, then casting it (§7.8). While it is the next ability and nothing is
+/// under way or cast, its target within 1.25 times its reach, and no attack playing, it chants one
+/// element each chant interval (a weapon spell: all at once). With all chanted, using it sets the
+/// spell's power and cast type and plays its clip, whose cast action casts.
+/// </summary>
 public class CastSpellBehaviour(CastSpellAbility template, int index) : NpcAbility(template, index)
 {
     public CastSpellAbility Spell => (CastSpellAbility)Template;
+
+    public override void Update(Agent agent, float dt)
+    {
+        var owner = agent.Owner;
+        if (ReferenceEquals(agent.BusyAbility, agent.NextAbility) || owner.CurrentSpell is not null || !(agent.ChantCooldown < 0)
+            || owner.SpellQueue.Count >= Spell.Elements.Count || owner.Attacking || agent.CurrentTarget is not { } target
+            || !(Vector3.DistanceSquared(owner.Position, target.Position) <= Spell.MaxRange * Spell.MaxRange * 1.25f * 1.25f))
+        {
+            return;
+        }
+        agent.ChantCooldown = Spell.ChantSpeed;
+        if (Spell.CastType == CastType.Weapon)
+        {
+            foreach (var element in Spell.Elements)
+            {
+                owner.Conjure(element);
+            }
+        }
+        else
+        {
+            owner.Conjure(Spell.Elements[owner.SpellQueue.Count]);
+        }
+    }
+
+    /// <summary>As the original's, a spell turns to face its target; on itself, ahead.</summary>
+    public override Vector3 DesiredDirection(Agent agent) =>
+        ReferenceEquals(agent.CurrentTarget, agent.Owner) ? agent.Owner.Body.Facing : base.DesiredDirection(agent);
 
     /// <summary>Whether the elements chanted so far begin this spell's (each sharing a flag, as far as both go).</summary>
     public bool Matches(ElementQueue queue)
@@ -182,7 +225,17 @@ public class CastSpellBehaviour(CastSpellAbility template, int index) : NpcAbili
 
     public override float Arc(Agent agent) => Spell.Arc;
 
-    protected override bool Act(Agent agent) => false;
+    protected override bool Act(Agent agent)
+    {
+        var owner = agent.Owner;
+        if (ReferenceEquals(agent.BusyAbility, agent.NextAbility) || owner.SpellQueue.Count < Spell.Elements.Count || owner.Attacking)
+        {
+            return false;
+        }
+        (owner.SpellPower, owner.CastType, agent.ChantCooldown) = (Spell.Power, Spell.CastType, Spell.ChantSpeed);
+        owner.PlayAttack(Pick(agent), allowRotate: true);
+        return true;
+    }
 }
 
 /// <summary>

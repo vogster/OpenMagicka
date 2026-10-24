@@ -44,7 +44,14 @@ public sealed partial class Agent
 
     public IReadOnlyList<NpcAbility> Abilities { get; }
 
-    public float AlertRadius => Profile.AlertRadius;
+    /// <summary>How far it notices: its template's, unless something (a summoning) set its own.</summary>
+    public float AlertRadius
+    {
+        get => alertRadius ?? Profile.AlertRadius;
+        set => alertRadius = value;
+    }
+
+    private float? alertRadius;
 
     public Order Order { get; private set; } = Order.Attack;
 
@@ -55,12 +62,15 @@ public sealed partial class Agent
     /// <summary>The script trigger a reaction fires (0 for none); the triggers come with OM-43.</summary>
     public int ReactionTrigger { get; private set; }
 
-    /// <summary>Raised when a reaction fires a trigger.</summary>
+    /// <summary>Raised when a reaction or a scripted event fires a trigger (the level's triggers answer, OM-43).</summary>
     public event Action<Agent, int>? Triggered;
 
     public AlertMode AlertMode { get; internal set; }
 
-    public Entity? PriorityTarget { get; private set; }
+    /// <summary>The script's priority target, by its script name (0 for none), looked up each time it is wanted.</summary>
+    public int PriorityTargetId { get; private set; }
+
+    public Entity? PriorityTarget => PriorityTargetId == 0 ? null : Owner.Manager?.FindByUniqueId(PriorityTargetId);
 
     /// <summary>The ability the script favours against the priority target (-1 for none).</summary>
     public int PriorityAbility { get; private set; } = -1;
@@ -102,10 +112,33 @@ public sealed partial class Agent
 
     public IEnumerable<(Character Attacker, float Grudge)> Grudges => grudges;
 
+    /// <summary>The wait before the next element is chanted (1 at first, as the original).</summary>
+    public float ChantCooldown { get; internal set; } = 1;
+
+    private float blockTimer;
+
+    /// <summary>Raises its guard for a second.</summary>
+    internal void Block() => (blockTimer, Owner.IsBlocking) = (1, true);
+
+    /// <summary>An ability is over: its clip ended or another state took over.</summary>
+    internal void Done(NpcAbility? only = null)
+    {
+        if (only is null || ReferenceEquals(BusyAbility, only))
+        {
+            BusyAbility = null;
+        }
+    }
+
     /// <summary>Time passes for the mind each frame; it is spent when the mind next thinks.</summary>
     internal void Pass(float dt)
     {
         sinceUpdate += dt;
+        ChantCooldown -= dt;
+        blockTimer -= dt;
+        if (blockTimer <= 0 && Owner.IsBlocking)
+        {
+            Owner.IsBlocking = false;
+        }
         for (var i = 0; i < cooldowns.Length; i++)
         {
             cooldowns[i] -= dt;                                                // as the original: the abilities cool every frame
@@ -200,7 +233,7 @@ public sealed partial class Agent
     /// The script's order (§7.10). A new order drops every state down to idle (letting go of the
     /// target of an attack); the events start from the first.
     /// </summary>
-    public void SetOrder(Order order, ReactTo reactTo = ReactTo.None, Order reaction = Order.None, Entity? priorityTarget = null,
+    public void SetOrder(Order order, ReactTo reactTo = ReactTo.None, Order reaction = Order.None, int priorityTarget = 0,
         int priorityAbility = -1, int reactionTrigger = 0, IReadOnlyList<AiEvent>? events = null)
     {
         if (Order != order)
@@ -215,11 +248,16 @@ public sealed partial class Agent
             }
         }
         (Order, ReactsTo, ReactionOrder, ReactionTrigger) = (order, reactTo, reaction, reactionTrigger);
-        (Events, EventIndex, EventDelay) = (events, 0, 0);
-        (PriorityTarget, PriorityAbility) = (priorityTarget, priorityAbility);
+        (Events, EventIndex) = (events is null ? null : [.. events], 0);
+        if (events is not null)
+        {
+            EventDelay = 0;                                                    // as the original: kept otherwise
+        }
+        (PriorityTargetId, PriorityAbility) = (priorityTarget, priorityAbility);
     }
 
-    public IReadOnlyList<AiEvent>? Events { get; private set; }
+    /// <summary>The order's scripted events (its own copy: a reversing loop turns it around).</summary>
+    public AiEvent[]? Events { get; private set; }
 
     public int EventIndex { get; internal set; }
 

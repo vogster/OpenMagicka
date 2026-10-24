@@ -499,8 +499,8 @@ fears and friendship between characters go by these.
 
 - **The target.** Of the characters within 14 (shields hide), the caster aside, not yet charmed
   and sharing none of its factions: the one whose way is nearest the caster's facing.
-- **The charm.** It is charmed by the caster for 15 s; the uncharmable are not. What a charmed
-  character does comes with the AI (OM-40).
+- **The charm.** It is charmed by the caster for 15 s; the uncharmable are not. A charmed NPC is
+  Friendly while it lasts, and its mind starts over (ENTITIES_AI.md §7.10).
 - **Failure.** With no target, it fails.
 - **Sound.** `magick_charm`.
 
@@ -542,7 +542,7 @@ fears and friendship between characters go by these.
 ## 7. Summons and the portal
 
 - **Summoned characters.** A summon takes its master's factions (and gets them back after a
-  confusion). What it then does comes with the AI (OM-40).
+  confusion). Its mind is ordered to attack, reacting to attacks and nearness (ENTITIES_AI.md §7.10).
 - **The bestiary.** A level finds the templates it makes at run time by asset name, with their
   clips. The engine's comes from the game files (attached to a level with level play); a missing
   or broken asset makes nothing.

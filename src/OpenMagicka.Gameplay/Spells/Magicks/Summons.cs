@@ -41,6 +41,7 @@ public static class Summoning
         {
             summon.Summoned(master);
         }
+        summon.Mind?.SetOrder(AI.Order.Attack, AI.ReactTo.Attack | AI.ReactTo.Proximity, AI.Order.Attack);   // as the original: summons attack
         return summon;
     }
 
@@ -126,6 +127,11 @@ public sealed class UndeadRising : Entity, IMagickEffect
         if (Summoning.Call(manager, caster.World, caster, Asset, ground, new Vector3(MathF.Sin(angle), 0, -MathF.Cos(angle))) is { } zombie)
         {
             zombie.ForceAnimation("spawn");                                   // as the original: only the clip, no rising state
+            zombie.Mind?.SetOrder(AI.Order.Attack, AI.ReactTo.Attack | AI.ReactTo.Proximity, AI.Order.Attack, priorityAbility: 0);
+            if (zombie.Mind is { } mind)
+            {
+                mind.AlertRadius = 12;
+            }
         }
     }
 }

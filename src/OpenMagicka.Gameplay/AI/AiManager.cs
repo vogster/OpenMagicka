@@ -32,6 +32,13 @@ public sealed class AiManager
 
     internal void Remove(Agent agent) => agents.Remove(agent);
 
+    private float stuck;
+
+    /// <summary>The time chanted elements have waited with no target, one count for all the level's minds, as the original's.</summary>
+    internal float Stuck(float dt) => stuck += dt;
+
+    internal void ResetStuck() => stuck = 0;
+
     public void Update(float dt)
     {
         var threat = false;

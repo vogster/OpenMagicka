@@ -226,9 +226,9 @@ public sealed partial class Character
 
     private void Cast(Spell spell, CastType cast, bool fromStaff)
     {
-        if (cast == CastType.None || SpellEffects.For(SpellTypes.Of(spell.Element)) is not { } effect)
+        if (cast is not (CastType.Force or CastType.Area or CastType.Self or CastType.Weapon) || SpellEffects.For(SpellTypes.Of(spell.Element)) is not { } effect)
         {
-            return;
+            return;                                                           // as the original: a blast or a magick cast type casts nothing here
         }
         CurrentSpell = effect;
         effect.Start(this, spell, cast, fromStaff);

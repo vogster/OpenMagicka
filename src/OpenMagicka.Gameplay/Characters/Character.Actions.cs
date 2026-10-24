@@ -93,28 +93,30 @@ public sealed partial class Character
 
     /// <summary>
     /// A ballistic jump to land <paramref name="delta"/> away at <paramref name="elevation"/> radians;
-    /// nothing when entangled, dead, or when no speed reaches it.
+    /// nothing (false) when entangled, dead, or when no speed reaches it.
     /// </summary>
-    public void Jump(Vector3 delta, float elevation)
+    public bool Jump(Vector3 delta, float elevation)
     {
         if (IsEntangled || Dead)
         {
-            return;
+            return false;
         }
         var flat = delta with { Y = 0 };
         var distance = flat.Length();
         if (distance < float.Epsilon)
         {
-            return;
+            return false;
         }
         var (sin, cos) = MathF.SinCos(elevation);
         var direction = (flat / distance * cos) with { Y = sin };
         var gravity = MathF.Abs(world.Settings.Gravity.Y);
         var speed = MathF.Sqrt(gravity * distance * distance / (2 * (distance * sin / cos - delta.Y) * cos * cos));
-        if (float.IsFinite(speed))
+        if (!float.IsFinite(speed))
         {
-            Body.Jump(direction * speed);
+            return false;
         }
+        Body.Jump(direction * speed);
+        return true;
     }
 
     internal void RaiseCue(AnimationCue cue)

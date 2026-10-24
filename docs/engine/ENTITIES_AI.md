@@ -887,6 +887,14 @@ stateDiagram-v2
   - `Kill remove=`;
   - `Loop type=Loop|Reverse`.
   A `NaN` delay means "wait for the animation to end".
+  - Every event has a trigger and a delay. When a delay runs out (or the clip ends), the trigger of the event before fires; a walk
+    with no delay fires its own at once. Several walks in a row go on without standing still in between.
+  - A walk measures from its leader's place when it follows one. A face toward a name looks for an entity, then a locator; with
+    neither it is skipped.
+  - A new order copies its events (a reversing loop turns them around in place) and starts them over; the delay is kept unless
+    the order brings events.
+  - Ours: `AiEvent` records (`MoveAiEvent`, `AnimationAiEvent`, `FaceAiEvent`, `KillAiEvent`, `LoopAiEvent`); triggers go out through
+    `Agent.Triggered` for the level (OM-43).
 - **Attack**. While an ability is executing (`BusyAbility`), the agent stands and turns to face. The ability is re-selected if
   the current one is useless or the target is "older" than 1 s. In range and facing the target → `Execute`; on success, the ability
   cooldown is set and the target is re-selected (switching). With `ForceNavMesh`, the target must be ≤ 3 m from the navmesh.
@@ -923,6 +931,9 @@ stateDiagram-v2
 - **Danger**: away from other dangerous entities (mines, puddles, missiles).
 The length of the sum is clamped to 1e5. The "must flee" threshold is 20.
 
+As the original: the weights `1 − d/12` go below 0 for what stands just past 12 (the query counts radii), so it is drawn to them a
+little. Ours skips a character on its very spot (no way to shy), where the original's sum turned to not-a-number.
+
 Dangers (`GetDanger`): a character, its chanted elements (a wizard charging, 10); a missile 2 (or its own); a barrier, its damage
 magnitudes; a mine 1 (10,000 while its fuse burns); a grease puddle 0.5 (burning, 10 × its heat); a whirlwind 10 × how much shows; a
 vortex 20 × its mass; Death 1,000; an elemental egg 0.
@@ -952,6 +963,35 @@ a flag and a fuzzy expression string (if the flag is true), an animation list (i
 Common checks: `InRange` (in XZ, with radii), `FacingTarget` (angle less than arc), `ChooseAttackAngle`: up to 3 random points
 on a half-circle around the target at the ability's middle distance, the first one without obstacles.
 
+**What each does** (ours: `OpenMagicka.Gameplay.AI`, one behaviour per template record):
+- **Wanted, without an expression:** Melee, Ranged, Dash and SpecialAbility by `distExp(min, max)` of the distance; Jump `+∞`
+  against a wizard and `−∞` against anything else. CastSpell, Block, ElementSteal and RemoveStatus must have an expression (the
+  original throws; ours never wants them then).
+- **Melee:** an attack by a random clip (turning only if the ability says so); damage comes from the clip's actions.
+- **Ranged:** refused with a fellow within 0.75 of the line (the line shortened by cos elevation); else the weapons are told the ability
+  and it attacks by a clip. A weapon so told throws at the mind's target: along the facing tipped up by the ability's and the item's
+  elevations, at the speed that lands it under gravity (twice the range when none does), off by a random share of what the accuracy
+  lacks in speed and up to a quarter turn; the missile homes at the target with the item's homing.
+  - As the original, the error is accuracy × a random share in (−1, 1) × (1 − accuracy): 0 for accuracy 0 or 1, at most for 0.5.
+  - The throw goes at the target the ability was used on (the mind may have chosen another by the time the clip throws), once. Its attack spot also keeps the first
+  and last parts of the shot clear of walls.
+- **CastSpell:** while it is the next ability, nothing under way or cast, the target within 1.25 × its reach and no attack playing,
+  it chants one element per chant interval (a weapon spell all at once); with all chanted, use sets the spell power and cast type and
+  plays its clip, whose cast action casts. An NPC's chant interval starts at 1 s. A cast type other than force, area, self or weapon
+  (a blast, a magick) casts nothing, as the original.
+- **Block:** the guard is up for 1 s; the clip's block action ends it as under way.
+- **Dash:** the next attack clip and a second pick as the dash clip; dashing, without turning.
+- **Jump:** to where the target will be in 0.5 s, 1.1 times as far, within its reach (its reach in three dimensions, radii not counted).
+  A leap no speed makes (a flat arc on level ground, a target straight above) is not under way in ours, so the mind does not wait
+  on it for ever.
+- **ElementSteal:** it plays its clip; once that is the current clip, the target (or, with no angle, every foe within reach with a queue)
+  loses its queue.
+- **RemoveStatus:** a clip, no use while one of its clips plays. **SpecialAbility:** when the item's special is ready, by a clip (or
+  straight away with none).
+- **Grips** (`GripCharacterFromBehind`, `PickUpCharacter`, `ZombieGrip`, `ThrowGrip`, `DamageGrip`, `ConfuseGrip`) wait for grips (OM-33).
+- **Under way** ends when the character's attack or cast state ends, or it goes idle.
+- On the game's data (309 templates with abilities, each against a foe 3 m ahead for 4 s): 305 take a target and 301 act.
+
 `MoveAbilities` (`Jump`, `Run`) is **dead code**: nothing references them. NPC movement is defined by the template's `MovementProperties` + `MoveAnimations`.
 
 ### 7.9 Messaging
@@ -966,6 +1006,14 @@ Attributes (occurrence in data): `order` (848), `delay` (771), `id` (681), `reac
 `idleAnimation` (13), `trigger` (7), `explicit` (7), `targetArea` (3), `speed` (3).
 Attribute names are **case-insensitive**. Action: release grips, set `WanderSpeed`, `TargetArea`, call `SetOrder`
 (when the order changes, the AI state stack collapses down to Idle), set animations; `Panic` means immediate panic.
+- Only an order to one NPC by name panics it at once (the zone's NPCs get the order alone), as the original.
+- The priority target is kept by its script name and looked up each time the mind chooses.
+- Ours: `Agent.Give(GiveOrderSpec, byName)`; reading the action from the level comes with the triggers (OM-43, OM-45).
+
+**Charm and summons.**
+- A charmed NPC belongs to Friendly while the charm lasts, and its states drop to idle (letting go of its target).
+- A summoned character is ordered to attack, reacting to attacks and nearness by attacking. A raised zombie also favours its first
+  ability and notices within 12.
 
 ---
 

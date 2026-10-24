@@ -7,6 +7,7 @@ internal sealed class IdleState : CharacterState
 {
     protected internal override void Enter(Character character)
     {
+        character.Mind?.Done();
         if (!character.IsEntangled)
         {
             (character.Body.AllowMove, character.Body.AllowRotate) = (true, true);

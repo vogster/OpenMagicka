@@ -121,7 +121,14 @@ public sealed class Block(float start, float end, int slot) : AnimationAction(st
 {
     public int Slot { get; } = slot is >= 0 and < Character.Slots ? slot : throw new ArgumentOutOfRangeException(nameof(slot), slot, "not a slot");
 
-    public override void Run(Character owner, bool first) => owner.BlockSlot = Slot;
+    public override void Run(Character owner, bool first)
+    {
+        owner.BlockSlot = Slot;
+        if (owner.Mind is { BusyAbility: AI.BlockBehaviour block } mind)
+        {
+            mind.Done(block);                                                 // a guard under way is up
+        }
+    }
 
     public override void Stop(Character owner) => owner.BlockSlot = -1;
 }

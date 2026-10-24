@@ -54,7 +54,7 @@ internal sealed class MoveAiState : IAiState
         var here = owner.Position with { Y = 0 };
         var goal = agent.Goal with { Y = 0 };
         var left = Vector3.DistanceSquared(here, goal);
-        if (left <= 0.25f || (path.Count == 0 && left > 9 && agent.IsLeader))
+        if (left <= 0.25f || (path.Count == 0 && left > 9 && agent.IsLeader && owner.Manager?.NavMesh is not null))   // without a mesh: straight
         {
             agent.PopState();
             return;
@@ -81,6 +81,10 @@ internal sealed class MoveAiState : IAiState
                 return;
             }
             way *= 0.9f;
+        }
+        if (agent.Events is { } events && agent.EventIndex < events.Length && events[agent.EventIndex] is MoveAiEvent walk)
+        {
+            way *= walk.Speed;                                                // a scripted walk's own pace
         }
         owner.Body.Movement = Shy(agent, way);
     }

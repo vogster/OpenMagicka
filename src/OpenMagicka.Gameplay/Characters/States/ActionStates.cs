@@ -46,6 +46,7 @@ internal sealed class AttackState : CharacterState
     /// <summary>An attack's cast (a non-player casts through its attack clips) ends with it.</summary>
     protected internal override void Exit(Character character)
     {
+        character.Mind?.Done();                                               // the ability under way is over
         character.Attacking = false;
         character.StopSpell();
         character.CastType = Spells.CastType.None;

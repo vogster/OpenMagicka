@@ -58,14 +58,17 @@ public static class Ranged
             return null;
         }
         item.Cooldown = item.Template.CooldownTime;
-        var throwing = velocity is { } given ? Turn(given, itemAligned ? item.Transform : owner.RootMatrix()) : Ahead(owner, ranged);
+        var aimed = item.AimedBy is var (ability, target) && target.Manager is not null && !target.IsDead ? (ability, target) : ((AI.RangedAbility, Entity)?)null;
+        item.AimedBy = null;
+        var throwing = velocity is { } given ? Turn(given, itemAligned ? item.Transform : owner.RootMatrix())
+            : aimed is var (by, at) ? AimAt(owner, item, ranged, by, at) : Ahead(owner, ranged);
         if (manager.Entities.Count >= EntityManager.Capacity)
         {
             return null;                                                      // no room: as the original's pool running dry
         }
         var gungnir = item.Template.PassiveAbility == PassiveAbility.Gungner;
         var missile = new Missile(owner.World, owner, item.Tip, throwing, gungnir ? Passives.GungnirRadius : ranged.ProjectileRadius, ranged.Events,
-            danger: ranged.Danger, facesVelocity: gungnir || ranged.FacesVelocity);
+            target: gungnir ? null : aimed?.Item2, homing: gungnir || aimed is null ? 0 : ranged.Homing, danger: ranged.Danger, facesVelocity: gungnir || ranged.FacesVelocity);
         try
         {
             manager.Add(missile);
@@ -91,6 +94,31 @@ public static class Ranged
             var axis = new Vector3(x, y, z);
             return axis.LengthSquared() > 1e-12f ? Vector3.Normalize(axis) : Vector3.Zero;
         }
+    }
+
+    /// <summary>
+    /// An NPC's aimed throw (§8.1.4): along the facing tipped up by the ability's and the item's
+    /// elevations, at the speed that lands it on the target under gravity (twice the range when none
+    /// does), both off by the ability's accuracy: a random share of what it lacks, of the speed and of a
+    /// quarter turn.
+    /// </summary>
+    private static Vector3 AimAt(Character owner, Item item, RangedTemplate ranged, AI.RangedAbility ability, Entity target)
+    {
+        var origin = item.Position;
+        var rise = target.Position.Y - origin.Y;
+        var distance = Vector3.Distance(target.Position with { Y = 0 }, origin with { Y = 0 });
+        var elevation = ability.Elevation + ranged.Elevation;
+        var (sin, cos) = MathF.SinCos(elevation);
+        var direction = new Vector3(owner.Body.Facing.X * cos, sin, owner.Body.Facing.Z * cos);
+        var miss = ability.Accuracy * (float)(owner.NextRandom() * 2 - 1) * MathF.Max(1 - ability.Accuracy, 0);
+        var gravity = -owner.World.Settings.Gravity.Y;
+        var speed = MathF.Sqrt(gravity * distance * distance / (2 * (distance * sin / cos - rise) * cos * cos));
+        if (!float.IsFinite(speed))
+        {
+            speed = ranged.Range * 2;
+        }
+        speed *= miss + 1;
+        return Vector3.Transform(direction, Quaternion.CreateFromAxisAngle(Vector3.UnitY, miss * MathF.PI / 4)) * speed;
     }
 
     /// <summary>The facing tipped up by the elevation (or lifted by 0.05), times twice the range.</summary>

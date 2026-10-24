@@ -65,6 +65,9 @@ public sealed class Item
     /// <summary>The gun's accuracy for this burst (its own × the action's).</summary>
     public float GunAccuracy { get; internal set; }
 
+    /// <summary>The NPC ranged ability its holder used it for, and at whom: its next throw aims there (§8.1.4).</summary>
+    internal (AI.RangedAbility Ability, Entities.Entity Target)? AimedBy { get; set; }
+
     /// <summary>Rounds left in this burst.</summary>
     public int Rounds { get; internal set; }
 

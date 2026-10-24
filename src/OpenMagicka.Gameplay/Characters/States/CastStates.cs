@@ -123,6 +123,7 @@ internal sealed class CastState : CharacterState
 
     protected internal override void Exit(Character character)
     {
+        character.Mind?.Done();
         character.StopSpell();
         character.CastType = CastType.None;
         character.Body.AllowRotate = true;

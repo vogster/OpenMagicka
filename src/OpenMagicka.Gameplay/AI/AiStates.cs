@@ -48,17 +48,15 @@ public static class AiStates
 /// <summary>
 /// Idle (§7.6): it struggles free, flees what it shies from too much, and takes up its order: an
 /// attack chooses a target, a defence goes back to its zone or locator first, a wander or panic
-/// begins; otherwise it stands. The scripted events come with phase 5 of OM-40.
+/// begins. Then the order's scripted events run; otherwise it stands.
 /// </summary>
 internal sealed class IdleAiState : IAiState
 {
     /// <summary>
     /// How long elements may wait chanted with no target before they are let go. As the original, the
-    /// count is one for every mind.
+    /// count is one for every mind (ours: of the level).
     /// </summary>
     public const float FreezeLimit = 2;
-
-    private static float stuck;
 
     public void Enter(Agent agent)
     {
@@ -84,23 +82,23 @@ internal sealed class IdleAiState : IAiState
         switch (agent.Order)
         {
             case Order.Attack:
+                var minds = agent.Owner.Manager?.Minds;
                 if (Engage(agent))
                 {
-                    stuck = 0;
+                    minds?.ResetStuck();
                     return;
                 }
                 if (agent.Owner.SpellQueue.Count > 0)
                 {
-                    stuck += dt;
-                    if (stuck > FreezeLimit)
+                    if (minds is not null && minds.Stuck(dt) > FreezeLimit)
                     {
-                        stuck = 0;
+                        minds.ResetStuck();
                         agent.Owner.ClearQueue();
                     }
                 }
                 else
                 {
-                    stuck = 0;
+                    minds?.ResetStuck();
                 }
                 break;
             case Order.Defend:
@@ -115,6 +113,10 @@ internal sealed class IdleAiState : IAiState
             case Order.Panic:
                 agent.PushState(AiStates.Panic);
                 break;
+        }
+        if (agent.RunEvents(dt))
+        {
+            return;
         }
         agent.Owner.Body.Movement = Vector3.Zero;
     }
