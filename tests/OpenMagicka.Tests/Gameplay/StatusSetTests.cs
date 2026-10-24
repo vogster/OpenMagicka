@@ -94,6 +94,8 @@ public class StatusSetTests
         Assert.Equal(0.5f, poisoned.SpeedFactor());
         Assert.Equal(1f, poisoned.SpeedFactor(inCutscene: true));
         Assert.Equal(1f, StatusSet.Empty.SpeedFactor());
+        Assert.Null(StatusSet.Empty.SpeedCap());
+        Assert.Null(poisoned.SpeedCap(inCutscene: true));
         Assert.True(poisoned.BlocksRegeneration);
         Assert.True(With(StatusEffect.Create(Burning, 60, 1)).BlocksRegeneration);
         Assert.False(cold.BlocksRegeneration);

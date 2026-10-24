@@ -108,6 +108,7 @@ public sealed partial class Character
         Guns.Stop(this, held);
         held.Detach();
         RaiseCue(new Animation.ItemEffectEndCue(held));
+        RaiseCue(new Animation.ItemEffectEndCue(held.PassiveSource));
         return dropped;
     }
 }

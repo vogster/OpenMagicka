@@ -2,6 +2,7 @@ using System.Numerics;
 using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Combat;
 using OpenMagicka.Gameplay.Entities;
+using OpenMagicka.Gameplay.Items;
 using OpenMagicka.Physics;
 using OpenMagicka.Physics.Characters;
 
@@ -284,6 +285,7 @@ public sealed partial class Character : Entity
         UpdateLooks(dt);
         Body.SpeedMultiplier = 1;
         SelfShield?.Update(this, dt);
+        CountDownMeleeBoost(dt);
         if (State is not null)
         {
             ChangeState(State.Update(this, dt));
@@ -301,6 +303,10 @@ public sealed partial class Character : Entity
         if (Dead)
         {
             Afterlife(dt);
+        }
+        else
+        {
+            Body.SpeedMultiplier = Passives.Speed(this, Body.SpeedMultiplier);    // as the original's held items, before the statuses
         }
         HitPoints = DamageRules.Regenerate(HitPoints, MaxHitPoints, Template.Regeneration, dt, Statuses);
         TickStatuses(dt);
@@ -339,6 +345,7 @@ public sealed partial class Character : Entity
         if (!Dead)
         {
             RunItemAuras(dt);                                                 // as the original: held items do nothing for a corpse
+            RunPassives(dt);
             FireGuns(dt);
         }
     }
@@ -356,7 +363,10 @@ public sealed partial class Character : Entity
         {
             DamageOverTime(damage.Amount, damage.Element);
         }
-        Body.SpeedMultiplier = MathF.Min(Body.SpeedMultiplier, Statuses.SpeedFactor());
+        if (Statuses.SpeedCap() is { } cap)
+        {
+            Body.SpeedMultiplier = MathF.Min(Body.SpeedMultiplier, cap);
+        }
     }
 
     /// <summary>A character's body is spent once it leaves: a removed character cannot come back.</summary>

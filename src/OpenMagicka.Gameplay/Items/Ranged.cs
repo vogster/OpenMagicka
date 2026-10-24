@@ -52,7 +52,8 @@ public static class Ranged
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(item);
-        if (item.Template.Ranged is not { } ranged || ranged.Events.Count == 0 || owner.Manager is not { } manager || owner.World.IsDisposed)
+        if (item.Template.Ranged is not { } ranged || ranged.Events.Count == 0 || owner.Manager is not { } manager || owner.World.IsDisposed
+            || !Passives.MayThrow(owner, item))
         {
             return null;
         }
@@ -62,7 +63,9 @@ public static class Ranged
         {
             return null;                                                      // no room: as the original's pool running dry
         }
-        var missile = new Missile(owner.World, owner, item.Tip, throwing, ranged.ProjectileRadius, ranged.Events, danger: ranged.Danger, facesVelocity: ranged.FacesVelocity);
+        var gungnir = item.Template.PassiveAbility == PassiveAbility.Gungner;
+        var missile = new Missile(owner.World, owner, item.Tip, throwing, gungnir ? Passives.GungnirRadius : ranged.ProjectileRadius, ranged.Events,
+            danger: ranged.Danger, facesVelocity: gungnir || ranged.FacesVelocity);
         try
         {
             manager.Add(missile);
@@ -72,6 +75,7 @@ public static class Ranged
             owner.World.Remove(missile.Body);
             throw;
         }
+        item.Thrown = gungnir ? missile : item.Thrown;                       // before its first events, which may throw
         missile.Start();
         return missile;
     }

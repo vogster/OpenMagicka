@@ -66,15 +66,18 @@ public sealed partial class StatusSet
     /// <summary>Cold's slowdown, <c>0.333 + 0.667·0.001^m</c>; 1 when not cold.</summary>
     public float ColdSlowdown => Has(StatusEffects.Cold) ? 0.333f + 0.667f * MathF.Pow(0.001f, this[StatusEffects.Cold].Magnitude) : 1;
 
-    /// <summary>The cap cold and poison put on the speed multiplier: cold's slowdown, poison 0.5.</summary>
-    public float SpeedFactor(bool inCutscene = false)
+    /// <summary>The cap cold and poison put on the speed multiplier: cold's slowdown, poison 0.5; 1 with neither.</summary>
+    public float SpeedFactor(bool inCutscene = false) => SpeedCap(inCutscene) ?? 1;
+
+    /// <summary>The same cap, null while neither status is at work: a faster multiplier is then left alone, as the original.</summary>
+    public float? SpeedCap(bool inCutscene = false)
     {
-        var factor = ColdSlowdown;
+        float? cap = Has(StatusEffects.Cold) ? ColdSlowdown : null;
         if (Has(StatusEffects.Poisoned) && !inCutscene)
         {
-            factor = MathF.Min(factor, 0.5f);
+            cap = MathF.Min(cap ?? 1, 0.5f);
         }
-        return factor;
+        return cap;
     }
 
     /// <summary>Status damage as it lands: fire burns a greased character twice as hard.</summary>

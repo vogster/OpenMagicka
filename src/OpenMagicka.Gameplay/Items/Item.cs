@@ -82,6 +82,21 @@ public sealed class Item
     /// <summary>Restarts with each strike; abilities read it.</summary>
     public float Cooldown { get; internal set; }
 
+    /// <summary>The passive ability's pulse timer (§8.1.6).</summary>
+    internal float PassiveTimer { get; set; }
+
+    /// <summary>A Glow item's light, 0 to 1, for the renderer.</summary>
+    public float Glow { get; internal set; }
+
+    /// <summary>A Gungnir's spear in flight (§8.1.6).</summary>
+    public Entities.Missile? Thrown { get; internal set; }
+
+    /// <summary>Its passive effect is running (started once while held).</summary>
+    internal bool PassiveEffect { get; set; }
+
+    /// <summary>The source of its passive effect's cues, apart from its events' (a strike's end leaves it running).</summary>
+    public object PassiveSource { get; } = new();
+
     internal int NextToDamage { get; set; }
 
     internal float ShieldGlance { get; set; }
@@ -108,8 +123,8 @@ public sealed class Item
     /// <summary>Taken into a hand: attached, and the next place starts afresh.</summary>
     internal void Held() => (placed, IsAttached) = (false, true);
 
-    /// <summary>Let go: it no longer acts from its slot.</summary>
-    internal void Detach() => IsAttached = false;
+    /// <summary>Let go: it no longer acts from its slot, and shows again, as the original's lying items.</summary>
+    internal void Detach() => (IsAttached, PassiveEffect, IsVisible) = (false, false, true);
 
     /// <summary>The item's timers run down (its holder's call, each frame).</summary>
     internal void Tick(float dt)

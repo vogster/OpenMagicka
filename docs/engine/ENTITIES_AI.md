@@ -233,7 +233,8 @@ the state machine run in it: §5.4), in this order:
    overkill: removed at once).
 4. Regeneration (§2.3) and then the statuses' tick (SPELLS.md §9): their damage goes the
    damage-over-time path (§2.2: no resistances, fire ×2 on grease; the self-shield takes it first);
-   cold and poison cap the speed multiplier.
+   cold and poison cap the speed multiplier while they are at work (a faster multiplier is left
+   alone otherwise).
 5. Frozen (or bloating): no speed, no turning, no movement.
 6. The last attacker is forgotten 8 s after the last hit, counted only while no status is active.
 
@@ -1241,6 +1242,62 @@ in one step otherwise):
 - **The animation.** The avatar attacks with `pickup_staff` or `pickup_weapon`.
 - **Later systems.** The level script's on-pickup trigger and the "obtained" text come with
   scripts and the HUD; Versus despawns come with that rule set.
+
+### 8.1.6 Passive abilities
+
+Eleven vanilla items have one: three `MoveSpeed`, two `Gungner`, two `MasterSword`, and one each
+of `Glow`, `Mjolnr`, `DragonSlayer` and `WetLightning`.
+
+An item's passive ability works only while the item is in hand (attached) and its holder is alive.
+Each frame the holder runs it, at the end of the frame after the items moved; the item's tip is
+where an area ability is centred. The value comes from the item file.
+
+**What works now:**
+- **`MoveSpeed`.** The holder's speed multiplier is multiplied by the value each frame, after the
+  zap slow-down and before the statuses slow it. Two such items multiply together. (Data: 0.4 for
+  a sausage knife, 1.5 for a counter-striking knife, 2 for a clock staff.)
+- **`AreaLifeDrain`.** Every 0.25 s (the first at once, the timer kept on its beat): every living
+  character within 7 m of the tip, the holder left out and friend or foe alike, takes 4 Arcane
+  damage, and the holder heals 4 for each. The damage is plain: no resistances, as damage over time.
+- **`AreaRegeneration`.** Every 0.25 s (the timer starting afresh): every living character within
+  7 m that shares a faction with the holder, the holder too, heals 2.
+- **`EnhanceAllyMelee`.** Each frame, every character within 7 m that shares a faction with the
+  holder, the holder too, gets a melee boost of 1.5 for 5 s. While boosted, a character's item
+  Damage and DamageOwner events (melee and guns, not missiles or splash) deal that many times as
+  much, as the original.
+- **`Glow`.** The item glows towards 1 while a character that shares no faction with the holder is
+  within the value (in metres) of the tip, else towards 0: each frame it moves by the gap times
+  half the frame time. The level is for the renderer (the item's emissive light). (Data: the sting
+  sword, 40 m.)
+- **`Gungner`.** The item throws only while its last missile is gone; its missile has a radius of
+  0.5 and faces its flight. Every frame the item is hidden while its missile flies and shown
+  otherwise, over whatever `WeaponVisibility` set, as the original. (Data: two spears.)
+- **`MasterSword`.** The item throws only while its holder is at full health. (Data: two swords.)
+- **`BirchSteam`.** While held, a `birch_steam` effect follows the tip, facing +X, apart from the
+  item's own event effects (a strike's end leaves it running); releasing the item ends it. (No
+  vanilla item has it.)
+
+**Kept from the original:**
+- Healing is not capped at once: hit points above the maximum last until the start of the holder's
+  next frame.
+- A character playing its death clip still counts as living: the drain hurts it, and heals the
+  holder 4 for it, and the regeneration heals it. A holder in its own death clip still runs its
+  items.
+- The drain heals the holder 4 for each victim even when the victim took nothing (immortal, or
+  shielded).
+- A drain whose timer fell far behind (a long frame) fires once a frame until it catches up.
+- A released item shows again.
+
+**With later systems:**
+- **With spells:** `ShieldBoost` (a slot-1 staff boosts the avatar's shields), `WetLightning`
+  (a wet holder is not shocked by its own lightning), `Zap` (a held item runs a lightning field).
+- **With the AI:** `ReduceAggro` and `ZombieDeterrent` (a slot-1 staff lowers how much the AI
+  hates the avatar; the second only for undead).
+- **With magicks:** `Mjolnr` (a melee hit that lands calls down thunder).
+- **With bosses:** `DragonSlayer` (it overkills Fafnir at once).
+- `InverseArcaneLife` does nothing in the original.
+- The Gungnir and steam effects themselves are presentation; the Gungnir glow effect comes with the
+  renderer.
 
 ### 8.2 Events: ConditionCollection / EventCollection
 

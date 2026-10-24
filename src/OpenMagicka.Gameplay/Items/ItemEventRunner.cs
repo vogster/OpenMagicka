@@ -14,11 +14,11 @@ internal static class ItemEventRunner
         switch (e)
         {
             case DamageEvent damage when target is not null:
-                return target.Damage(damage.Damage, owner, StruckFrom(item, target));
+                return target.Damage(owner.MeleeBoosted(damage.Damage), owner, StruckFrom(item, target));
             case SplashEvent splash when owner.Manager is { } manager:
                 return Splash.Hit(manager, owner, owner, at ?? item.Position, splash.Radius, splash.Damage);   // the holder is spared, as the original
             case DamageOwnerEvent damage:
-                return owner.Damage(damage.Damage, owner, item.Position);
+                return owner.Damage(owner.MeleeBoosted(damage.Damage), owner, item.Position);
             case SoundEvent sound:
                 owner.RaiseCue(new SoundCue(sound.Cue, sound.Banks, at ?? item.Position, owner.Body.Facing, sound.Magnitude));
                 return DamageResult.None;
