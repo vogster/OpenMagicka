@@ -282,18 +282,19 @@ public class CharacterTests
     {
         using var world = World();
         var knight = Spawn(world);
-        (knight.Blocker, knight.BlockSlot) = (new Shield(blocks: 1000), 0);
+        (knight.BlockSlot, _) = (0, EquipmentTests.Shield(knight, 1000));
+        var front = EquipmentTests.InFront(knight);
 
-        var result = knight.Damage(new DamageEntry(AttackProperties.Damage | AttackProperties.Status, Elements.Earth | Elements.Water, 100, 1), null, Vector3.Zero);
+        var result = knight.Damage(new DamageEntry(AttackProperties.Damage | AttackProperties.Status, Elements.Earth | Elements.Water, 100, 1), null, front);
 
         Assert.True(result.HasFlag(Deflected));
         Assert.Equal(300f, knight.HitPoints);
         Assert.True(knight.Statuses.Has(StatusEffects.Wet));
 
-        knight.Blocker = new Shield(blocks: 30);
-        knight.Damage(Hurt(Elements.Earth, 100), null, Vector3.Zero);
+        EquipmentTests.Shield(knight, 30);
+        knight.Damage(Hurt(Elements.Earth, 100), null, front);
         Assert.Equal(230f, knight.HitPoints);
-        knight.Damage(Hurt(Elements.Fire, 100), null, Vector3.Zero);              // fire is not blocked
+        knight.Damage(Hurt(Elements.Fire, 100), null, front);                     // fire is not blocked
         Assert.Equal(130f, knight.HitPoints);
     }
 
@@ -323,16 +324,6 @@ public class CharacterTests
 
         Assert.InRange(300 - goblin.HitPoints, 300, 600);                          // 100·(v/10)^2.7 ≈ 470: dead
         Assert.True(goblin.IsDead);
-    }
-
-    /// <summary>Blocks a fixed amount.</summary>
-    private sealed class Shield(float blocks) : IBlocker
-    {
-        public bool TryBlock(DamageEntry damage, Vector3 attackPosition, out float blocked)
-        {
-            blocked = blocks;
-            return true;
-        }
     }
 
     /// <summary>Halves every hit, and is solid.</summary>

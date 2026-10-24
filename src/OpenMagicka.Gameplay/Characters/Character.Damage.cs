@@ -24,6 +24,10 @@ public sealed partial class Character
     {
         Finite(damage.Amount, nameof(damage));
         Finite(damage.Magnitude, nameof(damage));
+        if (!float.IsFinite(attackPosition.X) || !float.IsFinite(attackPosition.Y) || !float.IsFinite(attackPosition.Z))
+        {
+            throw new ArgumentOutOfRangeException(nameof(attackPosition), attackPosition, "must be finite");
+        }
         if (Dead || IsImmortal)
         {
             return DamageResult.None;
@@ -119,17 +123,18 @@ public sealed partial class Character
     }
 
     /// <summary>
-    /// Step 5: Earth or Lightning damage against a block; true when fully blocked. As in the original,
-    /// "fully" compares the block with amount × magnitude, while a partial block comes off the amount.
+    /// Step 5: Earth or Lightning damage from in front, in a block window, against every item's block
+    /// value (§8.1.1); true when fully blocked. As in the original, "fully" compares the block with
+    /// amount × magnitude, while a partial block comes off the amount.
     /// </summary>
     private bool Block(ref DamageEntry damage, Vector3 attackPosition)
     {
-        if (BlockSlot < 0 || Blocker is null || !damage.Attack.HasFlag(AttackProperties.Damage) || (damage.Element & (Elements.Earth | Elements.Lightning)) == 0
-            || !Blocker.TryBlock(damage, attackPosition, out var blocked))
+        if (BlockSlot < 0 || !damage.Attack.HasFlag(AttackProperties.Damage) || (damage.Element & (Elements.Earth | Elements.Lightning)) == 0
+            || !FacesForBlock(attackPosition))
         {
             return false;
         }
-        Finite(blocked, nameof(Blocker));
+        float blocked = BlockValue;
         if (blocked >= damage.Amount * damage.Magnitude)
         {
             return true;

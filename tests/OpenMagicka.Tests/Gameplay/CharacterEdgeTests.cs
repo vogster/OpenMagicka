@@ -123,9 +123,9 @@ public class CharacterEdgeTests
     {
         using var world = World();
         var knight = Spawn(world);
-        (knight.Blocker, knight.BlockSlot) = (new FixedBlock(150), 0);
+        (knight.BlockSlot, _) = (0, EquipmentTests.Shield(knight, 150));
 
-        knight.Damage(Hurt(Elements.Earth, 100, 2), null, Vector3.Zero);           // 150 < 200: not full, but 100 − 150 → 0
+        knight.Damage(Hurt(Elements.Earth, 100, 2), null, EquipmentTests.InFront(knight));   // 150 < 200: not full, but 100 − 150 → 0
 
         Assert.Equal(300f, knight.HitPoints);
     }
@@ -179,8 +179,6 @@ public class CharacterEdgeTests
         Assert.Throws<ArgumentOutOfRangeException>(() => goblin.Entangle(float.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => goblin.KnockDown(float.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.Spawn(Goblin with { MaxHitPoints = 0 }, Vector3.Zero));
-        (goblin.Blocker, goblin.BlockSlot) = (new FixedBlock(float.NaN), 0);
-        Assert.Throws<ArgumentOutOfRangeException>(() => goblin.Damage(Hurt(Elements.Earth, 10), null, Vector3.Zero));
     }
 
     [Fact]
@@ -194,14 +192,5 @@ public class CharacterEdgeTests
 
         Assert.Throws<InvalidOperationException>(() => world.Spawn(Goblin, new Vector3(0, 0.9f, 0)));
         Assert.Null(world.Physics.CastSegment(new Vector3(0, 0.9f, -2), new Vector3(0, 0.9f, 2)));   // no capsule there
-    }
-
-    private sealed class FixedBlock(float blocks) : IBlocker
-    {
-        public bool TryBlock(DamageEntry damage, Vector3 attackPosition, out float blocked)
-        {
-            blocked = blocks;
-            return true;
-        }
     }
 }

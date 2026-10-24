@@ -13,10 +13,12 @@ public sealed class CharacterAnimator
     private bool[] started = [];
     private bool[] ended = [];
 
-    public CharacterAnimator(Character owner, CharacterAnimations animations)
+    /// <param name="equipped">The weapon classes held from the start, so the first idle comes from their set.</param>
+    public CharacterAnimator(Character owner, CharacterAnimations animations, IReadOnlyList<int>? equipped = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         Animations = animations ?? throw new ArgumentNullException(nameof(animations));
+        EquippedClasses = equipped ?? [];
         Force(CharacterAnimations.Idle);
     }
 

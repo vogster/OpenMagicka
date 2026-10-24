@@ -116,10 +116,10 @@ public sealed class Suicide(float start, float end, bool overkill) : AnimationAc
     }
 }
 
-/// <summary>The item in a slot blocks for the window.</summary>
+/// <summary>Opens a block window (every item's block value counts, as §8.1.1).</summary>
 public sealed class Block(float start, float end, int slot) : AnimationAction(start, end)
 {
-    public int Slot { get; } = slot;
+    public int Slot { get; } = slot is >= 0 and < Character.Slots ? slot : throw new ArgumentOutOfRangeException(nameof(slot), slot, "not a slot");
 
     public override void Run(Character owner, bool first) => owner.BlockSlot = Slot;
 
@@ -136,6 +136,22 @@ public sealed class BreakFree(float start, float end, float magnitude) : Animati
         if (first && owner.IsEntangled)
         {
             owner.DecreaseEntanglement(Magnitude, Elements.Earth);
+        }
+    }
+}
+
+/// <summary>Shows or hides the item in a slot, each frame of the window (not undone after).</summary>
+public sealed class WeaponVisibility(float start, float end, int slot, bool visible) : AnimationAction(start, end)
+{
+    public int Slot { get; } = slot is >= 0 and < Character.Slots ? slot : throw new ArgumentOutOfRangeException(nameof(slot), slot, "not a slot");
+
+    public bool Visible { get; } = visible;
+
+    public override void Run(Character owner, bool first)
+    {
+        if (owner.ItemIn(Slot) is { } item)
+        {
+            item.IsVisible = Visible;
         }
     }
 }

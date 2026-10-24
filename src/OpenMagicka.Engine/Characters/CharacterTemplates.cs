@@ -1,3 +1,4 @@
+using OpenMagicka.Content;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Gameplay.Combat;
 using Gameplay = OpenMagicka.Gameplay;
@@ -8,6 +9,20 @@ namespace OpenMagicka.Engine.Characters;
 /// <summary>The content reader's character template as the gameplay core needs it.</summary>
 public static class CharacterTemplates
 {
+    /// <summary>The template with its slots filled from the items it refers to (from <paramref name="templateAsset"/>).</summary>
+    public static Gameplay.Characters.CharacterTemplate From(ContentLoader loader, string templateAsset, CharacterTemplateContent content)
+    {
+        ArgumentNullException.ThrowIfNull(loader);
+        ArgumentNullException.ThrowIfNull(content);
+        var equipment = content.Equipment
+            .Where(e => e.Item is not null)
+            .Select(e => new Gameplay.Characters.EquipmentTemplate(e.Slot, e.Bone, new System.Numerics.Vector3(e.Rotation.X, e.Rotation.Y, e.Rotation.Z),
+                ItemTemplates.Load(loader, templateAsset, e.Item!)))
+            .ToList();
+        return From(content) with { Equipment = equipment };
+    }
+
+    /// <summary>The template alone, with empty slots.</summary>
     public static Gameplay.Characters.CharacterTemplate From(CharacterTemplateContent content)
     {
         ArgumentNullException.ThrowIfNull(content);
@@ -21,7 +36,7 @@ public static class CharacterTemplates
             stats.Mass,
             stats.Speed,
             stats.TurnSpeed,
-            Resistances(content.Resistances),
+            ItemTemplates.Resistances(content.Resistances),
             Regeneration: stats.Regeneration,
             HitTolerance: stats.HitTolerance,
             KnockdownTolerance: stats.KnockdownTolerance,
@@ -34,9 +49,4 @@ public static class CharacterTemplates
             IsEthereal: content.IsEthereal,
             Flies: content.MoveAnimations.Any(m => m.Movement.HasFlag(MovementProperties.Fly)));
     }
-
-    /// <summary>The template's overrides on top of the neutral table, one element each.</summary>
-    private static ResistanceTable Resistances(IReadOnlyList<ResistanceContent> overrides) =>
-        overrides.Aggregate(ResistanceTable.Neutral, (table, r) =>
-            table.With((Gameplay.Spells.Elements)(int)r.Elements, r.Multiplier, r.Modifier, r.StatusResistance));
 }

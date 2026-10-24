@@ -37,7 +37,7 @@ public sealed partial class Character : Entity
     /// <param name="players">The players in the game, for an enemy's resistances.</param>
     /// <param name="random">Picks the corpse time (20 to 40 s) and the death clip.</param>
     /// <param name="animations">The template's animations; without them there is no state machine and death is immediate.</param>
-    public Character(CharacterTemplate template, PhysicsWorld world, Vector3 position, int players = 1, ResistanceTable? staff = null,
+    public Character(CharacterTemplate template, PhysicsWorld world, Vector3 position, int players = 1,
         Random? random = null, Animation.CharacterAnimations? animations = null)
     {
         ArgumentNullException.ThrowIfNull(template);
@@ -46,14 +46,15 @@ public sealed partial class Character : Entity
         Template = template;
         Body = new CharacterBody(world, position, new CharacterShape(template.Radius, template.Length, template.Mass, template.Speed, template.Flies));
         Body.Body.Tag = this;
-        Defences = new Defences(template.ResistancesFor(players), staff);
+        Defences = new Defences(template.ResistancesFor(players));
         HitPoints = template.MaxHitPoints;
         IsEthereal = template.IsEthereal;
         this.random = random ?? Random.Shared;
         corpseTimer = 20 + 20 * (float)this.random.NextDouble();
+        EquipFrom(template);
         if (animations is not null)
         {
-            Animator = new Animation.CharacterAnimator(this, animations);
+            Animator = new Animation.CharacterAnimator(this, animations, EquippedClasses());
             State = States.CharacterStates.Idle;
             State.Enter(this);
         }
@@ -69,16 +70,13 @@ public sealed partial class Character : Entity
 
     public StatusSet Statuses { get; private set; } = StatusSet.Empty;
 
-    /// <summary>Template (scaled for the players), staff and resistance buffs.</summary>
-    public Defences Defences { get; set; }
+    /// <summary>Template (scaled for the players), an avatar's slot-1 item (kept by the slots) and resistance buffs.</summary>
+    public Defences Defences { get; private set; }
+
+    /// <summary>The resistance buffs on the character now; the template's and the slot-1 item's stay.</summary>
+    public void SetResistanceBuffs(IReadOnlyList<Resistance>? buffs) => Defences = Defences with { Buffs = buffs };
 
     public ISelfShield? SelfShield { get; set; }
-
-    /// <summary>The blocking item; it blocks only while a block action holds <see cref="BlockSlot"/> (which picks no item until equipment comes).</summary>
-    public IBlocker? Blocker { get; set; }
-
-    /// <summary>A player's avatar: heavier characters never walk through it.</summary>
-    public bool IsPlayer { get; set; }
 
     /// <summary>The game's gore setting: overkill by damage needs it.</summary>
     public bool BloodAndGore { get; set; } = true;

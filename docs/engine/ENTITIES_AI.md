@@ -436,9 +436,10 @@ the window; "once" means the first frame only.
 - **`Suicide`** (22): each frame, an overkill, or a kill that dies at once (not through the death
   clip). The dead state still follows, through the common checks. Six goblin and dwarf warrior
   templates carry one in `hit_stun_begin`, so a knockdown kills them, as in the original.
-- **`Block`** (84): each frame, the item in that slot blocks. The block slot is cleared at the start
-  of every frame before the actions run, so blocking lasts exactly the window. Only Earth or
-  Lightning damage is blocked, and only while a slot is set.
+- **`Block`** (84): each frame, the block slot is set, which opens a block window. Every item's block
+  value counts, whatever the slot (§8.1.1). The block slot is cleared at the start of every frame
+  before the actions run, so blocking lasts exactly the window. Only Earth or Lightning damage is
+  blocked, and only while a slot is set.
 - **`BreakFree`** (180): once, an entangled character tears the vines by the magnitude (as Earth
   damage to the entanglement); a gripped one breaks free (with grips).
 - **`PlaySound`** (4,288), **`PlayEffect`** (1,511), **`Footstep`** (2,928) and **`CameraShake`**
@@ -447,7 +448,7 @@ the window; "once" means the first frame only.
   the ground material and the character's mass, only on the ground and not levitating; a camera
   shake at the character's position.
 - **With items:** `DealDamage` (1,997), `SpawnMissile` (1,787), `Gunfire` (335), `SpecialAbility`
-  (84), `WeaponVisibility` (767), `DetachItem` (17), `SetItemAttach` (unused).
+  (84), `DetachItem` (17), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
 - **With spells:** `CastSpell` (1,371).
 - **With grips:** `Grip` (48), `DamageGrip` (48), `ReleaseGrip` (24), `ThrowGrip` (15),
   `OverkillGrip` (15).
@@ -881,6 +882,59 @@ ranged (range, facing, homing, elevation in degrees, danger), firearm (range, cl
 tracer speed, conditions), missile model, ranged conditions, scale, model, auras.
 
 `ChantEffects`: when the weapon is charged with an element, the `swordelementeffect_<element>` effect burns on the blade.
+
+### 8.1.1 Equipment on a character
+
+- **Slots.** A character has 8 equipment slots. Its template fills some of them by index, each with
+  a bone of the skeleton, a rotation and an item; the others are empty. When a template names one
+  slot twice, the later item replaces the earlier one, as the original. Characters of a template get
+  their own copies of its items.
+- **Weapon classes** pick the animation set (§4.1):
+
+  | Values | Classes |
+  |---|---|
+  | 0 | Default |
+  | 1–3 | Thrust (Fast, Medium, Slow) |
+  | 4–6 | Crush (Fast, Medium, Slow) |
+  | 7–9 | Slash (Fast, Medium, Slow) |
+  | 10–12 | Throw (Fast, Medium, Slow) |
+  | 13 | Unarmed |
+  | 14 | Handgun |
+  | 15 | Rifle |
+  | 16 | Machinegun |
+  | 17 | Heavy |
+  | 18 | Staff |
+  | 19–26 | NewAnimationSet0 to NewAnimationSet7 |
+
+  An animation comes from the set of the first item, in slot order, that is neither Default nor a
+  staff and whose set has it; otherwise from the default set. A character's first idle already
+  comes from its items' set.
+- **Spells and resistances.** The first slot holding a staff is where spells come from. For a
+  player's avatar, the resistances of the item in slot 1 join the template's on every hit
+  (docs/gameplay/SPELLS.md §8). An item's resistances are a neutral table with overrides, as a
+  template's.
+- **Blocking.** While a `Block` action's window holds the block slot (§4.2), Earth or Lightning
+  damage is blocked when the attack comes from within 1.0995574 rad (63°) of the character's flat
+  facing. Coming from the character's own position, it is not blocked. The block is the **sum of
+  every equipped item's block value**, whichever slot the action names, as the original. It is full
+  (deflected) when it reaches amount × magnitude (so a hit of no amount counts as deflected, even
+  with nothing to block), as the original; otherwise it comes off the amount. Block values are not
+  negative.
+- **Passive abilities.** An equipped item's passive ability (with its value) is asked for by kind.
+  Each takes effect with its system: ShieldBoost and the self-shields, AreaLifeDrain and
+  AreaRegeneration with auras, ZombieDeterrent and ReduceAggro with the AI, EnhanceAllyMelee and the
+  weapon passives (Mjolnr, Gungner, MasterSword, DragonSlayer) with melee, InverseArcaneLife, Zap,
+  BirchSteam and WetLightning with spells, MoveSpeed with movement, Glow with rendering.
+- **`WeaponVisibility`** (§4.2, 767 uses): each frame of its window, the item in that slot is shown
+  or hidden. It is not undone at the end. An empty slot ignores it.
+
+In the vanilla data, 286 of the 338 templates hold 591 items, and 86 of them hold a staff. Of the
+454 items, 200 are Default, 92 are staffs and 48 are medium slashing weapons; 292 have a block value
+and 11 have a passive ability.
+
+In OpenMagicka: `OpenMagicka.Gameplay.Items` (`ItemTemplate`, `Item`, `WeaponClass`,
+`PassiveAbility`) and `Character.Equipment`. `ItemTemplates` and `CharacterTemplates.From(loader, …)`
+(Engine) read the items and fill each template's slots.
 
 ### 8.2 Events: ConditionCollection / EventCollection
 

@@ -31,6 +31,7 @@ public static class CharacterAnimationActions
             PlayEffectAction a => new Actions.PlayEffect(start, end, a.Effect, a.Bone, a.Attach),
             FootstepAction => new Actions.Footstep(start, end),
             CameraShakeAction a => new Actions.CameraShake(start, end, a.Duration, a.Magnitude),
+            WeaponVisibilityAction a => new Actions.WeaponVisibility(start, end, a.Weapon, a.Visible),
             _ => null,
         };
     }

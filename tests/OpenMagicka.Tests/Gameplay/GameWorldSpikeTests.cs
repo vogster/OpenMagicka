@@ -9,6 +9,7 @@ using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Characters;
 using OpenMagicka.Gameplay.Characters.States;
 using OpenMagicka.Gameplay.Combat;
+using OpenMagicka.Gameplay.Items;
 using GameElements = OpenMagicka.Gameplay.Spells.Elements;
 using AttackProperties = OpenMagicka.Gameplay.Combat.AttackProperties;
 using OpenMagicka.Tests.Content;
@@ -48,7 +49,37 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 9754;
+    private const int MadeActions = 10521;
+
+    [GameContentFact]
+    public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()
+    {
+        var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var items = loader.Files.ListFiles("Data/Items", recursive: true)
+            .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
+            .Select(p => ItemTemplates.From((ItemContent)loader.LoadUncached(p[..^4]).Root!))
+            .ToList();
+        var (equipped, slots, staffs) = (0, 0, 0);
+        using var world = CharacterTests.World();
+        foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (loader.LoadUncached(path[..^4]).Root is not CharacterTemplateContent content)
+            {
+                continue;
+            }
+            var character = new Character(CharacterTemplates.From(loader, path[..^4], content), world.Physics, new Vector3(0, 10, 0));
+            var held = character.Equipment.Count(s => s.Item is not null);
+            (equipped, slots, staffs) = (equipped + (held > 0 ? 1 : 0), slots + held, staffs + (character.SpellSource >= 0 ? 1 : 0));
+            world.Physics.Remove(character.Body.Body);
+        }
+        var classes = items.GroupBy(i => i.WeaponClass).OrderBy(g => g.Key).Select(g => $"{g.Key} {g.Count()}");
+        output.WriteLine($"{items.Count} items ({string.Join(", ", classes)}); {items.Count(i => i.BlockValue > 0)} block, {items.Count(i => i.PassiveAbility != 0)} with a passive");
+        output.WriteLine($"{equipped} templates hold {slots} items; {staffs} hold a staff");
+        Assert.Equal(454, items.Count);
+        Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
+            items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
+        Assert.Equal((286, 591, 86), (equipped, slots, staffs));                  // as ENTITIES_AI §8.1.1 records
+    }
 
     [GameContentFact]
     public void EveryCharacterTemplate_HasItsAnimations()
@@ -110,7 +141,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             }
             count++;
             using var world = CharacterTests.World();
-            var character = new Character(CharacterTemplates.From(content), world.Physics, new Vector3(0, 0.5f + content.Stats.Radius + content.Stats.Length / 2, 0),
+            var character = new Character(CharacterTemplates.From(loader, path[..^4], content), world.Physics, new Vector3(0, 0.5f + content.Stats.Radius + content.Stats.Length / 2, 0),
                 random: new Random(count), animations: CharacterAnimationSets.From(loader, path[..^4], content));
             world.Entities.Add(character);
             CharacterTests.Run(world, 1);

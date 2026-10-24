@@ -203,7 +203,7 @@ public class AnimationActionTests
     {
         using var world = World();
         var knight = Acting(world, 1, new Block(0, 0.5f, 0));
-        knight.Blocker = new FullBlock();
+        EquipmentTests.Shield(knight, 1000);
 
         Assert.False(Hit(knight).HasFlag(DamageResult.Deflected));               // a blocker, but no block window
         knight.ForceAnimation(Special);
@@ -248,13 +248,4 @@ public class AnimationActionTests
 
     private static DamageResult Hit(Character character) =>
         character.Damage(new DamageEntry(AttackProperties.Damage, Elements.Earth, 10, 1), null, character.Position - Vector3.UnitZ);
-
-    private sealed class FullBlock : IBlocker
-    {
-        public bool TryBlock(DamageEntry damage, Vector3 attackPosition, out float blocked)
-        {
-            blocked = 1000;
-            return true;
-        }
-    }
 }
