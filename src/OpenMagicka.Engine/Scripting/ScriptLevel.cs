@@ -6,6 +6,9 @@ namespace OpenMagicka.Engine.Scripting;
 /// </summary>
 public sealed class ScriptLevel
 {
+    /// <summary>The stage the scenes share: the camera, the fade, the cutscene, the input locks, the requests (§9.3).</summary>
+    public ScriptStage Stage { get; } = new();
+
     private sealed class Clock(int id, float time)
     {
         public int Id { get; } = id;

@@ -61,6 +61,40 @@ public sealed class WorldItem : Entity
 
     public Item Item { get; }
 
+    /// <summary>The script trigger picking it up sets off, the picker as the sender (0 for none).</summary>
+    public int OnPickupTrigger { get; set; }
+
+    /// <summary>A tractor pull (a magick that draws items) leaves it be.</summary>
+    public bool IgnoresTractorPull { get; set; }
+
+    /// <summary>It stays where it was put (a script's item with no physics): no gravity, no drift.</summary>
+    public bool IsPinned
+    {
+        get => pinned is not null;
+        set
+        {
+            pinned = value ? Body.Position : null;
+            Body.AffectedByGravity = !value;
+        }
+    }
+
+    private Vector3? pinned;
+
+    /// <summary>Puts it elsewhere, as it would be put down there anew (its box where its bounds are, still).</summary>
+    public void MoveTo(Matrix4x4 transform)
+    {
+        var centre = transform.Translation + Ranged.Turn(Item.Template.Bounds!.Value.Centre, transform);
+        if (!float.IsFinite(centre.X) || !float.IsFinite(centre.Y) || !float.IsFinite(centre.Z))
+        {
+            throw new ArgumentOutOfRangeException(nameof(transform), transform, "must be finite");
+        }
+        (Body.Position, Body.Velocity, lastPosition) = (centre, Vector3.Zero, centre);
+        if (pinned is not null)
+        {
+            pinned = centre;
+        }
+    }
+
     public PhysicsBody Body { get; }
 
     /// <summary>Whether an avatar can pick it up.</summary>
@@ -95,6 +129,10 @@ public sealed class WorldItem : Entity
         if (Body.IsRemoved || world.IsDisposed)
         {
             return;
+        }
+        if (pinned is { } spot)
+        {
+            (Body.Position, Body.Velocity) = (spot, Vector3.Zero);
         }
         if (Body.Position.Y <= Missile.LowestY)
         {

@@ -619,6 +619,107 @@ the slot of the avatar of that name when the scene is built. Input waits on `Cha
 
 **Where the original crashes**, ours does nothing: an area the scene lacks, or a missing name.
 
+### 9.2 Ours: the things' actions (OM-45)
+
+Ours is `ThingActions.cs`, `ScenePart.cs` and `SceneEffects.cs`.
+
+**Animated parts** (`ScenePart`):
+- The part's name is lowered; its locators keep their names as written, as the original keys them.
+- Its clip plays between `start` and `end` (−1: the clip's ends) at `speed`; a negative speed plays from the later to the
+  earlier.
+- `resume` keeps the time when it lies within, else the nearer end; otherwise it starts over at the start.
+- Past the end, a looping clip goes back by the clip's span; any other stops at the end. The original wraps only on the
+  frame that crosses the end, so a frame longer than the loop (or a loop of no length) leaves it playing on past the end for
+  good. Ours wraps it into the loop, and stops a loop of no length.
+- `children` plays the children the same way, starting over.
+- Each frame its transform is the clip's pose at its time times its parent's. The pose is the keyframe at or before the time
+  (XNAnimation's search), blended linearly toward the next (none past the last).
+- Its nav mesh moves with it (the running level hands each part its mesh).
+- A scene locator is looked for before an area, and a part's locator after both (`spawn`, `setPosition` and the rest find a
+  part's locator where the part is now).
+- `playAnimation name="parent/child"` walks the path; a part the level lacks crashes the original, ours plays nothing.
+- Collision, carried entities, lights, decals and drawing at the animated transform come with OM-74.
+
+**Effects** (`SceneEffects`):
+- The scene's named effects are the level model's and its parts' (names lowered), all started when the scene is built, plus
+  those the scripts spawn.
+- `spawnEffect` makes a new one at the place under its name unless one plays under it already; a stopped one is replaced.
+- `startEffect` begins a stopped one again. With no name it asks for a newly generated key and so starts nothing, as the
+  original.
+- `stopEffect` stops one and keeps it.
+- Each frame an active one follows its part (with the part's last frame's place, as the original updates the effects before
+  the parts), and a beam (`range` > 0) is scaled down (uniformly, as the original) to the level in its way. The original also stops beams at shields; ours
+  does not yet.
+- The renderer draws the active ones and reports a one-shot effect that played out (the original's stops by itself).
+- An effect placed straight up or down cannot be turned (the original's world matrix fails); ours keeps it unturned.
+
+**`spawnItem`**:
+- The item `Data/Items/Wizard/<item>` lies at the place, turned with it: only one, whatever `nr` says, as the original.
+- `onPickup` fires when it is picked up, with the picker as the sender.
+- Without `physicsEnabled` it stays where it was put; `ignoreTractorPull` spares it from Tractor Pull.
+- The original keeps one item per action and moves it on every run, even out of a holder's hands. Ours moves it while it still
+  lies in the level, and otherwise puts a new one down.
+- `attachTo` waits for OM-74.
+- The items come from the running level's `IScriptAssets` (the game's content); with none, no item is made.
+
+**`spawnPhys`** comes with the physics props (OM-73).
+### 9.3 Ours: the stage's actions (OM-45)
+
+Ours is `StageActions.cs`, `RequestActions.cs` and `ScriptStage.cs`. The level's stage (shared by its scenes, as the
+original's camera and input are) holds the camera the scripts move, the
+screen's fade, the cutscene, the input locks, and the requests for the systems beyond the world, which the host takes each
+frame (`TakeRequests`).
+
+**Camera:**
+- `cameraMove` moves to a locator (a scene locator, then a part's; none found: where the camera is) plus `offset`, over `time`.
+  A `magnification` over 0 sets the zoom it heads for. `interpolation` is `linear` or `interpolated`. `lockInput` holds the
+  players' input until the camera is released, or until a move without it (each move sets the lock, as the original).
+- `cameraRelease` returns to following the players, without the box, at the default zoom, and lifts the camera's lock.
+- `cameraMagnify` sets the zoom it heads for and the time. Ours fails the loading on a magnification that is not positive
+  (the camera divides by it).
+- `cameraShake` shakes the camera. At a place the original also rumbles each player's pad by the distance (OM-68).
+
+**`fade`:** a screen fade to the colour (`fadeIn`) or back, over `time`. `override` cancels the scene change's own fade.
+
+**Cutscenes:**
+- `cutscene` begins one:
+  - the played timers stop (`noCutsceneActive` no longer holds);
+  - the HUD goes, and the dialogs end unless `killDialogs="false"`;
+  - every running magick ends;
+  - within 40 of the camera's ground point, whirlwinds, barriers, mines, shields, grease fields and the Reaper go;
+  - the characters there stop attacking, thaw, are let go of vines and fear; an NPC's charm ends and a summoned NPC dies.
+- `onSkip` is the trigger a skip sets off; with none, the cutscene cannot be skipped. A player's first skip shows the tip, the
+  next one skips once, and a network client does not skip. The tip goes when the cutscene ends (the original's, once the bars
+  are gone).
+- Ours lets a revival on its way (a checkpoint's) rise; the original's clearing of magicks would cut it short.
+- `endCutscene` brings the HUD back and ends the dialogs.
+
+**Input:**
+- `disableInput` makes the level hold the players' input, and `enableInput` lifts only that hold (others, such as the
+  camera's, stay).
+- A lifted hold keeps input back 0.1 s more, as the original.
+
+**Requests:**
+- `playSound`: the cue is written "bank/cue" or "cue" (Ambience). With an `id` it is a scene sound kept to stop later; at an
+  `area` it is a 3D one. The volume is the cue's Volume variable, 0 unless given, as the original.
+- `stopSound` stops a named scene sound; `playMusic` plays music (bank Music unless named).
+- A cue of any other form fails the loading.
+- These go to the sound system (OM-51).
+- `startDialog`: the dialog's next interact, over a speaker:
+  - the trigger's sender ("interactor", the default; each run takes the sender of its own firing, as `executeTrigger`);
+  - or a named character;
+  - else at a place, a screen point `x,y` or a level point `x,y,z`. The original reads `x,y,z` into (x, z, 0): its y is
+    overwritten by z. Ours keeps that.
+  - These go to the dialogs (OM-49).
+- `triggerCheckpoint`:
+  - the level's checkpoint (OM-47) is taken at the spawn points: the name with 0..3, placed when the scene is built;
+  - the `<ignore trigger=>` children name the triggers it leaves out, and any other child fails the loading;
+  - the living players are healed, twice over with the Staff of War; the dead are raised at their spawn point with all their
+    hit points (by the host);
+  - the fairy comes for a lone player outside Versus;
+  - the "checkpoint" text and the `ui_checkpoint01` cue go with it.
+- `changeScene`: a move to another scene (OM-47), the players at the spawn point's locators. A network client waits for the
+  host's.
 ## 10. Condition catalogue (24)
 
 All conditions have the base attribute `invert` (bool).
@@ -669,10 +770,10 @@ scene has one), a trigger it does not have (`triggered` is false), a `robeInUse`
 `isCampaignLooped` outside a campaign (false). Within one it is the scene's looped flag, the one that lets the `<looped>` blocks
 in.
 
-**Not yet fed:** the dialogs (OM-49), the boss fight, the cutscenes, the deaths on the level, the achievements, the packs and the
-save's loop flag reach the scripts through `ScriptGame`, which their own tasks fill; until then nothing there is shown, done,
-won or owned (`ScriptGame`); the campaign's loop is the scene's own flag. `physicsPresent` counts entities that are physics objects (`Entity.IsPhysicsObject`), none until the props come
-(`spawnPhys`, OM-45).
+**Not yet fed:** the dialogs (OM-49), the boss fight, the cutscenes, the deaths on the level, the achievements and the packs
+reach the scripts through `ScriptGame`, which their own tasks fill; until then nothing there is shown, done, won or owned. The
+campaign's loop is the scene's own flag. `physicsPresent` counts entities that are physics objects (`Entity.IsPhysicsObject`),
+none until the props come (`spawnPhys`, OM-73).
 
 ## 11. Dialogs (`Levels/Dialog_*.xml`)
 

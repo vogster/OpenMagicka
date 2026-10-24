@@ -35,6 +35,7 @@ public sealed class ScriptScene
             Add(new ScriptInteractable(this, point.Key, point.Locator, point.Enabled, Variants(point.Actions, registry, looped)));
         }
         Places = places ?? new ScriptPlaces(null);
+        Effects = new SceneEffects(Places);
         foreach (var action in triggers.Values.SelectMany(t => t.Variants).SelectMany(v => v).Distinct())
         {
             action.Initialize();                                              // as the original: the conditions are never initialized
@@ -42,6 +43,74 @@ public sealed class ScriptScene
     }
 
     public ScriptPlaces Places { get; }
+
+    /// <summary>The named effects: the level's and its parts', started now, and those the scripts spawn.</summary>
+    public SceneEffects Effects { get; }
+
+    /// <summary>Where scripts find the items they put in the world; none: they make none.</summary>
+    public IScriptAssets? Assets { get; set; }
+
+    /// <summary>The level's stage (it outlives a scene change): the camera, the fade, the cutscene, the input locks and the requests.</summary>
+    public ScriptStage Stage => Level.Stage;
+
+    /// <summary>
+    /// A cutscene begins (§9.3): the timers that play stop, the HUD goes, the dialogs end unless kept, and
+    /// the world near the camera is calmed. <paramref name="onSkip"/> is what a skip sets off (0: no skip).
+    /// </summary>
+    public void BeginCutscene(int onSkip, bool skipBarMove, bool killDialogs)
+    {
+        Game.InCutscene = true;
+        (Stage.IsUiEnabled, Stage.IsCutsceneSkipped, Stage.CutsceneSkipTrigger, Stage.CutsceneSkipsBarMove) = (false, false, onSkip, skipBarMove);
+        if (killDialogs)
+        {
+            Stage.Request(new EndDialogsRequest());
+        }
+        var ground = Stage.Camera.Ground;
+        Gameplay.Entities.CutsceneCalm.Calm(World.Entities, new System.Numerics.Vector3(ground.X, ground.Y, ground.Z));
+    }
+
+    public void EndCutscene(bool skipBarMove)
+    {
+        Game.InCutscene = false;
+        (Stage.IsUiEnabled, Stage.IsCutsceneSkipped, Stage.CutsceneSkipsBarMove, Stage.ShowsSkipTip) = (true, false, skipBarMove, false);
+        Stage.Request(new EndDialogsRequest());
+    }
+
+    /// <summary>
+    /// A player asks to skip the cutscene: the first time the tip shows; after that its skip trigger runs
+    /// once. One with no skip trigger cannot be skipped, and a network client does not skip (the host
+    /// does). True when it skipped.
+    /// </summary>
+    public bool SkipCutscene()
+    {
+        if (!Game.InCutscene || Stage.IsCutsceneSkipped || !IsHost || Stage.CutsceneSkipTrigger == 0)
+        {
+            return false;
+        }
+        if (!Stage.ShowsSkipTip)
+        {
+            Stage.ShowsSkipTip = true;
+            return false;
+        }
+        Stage.IsCutsceneSkipped = true;
+        var trigger = Stage.CutsceneSkipTrigger;
+        Stage.CutsceneSkipTrigger = 0;
+        ExecuteTrigger(trigger, null);
+        return true;
+    }
+
+    /// <summary>The camera holds the players' input (a camera move's lock), or lets it go.</summary>
+    internal void LockInputToCamera(bool locked)
+    {
+        if (locked)
+        {
+            Stage.LimitInput(Stage);
+        }
+        else
+        {
+            Stage.UnlimitInput(Stage);
+        }
+    }
 
     /// <summary>Whether it is the world's scene now (between <see cref="Enter"/> and <see cref="Leave"/>).</summary>
     public bool IsEntered { get; private set; }
@@ -115,7 +184,10 @@ public sealed class ScriptScene
 
     public ScriptTrigger? Find(string id) => Find(Hash(id));
 
-    /// <summary>The scene's frame: who is where, then each trigger in key order.</summary>
+    /// <summary>
+    /// The scene's frame: who is where, each trigger in key order, the effects (on their parts' last
+    /// places), then the animated parts, as the original.
+    /// </summary>
     public void Update(float dt)
     {
         Places.Refill(World.Entities);
@@ -123,6 +195,9 @@ public sealed class ScriptScene
         {
             trigger.Update(dt);
         }
+        Effects.Update(World.Physics);
+        Places.UpdateParts(dt);
+        Stage.Update(dt);
     }
 
     /// <summary>Fires a trigger by key, as the script's executeTrigger does (its conditions and repeat rule hold); a missing one is nothing.</summary>

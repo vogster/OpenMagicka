@@ -85,7 +85,8 @@ public sealed class TimeWarpEffect : Entity, IMagickEffect
 
 /// <summary>
 /// Tractor Pull: everything within 15 is pulled to the caster (MAGICKS.md §5.5): damageable things
-/// by an Earth pull of their own mass, the rest by a throw. Shields hide; the ethereal are spared.
+/// by an Earth pull of their own mass, the rest by a throw. Shields hide; the ethereal are spared, and
+/// items a script put down to stay.
 /// </summary>
 public sealed class TractorPull() : Magick(MagickType.TractorPull, "cast_area_ground")
 {
@@ -102,7 +103,7 @@ public sealed class TractorPull() : Magick(MagickType.TractorPull, "cast_area_gr
         var at = caster.Position;
         foreach (var entity in manager.Query(at, Range, ignoreProtected: true))
         {
-            if (ReferenceEquals(entity, caster) || entity is Character { IsEthereal: true })
+            if (ReferenceEquals(entity, caster) || entity is Character { IsEthereal: true } or WorldItem { IgnoresTractorPull: true })
             {
                 continue;
             }

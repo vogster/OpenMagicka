@@ -14,13 +14,14 @@ namespace OpenMagicka.Engine.Navigation;
 /// </summary>
 public static class LevelNavigation
 {
-    public static NavMesh From(LevelModelContent level)
+    /// <param name="parts">When given, each animated part's nav mesh, by its content (the running level moves them with the parts).</param>
+    public static NavMesh From(LevelModelContent level, IDictionary<AnimatedLevelPartContent, NavSurface>? parts = null)
     {
         ArgumentNullException.ThrowIfNull(level);
         var mesh = new NavMesh(Surface(level.NavMesh));
         foreach (var part in level.AnimatedParts)
         {
-            AddPart(mesh, part, Matrix.Identity);
+            AddPart(mesh, part, Matrix.Identity, parts);
         }
         return mesh;
     }
@@ -44,7 +45,7 @@ public static class LevelNavigation
         m.M31, m.M32, m.M33, m.M34,
         m.M41, m.M42, m.M43, m.M44);
 
-    private static void AddPart(NavMesh mesh, AnimatedLevelPartContent part, Matrix parent)
+    private static void AddPart(NavMesh mesh, AnimatedLevelPartContent part, Matrix parent, IDictionary<AnimatedLevelPartContent, NavSurface>? parts)
     {
         var world = (part.Animation.Count > 0 ? LevelParts.PoseMatrix(part.Animation[0].Pose) : Matrix.Identity) * parent;
         var placed = ToNumerics(world);
@@ -60,10 +61,11 @@ public static class LevelNavigation
                 return;                                                       // a pose that cannot be undone: left out with its children
             }
             mesh.AddPart(surface);
+            parts?.TryAdd(part, surface);
         }
         foreach (var child in part.Children)
         {
-            AddPart(mesh, child, world);
+            AddPart(mesh, child, world, parts);
         }
     }
 

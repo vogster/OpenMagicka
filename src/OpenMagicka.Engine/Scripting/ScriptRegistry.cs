@@ -21,7 +21,9 @@ public sealed class ScriptRegistry
 
     /// <summary>
     /// The engine's own kinds: all the conditions; counters, timers, executing and clearing triggers,
-    /// points of interest, and the characters' actions (spawn, orders, avatars' events, moves, removal).
+    /// points of interest, the characters' actions (spawn, orders, avatars' events, moves, removal), and
+    /// the things' (animated parts, effects, items), and the stage's (camera, fade, cutscene, input, and
+    /// the requests for sound, dialogs, checkpoints and scene changes).
     /// </summary>
     public static ScriptRegistry Engine() => new ScriptRegistry()
         .Condition<CounterCondition>("counter")
@@ -59,7 +61,27 @@ public sealed class ScriptRegistry
         .Action<GiveOrderAction>("giveOrder")
         .Action<AvatarMoveAction>("avatarMove")
         .Action<SetPositionAction>("setPosition")
-        .Action<RemoveAction>("remove");
+        .Action<RemoveAction>("remove")
+        .Action<PlayAnimationAction>("playAnimation")
+        .Action<SpawnEffectAction>("spawnEffect")
+        .Action<StartEffectAction>("startEffect")
+        .Action<StopEffectAction>("stopEffect")
+        .Action<SpawnItemAction>("spawnItem")
+        .Action<CameraMoveAction>("cameraMove")
+        .Action<CameraReleaseAction>("cameraRelease")
+        .Action<CameraShakeAction>("cameraShake")
+        .Action<CameraMagnifyAction>("cameraMagnify")
+        .Action<FadeAction>("fade")
+        .Action<CutsceneAction>("cutscene")
+        .Action<EndCutsceneAction>("endCutscene")
+        .Action<DisableInputAction>("disableInput")
+        .Action<EnableInputAction>("enableInput")
+        .Action<PlaySoundAction>("playSound")
+        .Action<StopSoundAction>("stopSound")
+        .Action<PlayMusicAction>("playMusic")
+        .Action<StartDialogAction>("startDialog")
+        .Action<TriggerCheckpointAction>("triggerCheckpoint")
+        .Action<ChangeSceneAction>("changeScene");
 
     /// <summary>The tags met that no kind answers (they never hold, or do nothing).</summary>
     public IReadOnlyCollection<string> Unknown => unknown;

@@ -25,7 +25,7 @@ public class DropTests
 
     private static readonly ItemTemplate Staff = new("staff", WeaponClass.Staff, Pickable: true, Bounds: Stick);
 
-    private static Character Holder(GameWorld world, ItemTemplate item, Vector3? at = null, CharacterTemplate? template = null)
+    internal static Character Holder(GameWorld world, ItemTemplate item, Vector3? at = null, CharacterTemplate? template = null)
     {
         var holder = Animated(world, template, at, new CharacterAnimations(Clips().Sets, SkeletonTests.Arm()));
         holder.Equip(0, new Item(item), "hand");

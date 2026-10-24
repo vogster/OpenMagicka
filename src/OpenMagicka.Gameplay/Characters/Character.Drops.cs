@@ -85,6 +85,7 @@ public sealed partial class Character
             Drop(old, old, Vector3.Zero);                                     // with no room, the old one is simply gone
         }
         lying.Take();
+        RaiseScriptTrigger(lying.OnPickupTrigger);
         Equip(slot, lying.Item, held.BoneName, held.Rotation);
         PlayAttack(slot == ResistanceSlot ? "pickup_staff" : "pickup_weapon", allowRotate: false);
         return true;

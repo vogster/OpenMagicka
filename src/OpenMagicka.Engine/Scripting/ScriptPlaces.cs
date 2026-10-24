@@ -169,13 +169,24 @@ public sealed class ScriptPlaces : IAiPlaces
     private readonly Dictionary<int, ScriptArea> areas = [];
     private readonly Dictionary<int, LocatorContent> locators = [];
 
+    private readonly Dictionary<int, ScenePart> parts = [];
+
     public ScriptPlaces(LevelModelContent? level)
-        : this(level?.TriggerAreas ?? [], level?.Locators ?? [])
+        : this(level?.TriggerAreas ?? [], level?.Locators ?? [], level?.AnimatedParts)
     {
+        Model = level;
     }
 
-    public ScriptPlaces(IEnumerable<TriggerAreaContent> triggerAreas, IEnumerable<LocatorContent> sceneLocators)
+    /// <param name="animatedParts">The level's animated parts (its locators and effects move with them).</param>
+    public ScriptPlaces(IEnumerable<TriggerAreaContent> triggerAreas, IEnumerable<LocatorContent> sceneLocators,
+        IEnumerable<AnimatedLevelPartContent>? animatedParts = null)
     {
+        foreach (var content in animatedParts ?? [])
+        {
+            var part = new ScenePart(content);
+            parts[part.Key] = part;
+            part.Update(0, Matrix4x4.Identity);                                // at rest
+        }
         foreach (var area in triggerAreas)
         {
             var key = LegacyStringHash.Lower(area.Name);
@@ -191,27 +202,70 @@ public sealed class ScriptPlaces : IAiPlaces
 
     public ScriptArea AnyArea { get; } = new(Any, "any", Vector3.Zero, Vector3.Zero, Quaternion.Identity);
 
+    /// <summary>The level model they come from (its effects too); none for bare places.</summary>
+    public LevelModelContent? Model { get; }
+
+    /// <summary>The level's animated parts, the top ones (their children under them).</summary>
+    public IEnumerable<ScenePart> Parts => parts.Values;
+
+    /// <summary>A part by its path of names ("parent/child", any case); null when one of them is missing.</summary>
+    public ScenePart? Part(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var names = path.Split('/');
+        var part = parts.GetValueOrDefault(LegacyStringHash.Lower(names[0]));
+        for (var i = 1; i < names.Length && part is not null; i++)
+        {
+            part = part.Child(LegacyStringHash.Lower(names[i]));
+        }
+        return part;
+    }
+
+    /// <summary>A frame of the parts: each plays on, its children with it.</summary>
+    public void UpdateParts(float dt)
+    {
+        foreach (var part in parts.Values)
+        {
+            part.Update(dt, Matrix4x4.Identity);
+        }
+    }
+
     public IEnumerable<ScriptArea> Areas => areas.Values;
 
     public ScriptArea? Area(int key) => areas.GetValueOrDefault(key);
 
     public ScriptArea? Area(string name) => Area(LegacyStringHash.Lower(name));
 
-    public Vector3? LocatorPosition(int key) => locators.TryGetValue(key, out var l) ? Numerics(l.Transform.Translation) : null;
+    public Vector3? LocatorPosition(int key) => LocatorTransform(key)?.Translation;
 
-    public Matrix4x4? LocatorTransform(int key) => locators.TryGetValue(key, out var l) ? Navigation.LevelNavigation.ToNumerics(l.Transform) : null;
+    /// <summary>A scene locator's transform, else a part's (where the part is now), as the original looks them up.</summary>
+    public Matrix4x4? LocatorTransform(int key)
+    {
+        if (locators.TryGetValue(key, out var locator))
+        {
+            return Navigation.LevelNavigation.ToNumerics(locator.Transform);
+        }
+        foreach (var part in parts.Values)
+        {
+            if (part.Locator(key) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
 
     /// <summary>
     /// Where a script puts something at a place (the original's scene locator): a locator's transform;
-    /// an area's random point, turned a random way about the vertical; else the origin. The animated
-    /// parts' locators come with the parts (OM-47).
+    /// an area's random point, turned a random way about the vertical; a part's locator, where the part
+    /// is now; else the origin.
     /// </summary>
     public Matrix4x4 Placement(int key, Random random)
     {
         ArgumentNullException.ThrowIfNull(random);
-        if (LocatorTransform(key) is { } transform)
+        if (locators.TryGetValue(key, out var locator))
         {
-            return transform;
+            return Navigation.LevelNavigation.ToNumerics(locator.Transform);
         }
         if (key != Any && Area(key) is { } area)
         {
@@ -219,7 +273,7 @@ public sealed class ScriptPlaces : IAiPlaces
             turned.Translation = area.RandomPoint(random);
             return turned;
         }
-        return Matrix4x4.Identity;
+        return LocatorTransform(key) ?? Matrix4x4.Identity;
     }
 
     /// <summary>The way a transform faces (its forward, −Z), of unit length (a scaled locator's too).</summary>

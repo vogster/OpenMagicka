@@ -48,6 +48,23 @@ public sealed class Revive() : Magick(MagickType.Revive, SelfClip)
         return best;
     }
 
+    /// <summary>
+    /// A script's revival (a checkpoint's): the player's wizard rises at the point with all its hit
+    /// points; false when it may not rise or the level has no room.
+    /// </summary>
+    public static bool RaiseAt(EntityManager manager, Physics.PhysicsWorld world, Player player, Vector3 at)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(player);
+        if (!CanRise(player) || manager.Entities.Count + 2 > EntityManager.Capacity)
+        {
+            return false;
+        }
+        manager.Add(new ReviveEffect(player, world, manager.Walkable(at), 1));
+        return true;
+    }
+
     /// <summary>Whether a revival may raise the player's wizard (see <see cref="Revivee"/>).</summary>
     public static bool CanRise(Player player) =>
         player.Playing && !player.Ressing && player.Avatar is { } avatar && (avatar.IsOverkilled || (avatar.IsDead && !avatar.IsReviving))
