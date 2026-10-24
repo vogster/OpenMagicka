@@ -640,7 +640,7 @@ Limit of 65535 vertices/triangles (example `ru_s5`: 6818 vertices, 12577 triangl
 | 60 | i32 + N × Ability | AI abilities (§5.6) |
 | 61 | i32 + N × (`u8 MovementProperties`, `i32 count`, count × `string` Animations) | MoveAnimations; MoveAbilities = OR of all flags |
 | 62 | i32 + N × BuffStorage | (§5.7) |
-| 63 | i32 + N × AuraStorage | TTL ≤ 0 → infinity |
+| 63 | i32 + N × AuraStorage | they go when their TTL runs out (ENTITIES_AI §8.3.2) |
 
 Behavior at load time (not format, but important): for characters without the FRIENDLY flag, resistance
 multipliers/modifiers are scaled by the number of players (`k = 1 − (players−1)·0.00666`; positive ×k, negative ÷k).

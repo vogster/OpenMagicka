@@ -61,6 +61,7 @@ public enum PassiveAbility : byte
 /// <param name="Attach0">Its tip or muzzle in the item's own frame (§4.3); null at the item's origin.</param>
 /// <param name="Attach1">Its second point (a gun's shells); null at the origin.</param>
 /// <param name="Melee">The groups a melee strike fires (§8.1.2, §8.2).</param>
+/// <param name="Auras">What the item spreads around its holder while held (§8.3.2).</param>
 public sealed record ItemTemplate(
     string Id,
     WeaponClass WeaponClass = WeaponClass.Default,
@@ -75,7 +76,8 @@ public sealed record ItemTemplate(
     bool Bound = false,
     System.Numerics.Matrix4x4? Attach0 = null,
     System.Numerics.Matrix4x4? Attach1 = null,
-    IReadOnlyList<EventGroup>? Melee = null)
+    IReadOnlyList<EventGroup>? Melee = null,
+    IReadOnlyList<Buffs.Aura>? Auras = null)
 {
     /// <summary>Throws on a value the rules cannot use; loaders call it as they read.</summary>
     public void Validate()
@@ -104,6 +106,11 @@ public sealed record ItemTemplate(
         {
             ArgumentNullException.ThrowIfNull(group, nameof(Melee));
             group.Validate();
+        }
+        foreach (var aura in Auras ?? [])
+        {
+            ArgumentNullException.ThrowIfNull(aura, nameof(Auras));
+            aura.Validate();
         }
     }
 }

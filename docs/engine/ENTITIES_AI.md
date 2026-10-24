@@ -218,9 +218,10 @@ With 4 players this is about −2%. The effect is small, but it is worth replica
 
 ### 2.5 The character's core each frame
 
-What a character does in its own update, leaving out effects, auras and grips (where the animation and
+What a character does in its own update, leaving out effects and grips (where the animation and
 the state machine run in it: §5.4), in this order:
 
+0. Its auras run, then its buffs (§8.3); its held items' auras run at the very end, while alive.
 1. Hit points are capped at the maximum; the immortality timer runs down (immortal while it is
    above 0). The speed multiplier resets to 1.
 2. Zap: while the zap timer (0.1 s after a lightning hit) is not below 0, the speed multiplier is
@@ -315,7 +316,7 @@ Read by `CharacterTemplateReader` and cached by ID hash. Field order of the bina
 | 59 | Abilities | int32 N, then N×Ability (§5.7) | up to 16 (cooldowns are stored in an array of 16) |
 | 60 | MoveAnimations | int32 N, then N×(byte MovementProperties, int32 K, K×string animation) | jump, fly, swim animations. The union of flags = the character's `MoveAbilities` for the navmesh |
 | 61 | Buffs | int32 N, then N×BuffStorage | innate buffs |
-| 62 | Auras | int32 N, then N×AuraStorage (TTL ≤ 0 → infinite) | innate auras |
+| 62 | Auras | int32 N, then N×AuraStorage (they go when their TTL runs out: §8.3.2) | innate auras |
 
 After reading, service joints are found by bone name: `Mouth`, `RightAttach`, `LeftAttach`, `RightLeg`, `LeftLeg`
 and the bone with index 1 (hips). A 180° rotation around Y is added to the bind pose.
@@ -1075,6 +1076,82 @@ projectiles. In the vanilla items, 258 have melee events:
   type (Buff: hands out BuffStorage, Deflect: strength, Boost: magnitude, LifeSteal: amount, Love: radius and TTL), category, color,
   effect, TTL, radius, type filter, faction filter. Auras "tick" in a cycle (`AuraCycleTimer`) and hand out buffs to those within the radius.
 - Sources: character template, item (staff), magicks (Haste and others).
+
+#### 8.3.1 Buffs on a character
+
+- **Adding.** A buff that the character already has (the same buff of the same loaded data, as
+  each loaded buff of the original has its own id, and items are loaded once per type) only gets
+  its time to live back. Two different sources of equal buffs stack. A dead
+  character takes no new buff. When a new Resistance buff arrives, each status of an element it
+  covers is scaled at once by its multiplier, or ended when the multiplier is under 10⁻⁶:
+  - Water scales Wet;
+  - Cold scales Cold;
+  - Fire scales Burning;
+  - Life scales Healing;
+  - Steam scales Steamed;
+  - Poison scales Poisoned.
+
+  A new ModifyHitPoints buff on a character that is not a player multiplies its hit points by the
+  buff's multiplier.
+- **Each frame**, after the auras have run, the maximum hit points and undying go back to the
+  template's. Then every buff with time left counts its time down and acts, in the order the buffs
+  came; a buff out of time goes. A damage buff ahead of a hit point buff therefore hits while the
+  maximum is still the template's, which clamps the hit points, as in the original. A new hit
+  point buff raises the hit points at once but the maximum only on the bearer's next frame, so a
+  hit in between clamps them too:
+  - Undying: the character is undying.
+  - ModifyHitPoints: maximum hit points × multiplier + modifier.
+  - DealDamage: every 1 s, the first after 1 s, the damage hits the character. Its attacker is
+    the aura's owner, or the character itself when no aura gave the buff. A negative amount heals.
+- **Read by other rules:**
+  - Resistance buffs join the resistances (docs/gameplay/SPELLS.md §8).
+  - BoostDamage: for an element its damage covers, spells add its amount and multiply by its
+    magnitude.
+  - ModifySpellTTL and ModifySpellRange: a spell's time or range × the multipliers + the modifiers.
+  - ReduceAgro: the AI's aggro × the amounts.
+  - Boost: an avatar's boosts are the product of its Boost auras' magnitudes, those of its slot-1
+    item's Boost auras, and its Boost buffs' amounts, each cut to a whole number.
+- The template's own buff list is read but never used, as in the original.
+
+#### 8.3.2 Auras
+
+- **Who carries them.**
+  - A character starts with its template's auras. They run at the start of its frame, a corpse's
+    too, and go when their time runs out (one with none left goes after its first frame).
+  - A held item runs its auras for its living holder at the end of the holder's frame, and does so
+    for as long as it is held: their time does not end them.
+  - Vanilla times are 6.9 million seconds, so in practice forever.
+- **Pace.** Buff, Boost, LifeSteal and Love auras act every 0.25 s, the first time on their first
+  frame. A long frame owes several pulses; after the first they only renew, so one stands for all.
+  A Type aura's list is the lower-cased text split at commas, spaces kept.
+- **A Buff aura** gives its buff to the characters it targets:
+  - Self: only the owner, whatever the radius.
+  - Otherwise, the characters within the radius of the owner, measured flat and counting their
+    radius, and leaving out the ethereal, filtered by the target:
+
+    | Target | Who gets the buff |
+    |---|---|
+    | All | everyone |
+    | AllButSelf | everyone but the owner |
+    | Enemy | characters sharing no faction bit with the owner |
+    | Friendly | characters sharing a faction bit, the owner included |
+    | FriendlyButSelf | as Friendly, without the owner |
+    | Type | characters of the listed template types |
+    | TypeButSelf | as Type, without the owner |
+    | Faction | characters sharing a bit with the aura's faction |
+    | FactionButSelf | as Faction, without the owner |
+
+  The buff's own time is short (0.5 to 1 s), so it lasts while the target stays in range.
+- **Boost** is read by the avatar's boosts. **Deflect** turns missiles within its strength away
+  (with projectiles). **Love** charms enemies around (with charms). **LifeSteal** does nothing,
+  in the original as here.
+- **Vanilla data:**
+  - 9 templates carry 13 auras. All are Buff auras with Resistance buffs (beastmen, the druid,
+    the frost goblin shaman).
+  - 52 item auras sit on staffs. 51 are Buff auras; the staff of deflection carries the only
+    Deflect aura.
+
+In OpenMagicka: `OpenMagicka.Gameplay.Buffs` and `Character.Buffs`.
 
 ### 8.4 PhysicsEntityTemplate (`Data/PhysicsEntities`, 69 files)
 

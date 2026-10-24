@@ -54,7 +54,8 @@ public sealed record CharacterTemplate(
     bool IsEthereal = false,
     bool Flies = false,
     IReadOnlyList<EquipmentTemplate>? Equipment = null,
-    float ModelScale = 1)
+    float ModelScale = 1,
+    IReadOnlyList<Buffs.Aura>? Auras = null)
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
@@ -68,6 +69,11 @@ public sealed record CharacterTemplate(
         {
             ArgumentNullException.ThrowIfNull(held, nameof(Equipment));
             held.Validate();                                                   // before the body is in the world
+        }
+        foreach (var aura in Auras ?? [])
+        {
+            ArgumentNullException.ThrowIfNull(aura, nameof(Auras));
+            aura.Validate();
         }
         if (!(MaxHitPoints > 0) || !float.IsFinite(MaxHitPoints))
         {

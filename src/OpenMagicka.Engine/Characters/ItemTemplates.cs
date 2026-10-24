@@ -26,24 +26,14 @@ public static class ItemTemplates
             content.Bound,
             Point(model, "attach0"),
             Point(model, "attach1"),
-            Events(content.Melee.Conditions));
+            Events(content.Melee.Conditions),
+            [.. content.Auras.Select(BuffTemplates.Aura)]);
         template.Validate();
         return template;
     }
 
-    /// <summary>An item referred to from another asset (a template's slot).</summary>
-    public static Gameplay.Items.ItemTemplate Load(ContentLoader loader, string referringAsset, Content.Xna.ExternalReference reference)
-    {
-        ArgumentNullException.ThrowIfNull(loader);
-        var asset = loader.ResolveReference(referringAsset, reference)
-            ?? throw new InvalidDataException($"reference '{reference.Path}' from '{referringAsset}' leaves the content root");
-        return loader.Load(asset).Root is ItemContent item
-            ? From(item, Model(loader, asset, item))
-            : throw new InvalidDataException($"'{reference.Path}' from '{referringAsset}' is not an item");
-    }
-
     /// <summary>The item's model, from the item's own asset.</summary>
-    private static Content.Xna.ModelContent? Model(ContentLoader loader, string itemAsset, ItemContent item) =>
+    internal static Content.Xna.ModelContent? Model(ContentLoader loader, string itemAsset, ItemContent item) =>
         item.Model is { } model ? loader.LoadReference(itemAsset, model).Root as Content.Xna.ModelContent : null;
 
     /// <summary>

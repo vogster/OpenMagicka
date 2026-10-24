@@ -54,11 +54,15 @@ public sealed partial class Character : Entity
         Body = new CharacterBody(world, position, new CharacterShape(template.Radius, template.Length, template.Mass, template.Speed, template.Flies));
         Body.Body.Tag = this;
         Defences = new Defences(template.ResistancesFor(players));
-        HitPoints = template.MaxHitPoints;
+        (HitPoints, MaxHitPoints, undying) = (template.MaxHitPoints, template.MaxHitPoints, template.Undying);
         IsEthereal = template.IsEthereal;
         this.random = random ?? Random.Shared;
         corpseTimer = 20 + 20 * (float)this.random.NextDouble();
         EquipFrom(template);
+        foreach (var aura in template.Auras ?? [])
+        {
+            AddAura(aura);
+        }
         if (animations is not null)
         {
             Animator = new Animation.CharacterAnimator(this, animations, EquippedClasses());
@@ -76,15 +80,13 @@ public sealed partial class Character : Entity
 
     public float HitPoints { get; private set; }
 
-    public float MaxHitPoints => Template.MaxHitPoints;
+    /// <summary>The template's, changed for a frame by hit point buffs.</summary>
+    public float MaxHitPoints { get; private set; }
 
     public StatusSet Statuses { get; private set; } = StatusSet.Empty;
 
-    /// <summary>Template (scaled for the players), an avatar's slot-1 item (kept by the slots) and resistance buffs.</summary>
+    /// <summary>Template (scaled for the players), an avatar's slot-1 item and the resistance buffs (each kept by its source).</summary>
     public Defences Defences { get; private set; }
-
-    /// <summary>The resistance buffs on the character now; the template's and the slot-1 item's stay.</summary>
-    public void SetResistanceBuffs(IReadOnlyList<Resistance>? buffs) => Defences = Defences with { Buffs = buffs };
 
     public ISelfShield? SelfShield { get; set; }
 
@@ -203,50 +205,6 @@ public sealed partial class Character : Entity
 
     public void ReleaseEntanglement() => Entanglement = 0;
 
-    /// <summary>Kills (a kill plane, a script): at once without a state machine, through the death clip with one.</summary>
-    public void Kill()
-    {
-        RemoveInvisibility();
-        HitPoints = MathF.Min(HitPoints, 0);
-        DieUnlessDying();
-    }
-
-    /// <summary>Shatters: no corpse, no revival.</summary>
-    public void OverKill()
-    {
-        RemoveInvisibility();
-        if (!IsOverkilled)
-        {
-            IsOverkilled = true;
-            HitPoints = -MaxHitPoints - 1000;
-            corpseTimer = -100;
-        }
-        DieUnlessDying();
-    }
-
-    /// <summary>With a state machine, the dead state dies when the death clip ends; without, now.</summary>
-    private void DieUnlessDying()
-    {
-        if (State is null)
-        {
-            Die();
-        }
-    }
-
-    internal void Die()
-    {
-        if (Dead)
-        {
-            return;
-        }
-        undieTimer = Template.Undying && !IsOverkilled
-            ? (Template.UndieTime < float.Epsilon ? 0.5f : Template.UndieTime)       // as the original: 0.5 s only when none is given
-            : float.NaN;
-        Dead = true;
-        IsKnockedDown = false;
-        ReleaseEntanglement();
-    }
-
     /// <summary>
     /// The body's conditions for the coming physics step, from the character's state; what others set
     /// on the body (grease underfoot, levitation, the nav-mesh height for flyers) is kept.
@@ -273,6 +231,8 @@ public sealed partial class Character : Entity
         {
             throw new ArgumentOutOfRangeException(nameof(dt), dt, "the time step must be positive");
         }
+        RunAuras(dt);
+        RunBuffs(dt);
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);
         root = RootMatrix();
         immortalTime -= dt;
@@ -331,21 +291,9 @@ public sealed partial class Character : Entity
             slot.Item?.Tick(dt);
         }
         PlaceItems();
-    }
-
-    private void Afterlife(float dt)
-    {
-        if (!float.IsNaN(undieTimer) && !IsOverkilled)
+        if (!Dead)
         {
-            undieTimer -= dt;
-            if (undieTimer <= 0)
-            {
-                (Dead, HitPoints) = (false, Template.UndieHitPoints);                // the timer stays spent: the dead state sees a revival
-            }
-        }
-        else
-        {
-            corpseTimer -= dt;
+            RunItemAuras(dt);                                                 // as the original: held items do nothing for a corpse
         }
     }
 

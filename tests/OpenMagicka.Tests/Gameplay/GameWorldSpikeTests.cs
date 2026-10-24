@@ -59,7 +59,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
             .Select(p => ItemTemplates.From((ItemContent)loader.LoadUncached(p[..^4]).Root!))
             .ToList();
-        var (equipped, slots, staffs, tipped) = (0, 0, 0, 0);
+        var (equipped, slots, staffs, tipped, auraTemplates, templateAuras) = (0, 0, 0, 0, 0, 0);
         var far = new List<string>();
         foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
         {
@@ -73,6 +73,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             world.Entities.Add(character);                                             // off the origin, where a lost item would be
             CharacterTests.Run(world, 0.5f);
             var held = character.Equipment.Count(s => s.Item is not null);
+            (auraTemplates, templateAuras) = (auraTemplates + (character.Template.Auras?.Count > 0 ? 1 : 0), templateAuras + (character.Template.Auras?.Count ?? 0));
             (equipped, slots, staffs) = (equipped + (held > 0 ? 1 : 0), slots + held, staffs + (character.SpellSource >= 0 ? 1 : 0));
             var reach = content.Stats.Radius + content.Stats.Length + 6;               // a horseman's lance reaches 5 m
             far.AddRange(character.Equipment.Where(s => s.Item is { } item && (!(Vector3.Distance(item.Tip, character.Position) <= reach)
@@ -86,9 +87,32 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         far.Take(20).ToList().ForEach(output.WriteLine);
         Assert.Empty(far);                                                         // the whole pose chain puts every held item at hand
         Assert.Equal(454, items.Count);
+        var itemAuras = items.SelectMany(i => i.Auras ?? []).ToList();
+        Assert.Equal((9, 13, 52, 51), (auraTemplates, templateAuras, itemAuras.Count, itemAuras.Count(a => a is OpenMagicka.Gameplay.Buffs.BuffAura)));   // as ENTITIES_AI §8.3.2 records
+        Assert.Single(itemAuras.OfType<OpenMagicka.Gameplay.Buffs.DeflectAura>());
         Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
             items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
         Assert.Equal((286, 591, 86, 291), (equipped, slots, staffs, tipped));      // as ENTITIES_AI §8.1.1 records
+    }
+
+    [GameContentFact]
+    public void TheLibrary_SharesAnItemsBuffs_BetweenItsHolders()
+    {
+        var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var library = new TemplateLibrary(loader);
+        var holders = loader.Files.ListFiles("Data/Characters", recursive: true)
+            .Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase))
+            .Select(p => library.Character(p[..^4]))
+            .SelectMany(t => (t.Equipment ?? []).Select(e => e.Item))
+            .Where(i => i.Auras?.Count > 0)
+            .GroupBy(i => i.Id)
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        Assert.NotEmpty(holders);                                                    // some staff is held by more than one template
+        Assert.All(holders, g => Assert.Single(g.Distinct()));                       // one template, so one object per buff
+        Assert.Same(library.Character(loader.Files.ListFiles("Data/Characters", recursive: true).First()[..^4]),
+            library.Character(loader.Files.ListFiles("Data/Characters", recursive: true).First()[..^4]));
     }
 
     [GameContentFact]

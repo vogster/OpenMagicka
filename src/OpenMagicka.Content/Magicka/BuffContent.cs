@@ -59,7 +59,7 @@ public sealed record ModifierBuff(BuffVisualCategory Visual, Vector3 Color, floa
     ModifierBuffKind Kind, float Multiplier, float Modifier) : BuffContent(Visual, Color, Ttl, Effect);
 
 /// <summary>
-/// An area that applies an effect to entities around its owner. TTL &lt;= 0 means forever.
+/// An area that applies an effect to entities around its owner. a character's aura goes when its TTL runs out (not forever at 0); a held item's never does.
 /// <see cref="TargetTypes"/> is a comma-separated list of character types.
 /// </summary>
 public abstract record AuraContent(AuraTarget Target, BuffVisualCategory Visual, Vector3 Color, string Effect,

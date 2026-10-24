@@ -29,7 +29,11 @@ public sealed class Item
         template.Validate();
         Template = template;
         MeleeEvents = new EventGroups(template.Melee ?? []);
+        Auras = [.. (template.Auras ?? []).Select(a => new Buffs.ActiveAura(a))];
     }
+
+    /// <summary>This item's own auras at work (their time never ends them while held).</summary>
+    public IReadOnlyList<Buffs.ActiveAura> Auras { get; }
 
     public ItemTemplate Template { get; }
 

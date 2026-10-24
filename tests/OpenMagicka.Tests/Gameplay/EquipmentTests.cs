@@ -83,16 +83,16 @@ public class EquipmentTests
         using var world = World();
         var early = Spawn(world);
         var late = Spawn(world, at: new Vector3(5, 0.9f, 0));
-        Resistance[] ward = [new Resistance(Elements.Fire, 0.5f, 0)];
+        var ward = new OpenMagicka.Gameplay.Buffs.ResistanceBuff(10, new Resistance(Elements.Fire, 0.5f, 0));
         (early.IsPlayer, _) = (true, 0);
-        early.SetResistanceBuffs(ward);
+        early.AddBuff(ward);
         early.Equip(Character.ResistanceSlot, new Item(Staff), "RightHand");
         late.Equip(Character.ResistanceSlot, new Item(Staff), "RightHand");
         late.IsPlayer = true;
 
         Assert.Same(Staff.Resistances, early.Defences.Staff);
         Assert.Same(Staff.Resistances, late.Defences.Staff);
-        Assert.Same(ward, early.Defences.Buffs);
+        Assert.Equal(ward.Resistance, Assert.Single(early.Defences.Buffs!));
         late.IsPlayer = false;
         Assert.Null(late.Defences.Staff);
     }

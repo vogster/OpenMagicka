@@ -94,6 +94,19 @@ public sealed partial class StatusSet
         return new StatusSet(copy, DryTimer);
     }
 
+    /// <summary>A status's magnitude scaled (a resistance buff arriving); a multiplier under 10⁻⁶ ends it.</summary>
+    public StatusSet Scaled(StatusEffects type, float multiplier)
+    {
+        var copy = Copy();
+        ref var slot = ref copy[StatusEffect.Index(type)];
+        slot = slot with { Magnitude = MathF.Abs(multiplier) < 1e-6f ? 0 : slot.Magnitude * multiplier };
+        if (!slot.IsActive)
+        {
+            slot = default;
+        }
+        return new StatusSet(copy, DryTimer);
+    }
+
     /// <summary>The set with the given statuses ended.</summary>
     public StatusSet Without(StatusEffects types)
     {
