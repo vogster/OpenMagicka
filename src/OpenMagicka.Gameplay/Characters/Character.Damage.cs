@@ -70,6 +70,10 @@ public sealed partial class Character
             }
             DieUnlessDying();
         }
+        if (result.HasFlag(DamageResult.Damaged))
+        {
+            RaiseScriptTrigger(OnDamageTrigger);
+        }
         return result;
     }
 

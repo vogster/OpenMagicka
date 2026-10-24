@@ -260,6 +260,22 @@ public sealed partial class Agent
 
     public float EventDelay { get; internal set; }
 
+    /// <summary>Whether scripted events remain: one to come, a delay running, or a clip being waited on.</summary>
+    public bool HasPendingEvents => Events is { } events && (EventIndex < events.Length || EventDelay >= float.Epsilon || float.IsNaN(EventDelay));
+
+    /// <summary>
+    /// A frame of a player's scripted events (an avatarMove): the top state acts at once, with no
+    /// reactions, grudges or abilities, as the original's avatar runs them.
+    /// </summary>
+    internal void RunScript(float dt)
+    {
+        for (var i = 0; i < states.Count; i++)
+        {
+            states[i] = (states[i].State, states[i].Age + dt);
+        }
+        State.Execute(this, dt);
+    }
+
     public void PushState(IAiState state)
     {
         if (state == State)

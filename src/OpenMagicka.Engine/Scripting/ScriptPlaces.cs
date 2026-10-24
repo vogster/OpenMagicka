@@ -199,6 +199,33 @@ public sealed class ScriptPlaces : IAiPlaces
 
     public Vector3? LocatorPosition(int key) => locators.TryGetValue(key, out var l) ? Numerics(l.Transform.Translation) : null;
 
+    public Matrix4x4? LocatorTransform(int key) => locators.TryGetValue(key, out var l) ? Navigation.LevelNavigation.ToNumerics(l.Transform) : null;
+
+    /// <summary>
+    /// Where a script puts something at a place (the original's scene locator): a locator's transform;
+    /// an area's random point, turned a random way about the vertical; else the origin. The animated
+    /// parts' locators come with the parts (OM-47).
+    /// </summary>
+    public Matrix4x4 Placement(int key, Random random)
+    {
+        ArgumentNullException.ThrowIfNull(random);
+        if (LocatorTransform(key) is { } transform)
+        {
+            return transform;
+        }
+        if (key != Any && Area(key) is { } area)
+        {
+            var turned = Matrix4x4.CreateRotationY(random.NextSingle() * MathF.Tau);
+            turned.Translation = area.RandomPoint(random);
+            return turned;
+        }
+        return Matrix4x4.Identity;
+    }
+
+    /// <summary>The way a transform faces (its forward, −Z), of unit length (a scaled locator's too).</summary>
+    public static Vector3 Forward(Matrix4x4 transform) =>
+        new Vector3(-transform.M31, -transform.M32, -transform.M33) is var forward && forward.LengthSquared() > 1e-12f ? Vector3.Normalize(forward) : -Vector3.UnitZ;
+
     /// <summary>Who is where this frame: each area refilled, "any" with everything.</summary>
     public void Refill(EntityManager manager)
     {

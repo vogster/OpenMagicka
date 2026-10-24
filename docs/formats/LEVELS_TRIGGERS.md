@@ -563,6 +563,62 @@ set). If `id` is given, it works only on that entity and the area is ignored.
 | 112 | `releaseGrip` | 0 | 0 | `factions`:Factions⁰, `id`:id⁰, `area`:id⁰, `type`:id⁰ | Releases characters grabbed by NPC `id` or by NPCs in the area. | yes |
 | 113 | `removeCameraEffect` | 0 | 0 | `effect`:id⁰ | Removes camera effect `effect` (empty — all). | yes |
 
+### 9.1 Ours: the characters' actions (OM-45)
+
+Ours is `OpenMagicka.Engine.Scripting` (`CharacterActions.cs`, `ScriptEvents.cs`); a scene being played is a `RunningLevel`
+(the world given the level's bestiary, nav mesh and places; a frame runs the world, then the level's timers, then the
+triggers, as the original).
+
+**Places.** An action's `area` is the original's scene locator: a locator's transform; else an area's random point, turned a
+random way about the vertical; else the origin. The animated parts' locators come with the parts (OM-47).
+
+**AI events** (`<move>`, `<animation>`, `<face>`, `<kill>`, `<loop>`, children of `spawn`, `giveOrder` and the `avatarMove`
+players) are read when the scene is built, as the original:
+- a `move` to an area takes one random point of it then, for good; a name that is neither a locator nor an area walks to the
+  origin; `position="x,y,z"` is a point;
+- `facingDirection` is either `x,y,z` (then fixed) or a bool;
+- an unknown event or attribute fails the loading, and so (ours) does a direction of no length, which would turn the original
+  to NaN.
+
+**`spawn`**:
+- each of the `nr` characters is placed anew (so an area scatters them); it stands on the floor up to 9 below, 0.1 over it
+  (none found: at the point);
+- it faces the place's way; `snapToNavMesh` moves the point to the nav mesh first;
+- the order, triggers, health (not clamped), name, dialog and clips are set as given;
+- a `spawnAnimation` other than `idle`/`idle_agg` makes it rise with that clip;
+- a network client spawns none, and a full level stops the spawning;
+- `forceDraw`, `forceCamera`, `forceNavMesh` and `meshId` are read and wait for the renderer and camera.
+
+The survivors and their hit points are what a checkpoint replays (OM-47).
+
+**`giveOrder`**:
+- by `id`: the NPC of that name, which panics at once on a `panic` order;
+- else the NPCs in the area by template, **or** template faction, or with exactly those factions with `explicit`;
+- with neither type nor factions, an area order reaches none, as the original;
+- grips are let go when grips come (OM-33).
+
+**`avatarMove`**: each player's avatar runs its events through a mind of its own, its states acting every frame while events
+remain (no reactions or abilities); its death ends them. `<Player1>`..`<Player4>` take that slot or the next free one, and `<PlayerID name=>` takes
+the slot of the avatar of that name when the scene is built. Input waits on `Character.IsInEvent` (OM-31).
+
+**`setPosition`**:
+- the named character, or `player1`..`player4` when playing, moves onto the floor up to 4 below the place;
+- it faces the place's way with `facingDirection`, or when no floor was found;
+- other entities wait for their bodies.
+
+**`remove`**:
+- the named character, or those in the area by template or template faction, the players too, vanish dead at once, with no
+  corpse and no `onDeath` trigger (the original's kill only empties the hit points, and its removal marks them dead first);
+- `force` lifts a named one's need of an explicit kill (in an area it is not looked at, as the original).
+
+**Triggers of characters:**
+- A character's `onDeath` trigger fires as it dies, and its `onDamage` trigger on each hit that hurts it. Both run with
+  conditions, with the character as the sender.
+- With a death clip, a killing hit fires `onDamage` first and `onDeath` when the clip ends.
+- A `spawn` whose health or speed is not finite fails the loading.
+
+**Where the original crashes**, ours does nothing: an area the scene lacks, or a missing name.
+
 ## 10. Condition catalogue (24)
 
 All conditions have the base attribute `invert` (bool).

@@ -51,6 +51,9 @@ public abstract class ScriptAction
 
     public float Delay { get; set; }
 
+    /// <summary>The script's element, for kinds that read their children (a spawn's events) when initialized.</summary>
+    public Content.Levels.ScriptNode? Node { get; internal set; }
+
     /// <summary>Whether no run is waiting.</summary>
     public bool IsIdle => queued == 0;
 

@@ -309,6 +309,7 @@ public sealed partial class Character : Entity
         SyncShieldMass();
         UpdateMagicks(dt);
         UpdateMind(dt);
+        RunScriptedEvents(dt);
         CountDownMeleeBoost(dt);
         if (State is not null)
         {

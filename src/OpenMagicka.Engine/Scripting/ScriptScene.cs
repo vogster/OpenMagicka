@@ -61,6 +61,7 @@ public sealed class ScriptScene
             IsEntered = true;
             World.Entities.Places = Places;
             World.Entities.Minds.TriggerRaised += OnMindTrigger;
+            World.Entities.ScriptTrigger += OnEntityTrigger;
         }
     }
 
@@ -73,6 +74,7 @@ public sealed class ScriptScene
         }
         IsEntered = false;
         World.Entities.Minds.TriggerRaised -= OnMindTrigger;
+        World.Entities.ScriptTrigger -= OnEntityTrigger;
         if (ReferenceEquals(World.Entities.Places, Places))
         {
             World.Entities.Places = null;
@@ -80,6 +82,8 @@ public sealed class ScriptScene
     }
 
     private void OnMindTrigger(Gameplay.AI.Agent agent, int trigger) => ExecuteTrigger(trigger, agent.Owner);
+
+    private void OnEntityTrigger(Gameplay.Entities.Entity source, int trigger) => ExecuteTrigger(trigger, source as Character);
 
     public SceneDefinition Definition { get; }
 

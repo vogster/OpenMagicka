@@ -42,6 +42,7 @@ public sealed partial class Character
         undieTimer = undying && !IsOverkilled
             ? (Template.UndieTime < float.Epsilon ? 0.5f : Template.UndieTime)       // as the original: 0.5 s only when none is given
             : float.NaN;
+        RaiseScriptTrigger(OnDeathTrigger);                                   // as the original: before it is marked dead
         Dead = true;
         IsKnockedDown = false;
         ReleaseEntanglement();

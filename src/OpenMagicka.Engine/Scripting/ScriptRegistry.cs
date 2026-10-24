@@ -19,7 +19,10 @@ public sealed class ScriptRegistry
     private readonly SortedSet<string> unknown = new(StringComparer.OrdinalIgnoreCase);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> Settable = new();
 
-    /// <summary>The engine's own kinds: all the conditions; counters, timers, executing and clearing triggers, points of interest.</summary>
+    /// <summary>
+    /// The engine's own kinds: all the conditions; counters, timers, executing and clearing triggers,
+    /// points of interest, and the characters' actions (spawn, orders, avatars' events, moves, removal).
+    /// </summary>
     public static ScriptRegistry Engine() => new ScriptRegistry()
         .Condition<CounterCondition>("counter")
         .Condition<TimerCondition>("timer")
@@ -51,7 +54,12 @@ public sealed class ScriptRegistry
         .Action<ExecuteTriggerAction>("executeTrigger")
         .Action<ClearDelayedActionsAction>("clearDelayedActions")
         .Action<EnablePoiAction>("enablePoi")
-        .Action<DisablePoiAction>("disablePoi");
+        .Action<DisablePoiAction>("disablePoi")
+        .Action<SpawnAction>("spawn")
+        .Action<GiveOrderAction>("giveOrder")
+        .Action<AvatarMoveAction>("avatarMove")
+        .Action<SetPositionAction>("setPosition")
+        .Action<RemoveAction>("remove");
 
     /// <summary>The tags met that no kind answers (they never hold, or do nothing).</summary>
     public IReadOnlyCollection<string> Unknown => unknown;
@@ -87,7 +95,9 @@ public sealed class ScriptRegistry
             unknown.Add("then:" + node.Name.ToLowerInvariant());
             return new UnknownAction(node.Name);
         }
-        return Bind((ScriptAction)Activator.CreateInstance(type)!, node);
+        var action = Bind((ScriptAction)Activator.CreateInstance(type)!, node);
+        action.Node = node;
+        return action;
     }
 
     /// <summary>Sets the node's attributes on the part's properties, in the node's order.</summary>

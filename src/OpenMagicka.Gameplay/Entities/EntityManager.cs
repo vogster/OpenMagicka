@@ -83,6 +83,14 @@ public sealed class EntityManager
 
     internal void RaiseCue(Entity source, Animation.AnimationCue cue) => Cue?.Invoke(source, cue);
 
+    /// <summary>
+    /// An entity sets off a script trigger of its own (a character's death or damage trigger); the level's
+    /// scene runs it. It is raised in the middle of a death or a hit: a handler may only queue work.
+    /// </summary>
+    public event Action<Entity, int>? ScriptTrigger;
+
+    internal void RaiseScriptTrigger(Entity source, int trigger) => ScriptTrigger?.Invoke(source, trigger);
+
     /// <summary>Adds an entity on the server, which gives it the next id; an entity already in keeps its own.</summary>
     public NetId Add(Entity entity)
     {
