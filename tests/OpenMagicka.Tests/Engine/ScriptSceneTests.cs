@@ -218,7 +218,7 @@ public class ScriptSceneTests
     {
         var registry = ScriptRegistry.Engine();
         var (scene, world) = Scene("""
-            <Trigger id="x" repeat="true"><If><bossDead/></If><Then><counter name="n" action="inc" value="1"/></Then></Trigger>
+            <Trigger id="x" repeat="true"><If><moonIsFull/></If><Then><counter name="n" action="inc" value="1"/></Then></Trigger>
             <Trigger id="y"><Then><spawnUnicorn type="pink"/></Then></Trigger>
             """, registry);
         using var _ = world;
@@ -226,7 +226,7 @@ public class ScriptSceneTests
         Run(scene, 0.1f);
 
         Assert.Equal(0, Counter(scene, "n"));
-        Assert.Equal(["if:bossdead", "then:spawnunicorn"], registry.Unknown);
+        Assert.Equal(["if:moonisfull", "then:spawnunicorn"], registry.Unknown);
     }
 
     [Fact]

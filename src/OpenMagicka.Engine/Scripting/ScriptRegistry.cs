@@ -19,10 +19,32 @@ public sealed class ScriptRegistry
     private readonly SortedSet<string> unknown = new(StringComparer.OrdinalIgnoreCase);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> Settable = new();
 
-    /// <summary>The engine's own kinds: counters, timers, executing and clearing triggers, points of interest.</summary>
+    /// <summary>The engine's own kinds: all the conditions; counters, timers, executing and clearing triggers, points of interest.</summary>
     public static ScriptRegistry Engine() => new ScriptRegistry()
         .Condition<CounterCondition>("counter")
         .Condition<TimerCondition>("timer")
+        .Condition<PresentCondition>("present")
+        .Condition<FactionPresentCondition>("factionPresent")
+        .Condition<IdPresentCondition>("idPresent")
+        .Condition<PhysicsPresentCondition>("physicsPresent")
+        .Condition<TriggeredCondition>("triggered")
+        .Condition<CharacterHealthCondition>("characterHealth")
+        .Condition<InteractorIsCondition>("interactorIs")
+        .Condition<CharacterCastingCondition>("characterCasting")
+        .Condition<RobeInUseCondition>("robeInUse")
+        .Condition<PlayerCountCondition>("playerCount")
+        .Condition<PlayersHaveStatusEffectCondition>("playersHaveStatusEffect")
+        .Condition<PlayerHasElementCondition>("playerHasElement")
+        .Condition<DialogDoneCondition>("dialogDone")
+        .Condition<DialogActiveCondition>("dialogActive")
+        .Condition<DialogHintDoneCondition>("dialogHintDone")
+        .Condition<BossHealthCondition>("bossHealth")
+        .Condition<BossDeadCondition>("bossDead")
+        .Condition<NoCutsceneActiveCondition>("noCutsceneActive")
+        .Condition<HasAchievementCondition>("hasAchievement")
+        .Condition<AnyPlayerHasDiedCondition>("anyPlayerHasDied")
+        .Condition<HasDlcCondition>("hasDLC")
+        .Condition<IsCampaignLoopedCondition>("isCampaignLooped")
         .Action<CounterAction>("counter")
         .Action<TimerAction>("timer")
         .Action<AddTimerAction>("addTimer")

@@ -56,6 +56,9 @@ public abstract class Entity
     /// <summary>Whether the entity can take damage (protected queries keep only these).</summary>
     public virtual bool IsDamageable => false;
 
+    /// <summary>Whether it is one of the level's physics objects (a crate, a barrel), as scripts count them.</summary>
+    public virtual bool IsPhysicsObject => false;
+
     /// <summary>How much the AI shies from it, and counts it in its own danger (ENTITIES_AI.md §7.7).</summary>
     public virtual float Danger => 0;
 

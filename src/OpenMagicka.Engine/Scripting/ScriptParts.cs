@@ -99,7 +99,7 @@ public abstract class ScriptAction
     protected static int Hash(string name) => LegacyStringHash.Lower(name);
 }
 
-/// <summary>A tag no kind is known for yet (OM-44, OM-45, OM-46): it never holds.</summary>
+/// <summary>A tag no kind is known for yet (none now; the actions: OM-45, OM-46): it never holds.</summary>
 internal sealed class UnknownCondition(string tag) : ScriptCondition
 {
     public string Tag { get; } = tag;

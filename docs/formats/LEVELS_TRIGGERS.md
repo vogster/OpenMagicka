@@ -249,8 +249,8 @@ not those senders, so later runs take older senders (as the original).
 - A trigger that sets itself off again with no delay hangs the original (its action's run loop never ends); ours runs only
   the runs waiting as the frame began, so such a trigger runs once a frame.
 - An unknown tag in `<if>` or `<then>` crashes the original's loading; ours keeps a stand-in (never holds, does nothing) and lists
-  it, while the kinds are being written (OM-44, OM-45, OM-46).
-- On all 141 scenes: 2,801 triggers and points, 1,296 areas; in their first 2 s, 449 firings.
+  it, while the kinds are being written (the actions: OM-45, OM-46; every condition is known).
+- On all 141 scenes: 2,801 triggers and points, 1,296 areas; in their first 2 s, 736 firings (with all the conditions known).
 
 `executeTrigger` calls the target **with condition checks** and the repeat rule: a one-shot trigger that
 already fired will not run again. A typical "function" pattern in scripts:
@@ -593,6 +593,30 @@ All conditions have the base attribute `invert` (bool).
 | 22 | `dialogHintDone` | 0 | 0 | — | The tutorial dialog hint is closed. |
 | 23 | `isCampaignLooped` | 0 | 0 | — | The campaign has been completed again (NG+); outside Campaign — exception. |
 | 24 | `physicsPresent` | 0 | 0 | `onlyDamagable`:bool⁰, `area`:id="any"⁰, `nr`:int⁰, `compareMethod`:CompareMethod⁰ | The number of physics objects (`onlyDamagable` — only destructible ones) in area `area` is compared with `nr`. |
+
+**Further, as the original** (ours: `OpenMagicka.Engine.Scripting`, the `*Condition` kinds; the game state beyond the world in
+`ScriptGame`):
+- `present` with `includeInvisible="false"` takes off every invisible character of the template that is in the area, the dead too
+  (who were not counted), so the count can go below the true one; with `type="any"` it takes off none.
+- `factionPresent` counts a character once for each of its template's factions among `factions`; `includeInvisible="false"`
+  takes each invisible one off once, the dead too, if its faction now (charmed, say) is among them.
+- `characterHealth`: a `health` outside 0..1 fails the loading; the share is not clamped; equal is within 0.0001.
+- `bossHealth`: equal is within 0.000001 (`timer` and `counter`: exact).
+- `characterCasting` asks the spell for one element at a time: a combination (`element="fire,water"`) is never in it.
+- `playerHasElement` holds for any element of a combination in `element`.
+- `playersHaveStatusEffect` holds when a player has any of the nine statuses; `statusEffect` is read but not asked about.
+- `robeInUse` with no `name` never holds; `dialogActive` with no `dialog` or `any` asks whether any message box is up.
+- `bossDead` and `bossHealth` with no boss fight do not hold, inverted or not.
+
+**Ours, where the original crashes:** an area the scene does not have (the area conditions do not hold, inverted or not; no game
+scene has one), a trigger it does not have (`triggered` is false), a `robeInUse` player beyond the slots (false), and
+`isCampaignLooped` outside a campaign (false). Within one it is the scene's looped flag, the one that lets the `<looped>` blocks
+in.
+
+**Not yet fed:** the dialogs (OM-49), the boss fight, the cutscenes, the deaths on the level, the achievements, the packs and the
+save's loop flag reach the scripts through `ScriptGame`, which their own tasks fill; until then nothing there is shown, done,
+won or owned (`ScriptGame`); the campaign's loop is the scene's own flag. `physicsPresent` counts entities that are physics objects (`Entity.IsPhysicsObject`), none until the props come
+(`spawnPhys`, OM-45).
 
 ## 11. Dialogs (`Levels/Dialog_*.xml`)
 

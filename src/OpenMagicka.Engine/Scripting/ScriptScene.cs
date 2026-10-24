@@ -15,14 +15,15 @@ public sealed class ScriptScene
 
     /// <param name="looped">A replayed campaign: the looped blocks are in.</param>
     /// <param name="places">The scene's areas and locators (from its level model); none for a bare scene.</param>
+    /// <param name="game">What the scripts read of the game beyond the world; a quiet one when none is given.</param>
     public ScriptScene(SceneDefinition scene, ScriptLevel level, ScriptRegistry registry, GameWorld world, bool looped = false, int seed = 0,
-        ScriptPlaces? places = null)
+        ScriptPlaces? places = null, ScriptGame? game = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(world);
-        (Definition, Level, World, Random) = (scene, level, world, new Random(seed));
+        (Definition, Level, World, Random, Game, Looped) = (scene, level, world, new Random(seed), game ?? new ScriptGame(), looped);
         foreach (var trigger in scene.Triggers)
         {
             var conditions = trigger.Conditions.Select(block => block.Where(n => n.Type == System.Xml.XmlNodeType.Element)
@@ -85,6 +86,11 @@ public sealed class ScriptScene
     public ScriptLevel Level { get; }
 
     public GameWorld World { get; }
+
+    public ScriptGame Game { get; }
+
+    /// <summary>A replayed campaign: the looped blocks are in, and isCampaignLooped holds.</summary>
+    public bool Looped { get; }
 
     /// <summary>The variants' (and the scripts') dice.</summary>
     public Random Random { get; }
