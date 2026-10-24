@@ -43,6 +43,10 @@ internal sealed class IdleState : CharacterState
         {
             return CharacterStates.Move;
         }
+        if (Casting.Into(character) is { } casting)
+        {
+            return casting;
+        }
         if (character.Dashing)
         {
             return CharacterStates.Dash;
@@ -106,6 +110,10 @@ internal sealed class MoveState : CharacterState
         if (character.IsBlocking)
         {
             return CharacterStates.Block;
+        }
+        if (Casting.Into(character) is { } casting)
+        {
+            return casting;
         }
         if (character.ZapTimer >= float.Epsilon)
         {

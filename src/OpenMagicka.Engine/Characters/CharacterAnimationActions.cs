@@ -38,6 +38,7 @@ public static class CharacterAnimationActions
             SpawnMissileAction a => new Actions.SpawnMissile(start, end, a.Weapon, ThrowVelocity(a), a.ItemAligned),
             DetachItemAction a => new Actions.DetachItem(start, end, a.Item, new System.Numerics.Vector3(a.Velocity.X, a.Velocity.Y, a.Velocity.Z)),
             SpecialAbilityAction a => new Actions.SpecialAbility(start, end, a.Weapon, a.Ability is { } own ? ItemTemplates.Special(own) : null),
+            CastSpellAction a => new Actions.CastSpell(start, end, a.Source),
             _ => null,
         };
     }

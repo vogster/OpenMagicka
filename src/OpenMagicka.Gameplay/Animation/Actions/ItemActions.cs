@@ -128,3 +128,25 @@ public sealed class SpecialAbility : AnimationAction
         }
     }
 }
+
+/// <summary>
+/// On its first frame, casts the character's spell unless an effect runs; its end tells the effect
+/// the animation ended (docs/gameplay/SPELLS.md §4.1).
+/// </summary>
+/// <param name="source">The bone the spell leaves from; null from the staff.</param>
+public sealed class CastSpell(float start, float end, string? source) : AnimationAction(start, end)
+{
+    public string? Source { get; } = source;
+
+    public bool FromStaff => Source is null;
+
+    public override void Run(Character owner, bool first)
+    {
+        if (first && owner.CurrentSpell is null)
+        {
+            owner.CastSpell(FromStaff, Source);
+        }
+    }
+
+    public override void Stop(Character owner) => owner.CurrentSpell?.AnimationEnded(owner);
+}

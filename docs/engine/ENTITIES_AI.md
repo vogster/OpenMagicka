@@ -451,7 +451,7 @@ the window; "once" means the first frame only.
   shake at the character's position.
 - **With items:** `DealDamage` (1,997), `SpawnMissile` (1,787), `Gunfire` (335), `SpecialAbility`
   (84, §8.1.7), `DetachItem` (17, §8.1.5), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
-- **With spells:** `CastSpell` (1,371).
+- **With spells:** `CastSpell` (1,371, SPELLS.md §4.1).
 - **With grips:** `Grip` (48), `DamageGrip` (48), `ReleaseGrip` (24), `ThrowGrip` (15),
   `OverkillGrip` (15).
 - **With the frog:** `Tongue` (1).
@@ -676,9 +676,9 @@ Details the table above leaves out (blend times in seconds):
   **`Busy`** (`emote_confused0`, 0.2, while busy) as in the table.
 
 OpenMagicka has `Idle`, `Move`, `Hit`, `KnockDown`, `Flying`, `Pushed`, `Stun`, `Entangled`, `Jump`,
-`Land`, `Dead`, `Ressurection`, `Attack`, `Block`, `Dash`, `Alarm` and `Busy` now; `Cast`, `Charge`,
-`PanicCast`, `Panic`, `Boost`, `Gripping`, `GripAttack`, `Drop` and `Bloat`, with the transitions into
-them, come with spells in the world, panic and fear, shields, grips and bloating. A character made
+`Land`, `Dead`, `Ressurection`, `Attack`, `Block`, `Dash`, `Alarm`, `Busy`, `Cast` and `Charge`
+(SPELLS.md §4.1) now; `PanicCast`, `Panic`, `Boost`, `Gripping`, `GripAttack`, `Drop` and `Bloat`,
+with the transitions into them, come with panic and fear, magicks, grips and bloating. A character made
 without animations has no state machine and dies on the frame its hit points reach 0 (§2.5).
 
 ---

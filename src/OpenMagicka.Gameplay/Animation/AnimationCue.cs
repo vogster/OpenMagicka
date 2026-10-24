@@ -9,6 +9,9 @@ public abstract record AnimationCue;
 /// <param name="Magnitude">The cue's magnitude variable, when the source sets one.</param>
 public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue;
 
+/// <summary>The cue's sounds playing from the source stop (a charge's, when the charge ends).</summary>
+public sealed record SoundStopCue(string Cue) : AnimationCue;
+
 /// <summary>
 /// An effect at a bone; an attached one follows the bone until its <see cref="EffectEndCue"/> (same
 /// character and source). A looping clip can start one again before it ended: the new one replaces it.

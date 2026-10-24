@@ -95,6 +95,12 @@ public abstract class Entity
     }
 
     /// <summary>
+    /// Thrown away from a point by the ballistic rule (ENTITIES_AI.md §1) for a strength and a distance;
+    /// false when it did not move (a body too heavy, or none).
+    /// </summary>
+    public virtual bool Impulse(Vector3 from, float elevation, float power, float distance) => false;
+
+    /// <summary>
     /// The arc test of melee and area spells (§1.6): within <paramref name="heightTolerance"/> in
     /// height, within <paramref name="range"/> of the origin counting the radius, and within
     /// <paramref name="angle"/> of <paramref name="direction"/> counting the half-width. The hit is on

@@ -113,6 +113,22 @@ public sealed class Missile : Entity
 
     public override bool IsDamageable => true;
 
+    /// <summary>A push throws it: its velocity becomes the ballistic one for its mass.</summary>
+    public override bool Impulse(Vector3 from, float elevation, float power, float distance)
+    {
+        if (dead || Body.IsRemoved || world.IsDisposed)
+        {
+            return false;
+        }
+        var velocity = Combat.DamageRules.PushVelocity(from, Position, elevation, power, distance, Body.Mass, MathF.Abs(world.Settings.Gravity.Y));
+        if (velocity.LengthSquared() <= 1e-6f)
+        {
+            return false;
+        }
+        Body.Velocity = velocity;
+        return true;
+    }
+
     /// <summary>Its Default events, once it is in the level (once only).</summary>
     public void Start()
     {

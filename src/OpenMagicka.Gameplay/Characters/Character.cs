@@ -263,7 +263,7 @@ public sealed partial class Character : Entity
             IsKnockedDown = IsKnockedDown,
             CanBeKnockedDown = CanBeKnockedDown,
             IsIntangible = IsIntangible,
-            TurnSpeed = frozen ? 0 : Template.TurnSpeed,
+            TurnSpeed = frozen ? 0 : Template.TurnSpeed * castTurn,
         };
     }
 
@@ -290,6 +290,7 @@ public sealed partial class Character : Entity
         {
             ChangeState(State.Update(this, dt));
         }
+        UpdateCasting(dt);
         if (zapTimer >= 0)
         {
             if (float.IsFinite(Template.ZapModifier))

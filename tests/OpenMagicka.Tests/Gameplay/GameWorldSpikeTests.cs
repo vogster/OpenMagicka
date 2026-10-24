@@ -49,7 +49,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 14741;
+    private const int MadeActions = 16112;
 
     [GameContentFact]
     public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()

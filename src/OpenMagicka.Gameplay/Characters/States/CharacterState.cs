@@ -78,6 +78,8 @@ public static class CharacterStates
     public static readonly CharacterState Stun = new StunState();
     public static readonly CharacterState Entangled = new EntangledState();
     public static readonly CharacterState Jump = new JumpState();
+    public static readonly CharacterState Cast = new CastState();
+    public static readonly CharacterState Charge = new ChargeState();
     public static readonly CharacterState Land = new LandState();
     public static readonly CharacterState Dead = new DeadState();
     public static readonly CharacterState Ressurection = new RessurectionState();

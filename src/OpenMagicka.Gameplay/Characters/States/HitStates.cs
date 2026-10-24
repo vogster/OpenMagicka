@@ -98,6 +98,10 @@ internal sealed class EntangledState : CharacterState
         {
             return next;
         }
+        if (character.IsPlayer && character.CastType != Spells.CastType.None)
+        {
+            return CharacterStates.Cast;
+        }
         if (character.Attacking)
         {
             return CharacterStates.Attack;

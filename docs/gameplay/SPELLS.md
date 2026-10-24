@@ -238,6 +238,120 @@ are moved into the held weapon's queue (`Item.TryAddToQueue`, with `Normalize` a
 merge rules, capacity 5), and the player's queue is cleared. When the weapon is "charged" and the player's queue
 is empty, an attack calls `Cast(Weapon)` of the stored spell.
 
+### 4.1 Casting in the world (OpenMagicka, OM-71)
+
+**What a character holds.**
+- Its element queue (five entries for an avatar) and the spell combined from it.
+- Its cast type, its spell power, and the spell effect it is running (at most one).
+- For an avatar, two more things:
+  - the cast button it holds;
+  - whether charging is unlocked. Charging locks when a charge starts and unlocks again when the
+    Force button is released.
+
+Setting the cast type to Force, Area or Self, when it was something else, combines the queue
+into the spell and empties the queue. Setting it to Weapon keeps the queue.
+
+**An avatar's buttons** (the input, OM-31, calls them; a dead character presses nothing):
+- **Force or Area pressed.** The cast starts only when all of these hold:
+  - the slot-1 item is a staff;
+  - no button is held;
+  - the cast type is none.
+
+  The cast type becomes Force or Area, and the button is held. An empty queue casts a push.
+- **Force or Area released.** The button is let go if it is the one held. Only a Force release
+  unlocks charging, as the original: after an Area charge, charging stays locked until the Force
+  button is released.
+- **Self pressed** (the special button):
+  - **With a queue:** if the cast type is none, the button is held and the cast type becomes Self.
+    A frozen, flying, pushed or knocked-down avatar casts at once, since its state will not get to it.
+  - **Without a queue:** the spell-source item's special ability is used (ENTITIES_AI §8.1.7),
+    unless the avatar is casting or charging.
+- **Self released.** The button is let go.
+- **Attack pressed** with a queue whose first entry is not a magick, or with a charged weapon:
+  if the cast type is none and the avatar is not gripped, the Weapon button is held and the cast
+  type becomes Weapon. Otherwise it is an ordinary attack.
+- **Attack released.** The Weapon button is let go if the cast type is none.
+- **Each frame.** An avatar running no effect and with no cast type lets go of a held Self or
+  Weapon button.
+- **Conjuring** adds the element to the queue, except while charging or dead (§1.3 has the
+  avatar's lightning-while-wet and fire-while-greased).
+
+**Into the cast states.** Idle and Move go to Charge or Cast, as do Entangled (Cast only), when an
+avatar has a cast type:
+- **Charge**, when charging is unlocked and the spell is a Force projectile or a Force or Area
+  push.
+- **Cast**, otherwise.
+- In Idle the check comes after "moving", and in Move after "blocking" (ENTITIES_AI §5.2).
+
+**The cast state.**
+- **Entry:** invisibility ends and the character turns solid. The animation follows the table in
+  ENTITIES_AI §5.3.
+  - Weapon casts: when the weapon is charged and the queue is empty, the clip is `cast_sword_*`
+    by the weapon's stored spell type; otherwise it is `cast_sword` (blend 0.15).
+  - A frozen character casting Self casts at once.
+- **Each frame, in order:**
+  1. The clip `idle` → Idle.
+  2. A push → Pushed; a knockdown → KnockDown.
+  3. A looping clip, once its blend ended, unless the cast is Force → Move (walking) or Idle.
+  4. The clip finished → Move or Idle.
+  5. The effect stopped → Attack if attacking, else Move or Idle.
+  6. Frozen → Idle.
+- **Exit:** the effect stops, the cast type goes back to none, and the character may turn again.
+
+**The charge state.**
+- **Entry:** invisibility ends and the character turns solid. It plays `charge_force` or
+  `charge_area` and the `spell_projectile_precharge` sound (Spells bank). The spell power goes to 0,
+  and an avatar's charging locks.
+- **Each frame:**
+  - The hit checks come first.
+  - While the clip is not looping:
+    - once it has finished, the loop clip (`charge_force_loop` / `charge_area_loop`) plays, the
+      loop sound `spell_projectile_charge_loop` starts, and the power is 1;
+    - before that, outside a blend, the power is the clip's time over its duration.
+  - An avatar whose Force or Area button is no longer held goes to Cast.
+- **Exit:** the sound stops. A spell with elements is cast at once, from the staff, so a charged
+  projectile flies on release. A charged push has no elements and is cast by the cast clip, which
+  plays the push animation.
+- **Kept from the original:** the exit casts however the charge ends, a hit or death included, and
+  the cast type stays set, so an avatar back on its feet goes on into Cast.
+
+**The `CastSpell` action** (`fromStaff`, or a bone otherwise): on its first frame, if the
+character runs no effect, it casts. When the action ends, it tells the running effect that its
+animation ended. One cast casts once: a later action of the same cast (a looping cast clip, the
+push clip after a charged projectile flew) does nothing until the cast type is set again
+(OpenMagicka's; in the original the running effect blocks it, but types without an effect yet
+would cast a push).
+
+**Non-players cast through their attacks** (the AI's `CastSpell` ability sets the spell power and
+the cast type, then attacks with a clip that holds the `CastSpell` action):
+- A non-player's Weapon cast combines its queue and casts it there and then.
+- The attack state stops the running effect when it chains into its next clip and when it ends,
+  and the end sets the cast type back to none.
+
+**Casting:**
+- **A magick** (the combined spell is all elements) comes with the magicks (OM-37); until then it
+  does nothing.
+- **An avatar's Weapon cast:**
+  - with a charged weapon and an empty queue, it casts the weapon's stored spell (which empties the
+    weapon);
+  - otherwise it imbues the queue into the weapon (§4) and casts nothing.
+- **Otherwise,** the spell takes an effect by its type and starts it by the cast type. The spell is
+  then spent. An entangled character casting Self loosens its vines by the spell's elements (by 0).
+  The effect types arrive phase by phase; a type with no effect yet casts nothing.
+
+**Running an effect.** After the state each frame, the running effect updates:
+- It gives the turn-speed share for that frame (§4).
+- While charging, the turn speed stays at ×0.125. With no effect, it is the full speed.
+- A Weapon effect that stopped is dropped outside the cast state.
+
+**Every effect's base rules:**
+- An effect lives at least its minimum time.
+- A continuous effect (all but projectiles) stops in three cases:
+  - an avatar's held button is none once the minimum time has passed;
+  - the caster is dead;
+  - an avatar's cast type is none.
+- A push, a projectile and a shield keep their own rules for this (below).
+
 ---
 
 ## 5. Behavior by type
@@ -253,6 +367,25 @@ is empty, an attack calls `Cast(Weapon)` of the stored spell.
 Hit: `Damage(Pushed, Earth, amount = strength, magnitude = 1.5)`, once per target (hit list),
 only with line of sight (the ray to the target does not cross level geometry). Entities without
 `IDamageable` get the impulse directly (elevation `10° + SpellPower·0.1·π/8`). Self/Weapon do nothing.
+
+In the world (OM-71):
+- **Timing.** The push lives at least 0.4 s; its wave runs 0.25 s. It ends once both are over, and
+  it does not stop for a released button.
+- **Each frame of the wave:**
+  - The radius is `R·(0.25 + 0.75·(1 − t/0.25))`, where `t` is the wave time left.
+  - It reaches every entity within that radius except the caster: damageable ones, and none hidden
+    behind a shield.
+  - A Force push also needs the entity inside its cone (the arc test, within 4 m of height). An Area
+    push takes the whole circle.
+  - Each entity is hit once. It needs a line of sight from the caster, and the dead are skipped.
+- **What a hit does:**
+  - A damageable entity takes the push damage from the caster's position.
+  - A missile takes no damage: it gets the impulse instead, its velocity set by the ballistic rule
+    (ENTITIES_AI §1) for the strength and a distance of 1.5.
+- **Spell power.** It goes back to 0 once the push is cast.
+- **Cues.** The `push_force` effect (at the cast source) or `push_area` (at the caster) plays, with
+  the `spell_push_force` or `spell_push_area` sound from the Spells bank. The sound's magnitude is
+  the spell power × 3.
 
 ### 5.2 Spray
 

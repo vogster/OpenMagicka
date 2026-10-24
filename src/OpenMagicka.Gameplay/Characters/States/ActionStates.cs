@@ -28,6 +28,7 @@ internal sealed class AttackState : CharacterState
         character.Body.AllowRotate = !character.IsEntangled && (clock.IsCrossFading || character.AllowAttackRotate || clock.Time < 0.1f);
         if (character.NextAttackAnimation is { } chained && character.Attacking && !clock.IsCrossFading && clock.HasFinished)
         {
+            character.StopSpell();                                            // the clip that cast it is over
             if (!character.IsPlaying("attack_recoil"))
             {
                 character.GoToAnimation(chained, 0.2f);
@@ -42,7 +43,13 @@ internal sealed class AttackState : CharacterState
         return null;
     }
 
-    protected internal override void Exit(Character character) => character.Attacking = false;
+    /// <summary>An attack's cast (a non-player casts through its attack clips) ends with it.</summary>
+    protected internal override void Exit(Character character)
+    {
+        character.Attacking = false;
+        character.StopSpell();
+        character.CastType = Spells.CastType.None;
+    }
 }
 
 /// <summary>Holding a block up.</summary>

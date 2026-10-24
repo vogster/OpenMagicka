@@ -82,6 +82,19 @@ public sealed class Item
     /// <summary>Restarts with each strike; abilities read it.</summary>
     public float Cooldown { get; internal set; }
 
+    /// <summary>The spell imbued into it (docs/gameplay/SPELLS.md §4, §4.1).</summary>
+    public Spells.ElementQueue Imbued { get; internal set; } = Spells.ElementQueue.Empty;
+
+    public bool IsSpellCharged => Imbued.Count > 0;
+
+    /// <summary>Takes the imbued spell out, combined; the item is empty after.</summary>
+    internal Spells.Spell RetrieveSpell()
+    {
+        var spell = Imbued.Combine();
+        Imbued = Imbued.Cleared();
+        return spell;
+    }
+
     /// <summary>Time until the special ability is ready again (§8.1.7); at or below 0 it is.</summary>
     public float SpecialCooldown { get; internal set; }
 
