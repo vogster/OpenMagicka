@@ -68,6 +68,22 @@ public class BarrierTests
     }
 
     [Fact]
+    public void ALightningWall_BoltsItsToucher_AndTheBoltChainsOnAShortWay()
+    {
+        using var world = World();
+        var wall = Raise(world, Elements.Shield | Elements.Lightning, Vector3.Zero);
+        var toucher = Animated(world, Foe, at: new Vector3(0.6f, 0.9f, 0));
+        var next = Animated(world, Foe, at: new Vector3(1.5f, 0.9f, 0));
+        var aside = Animated(world, Foe, at: new Vector3(0.6f, 0.9f, 3));
+        Run(world, 0.05f);
+
+        Assert.True(toucher.HitPoints < 300, $"{toucher.HitPoints}");
+        Assert.True(next.HitPoints < 300, $"{next.HitPoints}");                     // 0.9 on, within the bolt's range of 1
+        Assert.Equal(300f, aside.HitPoints);
+        Assert.Contains(next, wall.Hits.Struck);
+    }
+
+    [Fact]
     public void AStoneBarrier_StandsInTheWay()
     {
         using var world = World();

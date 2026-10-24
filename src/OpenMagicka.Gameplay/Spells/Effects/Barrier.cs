@@ -25,6 +25,9 @@ public sealed partial class Barrier : Entity
     /// <summary>A solid barrier sinks back for this long (its rising clip, 0.5 s at 2×) before it goes.</summary>
     public const float SinkTime = 0.25f;
 
+    /// <summary>A barrier's bolt reaches this far on from whom it strikes.</summary>
+    public const float BoltRange = 1;
+
     /// <summary>A solid barrier with Arcane or Life blasts this far as it breaks.</summary>
     public const float BlastRadius = 5;
 
@@ -163,7 +166,10 @@ public sealed partial class Barrier : Entity
         }
     }
 
-    /// <summary>Strikes what touches it, once per <see cref="BarrierHits.Memory"/>: a bolt with Lightning, else its contact damage.</summary>
+    /// <summary>
+    /// Strikes what touches it, once per <see cref="BarrierHits.Memory"/>: with Lightning a bolt that
+    /// chains on <see cref="BoltRange"/>, else its contact damage.
+    /// </summary>
     private void StrikeTouching()
     {
         if (Manager is not { } manager)
@@ -178,13 +184,13 @@ public sealed partial class Barrier : Entity
             {
                 continue;
             }
-            var from = Position;
             if ((Spell.Element & Elements.Lightning) != 0)
             {
-                from = Position + Vector3.UnitY * (IsSolid ? BarrierRadius : 1);
-                manager.RaiseCue(this, new LightningCue(from, entity.Position, Faded: false));
+                var from = Position + Vector3.UnitY * (IsSolid ? BarrierRadius : 1);
+                LightningBolts.StrikeAt(manager, Owner, this, from, entity, BoltRange, ContactDamage, Hits);
+                continue;
             }
-            entity.Damage(ContactDamage, Owner, from);
+            entity.Damage(ContactDamage, Owner, Position);
             Hits.Add(entity);
         }
     }

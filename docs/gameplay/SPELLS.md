@@ -866,7 +866,15 @@ In the world (OM-71), mines and barriers:
     - The touch reaches `R` around its centre, and `R` (elemental) or `2R` (solid) around its foot.
     - A solid barrier strikes only while its effect lasts; an elemental one always.
     - With Lightning, the strike is a bolt to the toucher from 1 (elemental) or R (solid) above
-      the barrier's centre. A bolt that chains on is not modelled.
+      the barrier's centre, with a range of 1 (the owner's spell-range buffs count).
+      - From each target it chains to the nearest thing within the range left and π/4 of the
+        bolt's way. Each link's length comes off the range.
+      - It chains to characters that are neither ethereal nor frozen, solid barriers, missiles
+        and other damageable things, never to mines, shields or elemental walls. It skips anything
+        on the cast's hit list, and adds every target it strikes.
+      - It stops at a barrier, a shield or a wholly deflected strike. A blocking character takes
+        it into its weapon as plain Lightning.
+      - With no next target it fades on along its way.
   - **Solid barriers** stand in the world as a ball of radius `R·scale`: characters and missiles meet it.
   - **Effect times** (solid):
     - Ice: I s, or Z s with Lightning (a tesla). An ice geyser (another element of Water, Cold,

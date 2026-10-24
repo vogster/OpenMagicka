@@ -109,7 +109,7 @@ public sealed class LightningEffect : SpellEffect
 }
 
 /// <summary>How a spell's bolt finds its target and chains on (docs/gameplay/SPELLS.md §5.5).</summary>
-public static class LightningBolts
+public static partial class LightningBolts
 {
     /// <summary>A bolt from a source along a direction; it chains from each target it hits, with the same range.</summary>
     public static void Strike(Character caster, Vector3 source, Vector3 direction, float range, IReadOnlyList<DamageEntry> damage, Spell spell, ISet<Entity> hitList)

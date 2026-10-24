@@ -6,7 +6,7 @@ namespace OpenMagicka.Gameplay.Spells.Effects;
 /// Whom one cast's barriers struck lately: they share it, so a target touching several of them is
 /// struck once per <see cref="Memory"/>. Its first barrier still standing keeps its time.
 /// </summary>
-public sealed class BarrierHits
+public sealed class BarrierHits : IHitList
 {
     public const float Memory = 0.25f;
 
@@ -17,7 +17,7 @@ public sealed class BarrierHits
 
     public bool Contains(Entity entity) => times.ContainsKey(entity);
 
-    internal void Add(Entity entity) => times.TryAdd(entity, Memory);
+    public void Add(Entity entity) => times.TryAdd(entity, Memory);
 
     internal void Join(Barrier barrier) => barriers.Add(barrier);
 
