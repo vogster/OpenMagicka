@@ -51,9 +51,30 @@ public abstract class CharacterState
         return character.IsStunned ? CharacterStates.Stun : null;
     }
 
-    /// <summary>The third common check (§5.1): a jump (panic, boosts and grips come with their systems).</summary>
-    protected static CharacterState? Actions(Character character) =>
-        character.Body.IsJumping ? CharacterStates.Jump : null;
+    /// <summary>
+    /// The third common check (§5.1): a jump, then fear (unless entangled), then boosts (spent on a
+    /// shield ahead or a self-shield; with neither they are dropped). Grips come with their system.
+    /// </summary>
+    protected static CharacterState? Actions(Character character)
+    {
+        if (character.Body.IsJumping)
+        {
+            return CharacterStates.Jump;
+        }
+        if (character.IsFeared && !character.IsEntangled)
+        {
+            return CharacterStates.Panic;
+        }
+        if (character.Boosts > 0)
+        {
+            if (character.ShieldToBoost() is not null || character.SelfShield is not null)
+            {
+                return CharacterStates.Boost;
+            }
+            character.Boosts = 0;
+        }
+        return null;
+    }
 
     /// <summary>The three common checks in order.</summary>
     protected static CharacterState? Common(Character character) => Death(character) ?? Hits(character) ?? Actions(character);
@@ -90,4 +111,7 @@ public static class CharacterStates
     public static readonly CharacterState Dash = new DashState();
     public static readonly CharacterState Alarm = new AlarmState();
     public static readonly CharacterState Busy = new BusyState();
+    public static readonly CharacterState Boost = new BoostState();
+    public static readonly CharacterState Panic = new PanicState();
+    public static readonly CharacterState PanicCast = new PanicCastState();
 }

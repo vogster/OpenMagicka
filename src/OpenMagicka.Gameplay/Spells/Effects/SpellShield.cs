@@ -86,6 +86,15 @@ public sealed class SpellShield : Entity, IShield
         return DamageResult.Hit;
     }
 
+    /// <summary>Mends it (a boost); its most comes back with its next frame.</summary>
+    public void Repair(float amount)
+    {
+        if (!dead && HitPoints > 0 && float.IsFinite(amount) && amount > 0)
+        {
+            HitPoints += amount;
+        }
+    }
+
     /// <summary>Ends it: it lets characters through at once and goes on its next frame.</summary>
     public void Kill()
     {

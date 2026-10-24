@@ -10,12 +10,16 @@ namespace OpenMagicka.Gameplay;
 /// </summary>
 public sealed class GameWorld : IDisposable
 {
-    public GameWorld(PhysicsSettings? settings = null)
+    public GameWorld(PhysicsSettings? settings = null, GameSession? session = null)
     {
         Physics = new PhysicsWorld(settings);
+        Entities.Session = session;
     }
 
     public PhysicsWorld Physics { get; }
+
+    /// <summary>The game being played, if any.</summary>
+    public GameSession? Session => Entities.Session;
 
     public EntityManager Entities { get; } = new();
 
@@ -48,6 +52,7 @@ public sealed class GameWorld : IDisposable
     /// </summary>
     public IReadOnlyList<RemovedEntity> Tick(float dt)
     {
+        dt *= Entities.TimeMultiplier;                                        // a time warp slows the whole level
         var characters = Characters.ToList();
         foreach (var character in characters)
         {
@@ -61,6 +66,7 @@ public sealed class GameWorld : IDisposable
         }
         Entities.RebuildGrid();
         Entities.Update(dt);
+        Session?.Tick(dt);
         return Entities.RemoveDead();
     }
 

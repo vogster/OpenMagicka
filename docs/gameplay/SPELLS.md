@@ -1345,7 +1345,7 @@ Thunderbolt, Teleport, MeteorShower, Charm, SummonZombie, Conflagration, SummonP
 Invisibility, Thunderstorm, TimeWarp, Blizzard, Tornado, Grease, Vortex, SummonElemental,
 SummonDeath, Corporealize, Nullify, CTD, Napalm, Portal, TractorPull, ProppMagick, Levitate,
 Zap (ChainLightning), Confuse, Wave, PerformanceEnchantment, JudgementSpray, Amalgameddon.
-Their behavior is a separate document (outside this spec).
+Their behavior, casting and unlocks are in [`MAGICKS.md`](MAGICKS.md).
 
 Localization: `#magick_<name>` (title) and `#magick_<name>d` (description), name in lower case
 (`thunderb`, `sundead`, `performance` …).

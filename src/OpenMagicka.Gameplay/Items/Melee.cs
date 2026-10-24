@@ -120,7 +120,7 @@ public static class Melee
         }
         if (entity is Character character)
         {
-            var friendly = (character.Template.Factions & owner.Template.Factions) != 0;
+            var friendly = (character.Factions & owner.Factions) != 0;
             return targets.HasFlag(friendly ? DamageTargets.Friendly : DamageTargets.Enemy);
         }
         return targets.HasFlag(DamageTargets.NonCharacters);

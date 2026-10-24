@@ -35,6 +35,21 @@ public sealed class EntityManager
 
     public IReadOnlyList<IShield> Shields => shields;
 
+    /// <summary>The game the level belongs to (its players, what they unlocked); null outside one.</summary>
+    public GameSession? Session { get; set; }
+
+    /// <summary>The scene is indoors (its <c>Indoor</c> flag): no sky for the weather magicks.</summary>
+    public bool Indoors { get; set; }
+
+    /// <summary>How fast the level's time runs (a time warp slows it); the world's frame is scaled by it.</summary>
+    public float TimeMultiplier
+    {
+        get => timeMultiplier;
+        set => timeMultiplier = value is > 0 and <= 1 && float.IsFinite(value) ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "must be in (0, 1]");
+    }
+
+    private float timeMultiplier = 1;
+
     /// <summary>
     /// Presentation any entity asks for (sounds, effects, tracers), for the engine; a character's cues
     /// come on its own <c>Cue</c> too, so listen to one or the other. It can fire during the physics step.
@@ -166,6 +181,7 @@ public sealed class EntityManager
         entities.Clear();
         all.ForEach(Release);
         grid.Rebuild(entities);
+        timeMultiplier = 1;
     }
 
     /// <summary>

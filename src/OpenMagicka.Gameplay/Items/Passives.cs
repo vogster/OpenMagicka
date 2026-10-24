@@ -109,5 +109,5 @@ public static class Passives
     private static List<Character> Around(Character owner, Vector3 at, float range) =>
         owner.Manager is { } manager ? [.. manager.Query(at, range, ignoreProtected: true).OfType<Character>()] : [];
 
-    private static bool Friends(Character a, Character b) => (a.Template.Factions & b.Template.Factions) != 0;
+    private static bool Friends(Character a, Character b) => (a.Factions & b.Factions) != 0;
 }

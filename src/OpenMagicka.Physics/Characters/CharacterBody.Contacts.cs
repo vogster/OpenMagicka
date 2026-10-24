@@ -28,6 +28,10 @@ public sealed partial class CharacterBody
     public CharacterReport AfterStep()
     {
         TakeStagedPushes();
+        if (conditions.IsOnGrease)
+        {
+            conditions = conditions with { IsOnGrease = false };            // grease lasts only for the step it was reported for
+        }
         if (impactSpeed is null && !knockedDownSelf && knockedDown.Count == 0 && touched.Count == 0)
         {
             return CharacterReport.Quiet;

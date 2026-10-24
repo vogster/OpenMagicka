@@ -56,6 +56,7 @@ internal static class Casting
                 _ => "cast_sword",
             }, 0.075f),
             CastType.Weapon => ("cast_sword", 0.15f),
+            CastType.Magick => (Spells.Magicks.MagickEffects.For(character.Spell.Magick)?.Animation ?? Spells.Magicks.Magick.SelfClip, 0.075f),
             _ => ("cast_self", 0.075f),
         };
     }
@@ -80,6 +81,10 @@ internal sealed class CastState : CharacterState
         character.Ethereal(false, 1, 1);
         var (clip, blend) = Casting.Clip(character);
         character.GoToAnimation(clip, blend);
+        if (character.CastType == CastType.Magick)
+        {
+            character.Body.AllowRotate = false;
+        }
         if (character.Statuses.Has(StatusEffects.Frozen) && character.CastType == CastType.Self)
         {
             character.CastSpell(fromStaff: true);
@@ -173,5 +178,24 @@ internal sealed class ChargeState : CharacterState
         {
             character.CastSpell(fromStaff: true);                             // a charged projectile flies on release
         }
+    }
+}
+
+/// <summary>Boosting: each press heals the bubble or mends the shield ahead, until the presses stop (MAGICKS.md §2.3).</summary>
+internal sealed class BoostState : CharacterState
+{
+    protected internal override void Enter(Character character) => character.GoToAnimation("boost", 0.2f);
+
+    protected internal override CharacterState? Update(Character character, float dt)
+    {
+        if ((Death(character) ?? Hits(character)) is { } next)
+        {
+            return next;
+        }
+        if (!character.SpendBoosts() || character.BoostCooldown <= 0)
+        {
+            return GoOn(character);
+        }
+        return null;
     }
 }

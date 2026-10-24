@@ -36,6 +36,7 @@ an abstraction (UDP + our own lobby/relay server, Steam optional). Details:
 - [Levels and triggers](formats/LEVELS_TRIGGERS.md): .lvl, scenes, conditions and actions, dialogs
 - [Enumerations](formats/ENUMS.md): names and values of the original's enums (elements, factions, magicks, animations…)
 - [Spells and combat](gameplay/SPELLS.md): elements, combinations, magicks, damage, statuses
+- [Magicks](gameplay/MAGICKS.md): unlocks, casting magicks, the boost, what each magick does
 - [Engine architecture](engine/ARCHITECTURE.md): main loop, rendering, physics, audio, input, saves
 - [Entities, AI and network](engine/ENTITIES_AI.md)
 - Decisions: [ADR-0001 Stack](adr/0001-stack.md), [ADR-0002 Network play](adr/0002-network.md), [ADR-0003 Physics](adr/0003-physics.md)

@@ -54,6 +54,9 @@ public static class CharacterTemplates
             Flies: content.MoveAnimations.Any(m => m.Movement.HasFlag(MovementProperties.Fly)),
             ModelScale: content.Models.Count > 0 && content.Models[0].Scale > 0 ? content.Models[0].Scale : 1,   // the first variant until spawns pick
             Auras: [.. content.Auras.Select(BuffTemplates.Aura)],                 // the template's own buff list is never used, as in the original
-            HasGibs: content.Gibs.Count > 0);                                     // gore is taken as on
+            HasGibs: content.Gibs.Count > 0,                                      // gore is taken as on
+            Fearless: content.Fearless,
+            Uncharmable: content.Uncharmable,
+            Nonslippery: content.Nonslippery);
     }
 }

@@ -121,8 +121,8 @@ public sealed partial class Character
         }
     }
 
-    /// <summary>An avatar's boosts: its Boost auras', its slot-1 item's and its Boost buffs', each cut to a whole number.</summary>
-    public int Boosts
+    /// <summary>What a boost press counts for: its Boost auras', its slot-1 item's and its Boost buffs', each cut to a whole number.</summary>
+    public int BoostFactor
     {
         get
         {
@@ -272,8 +272,8 @@ public sealed partial class Character
     private bool Targets(BuffAura aura, Character other)
     {
         var self = ReferenceEquals(other, this);
-        var friendly = (other.Template.Factions & Template.Factions) != 0;
-        var faction = (other.Template.Factions & aura.TargetFaction) != 0;
+        var friendly = (other.Factions & Factions) != 0;
+        var faction = (other.Factions & aura.TargetFaction) != 0;
         return aura.Target switch
         {
             AuraTarget.All => true,

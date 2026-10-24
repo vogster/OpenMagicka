@@ -81,6 +81,9 @@ public sealed class SpellMine : Entity
         return DamageResult.Damaged;
     }
 
+    /// <summary>Goes without a blast (Nullify).</summary>
+    public void Kill() => dead = true;
+
     /// <summary>Goes off: a full blast around it, sparing itself.</summary>
     public void Detonate()
     {

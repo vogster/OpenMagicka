@@ -21,6 +21,7 @@ PAGES = {
     "docs/formats/LEVELS_TRIGGERS.md": "Levels and triggers",
     "docs/formats/ENUMS.md": "Enumerations",
     "docs/gameplay/SPELLS.md": "Spells and combat",
+    "docs/gameplay/MAGICKS.md": "Magicks",
     "docs/engine/ARCHITECTURE.md": "Engine architecture",
     "docs/engine/ENTITIES_AI.md": "Entities, AI and network",
     "docs/engine/RISK_CHECKS.md": "Stack risk checks",

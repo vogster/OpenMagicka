@@ -130,7 +130,7 @@ public class BuffTests
         Assert.Equal(11f, wizard.Modify(Modified.SpellTtl, 5));
         Assert.Equal(5f, wizard.Modify(Modified.SpellRange, 5));
         Assert.Equal(0.5f, wizard.AggroMultiplier);
-        Assert.Equal(2, wizard.Boosts);                                              // cut to a whole number
+        Assert.Equal(2, wizard.BoostFactor);                                              // cut to a whole number
     }
 
     [Fact]
@@ -256,9 +256,9 @@ public class BuffTests
         var wizard = Spawn(world, Goblin with { Auras = [new BoostAura(AuraTarget.Self, 100, 0, 2)] });
         wizard.Equip(1, new Item(new ItemTemplate("staff", WeaponClass.Staff, Auras: [new BoostAura(AuraTarget.Self, 100, 0, 3.7f)])), "RightHand");
 
-        Assert.Equal(6, wizard.Boosts);
+        Assert.Equal(6, wizard.BoostFactor);
         wizard.AddBuff(new BoostBuff(5, 0.5f));
-        Assert.Equal(0, wizard.Boosts);                                              // 0.5 cuts to nothing
+        Assert.Equal(0, wizard.BoostFactor);                                              // 0.5 cuts to nothing
     }
 
     [Fact]

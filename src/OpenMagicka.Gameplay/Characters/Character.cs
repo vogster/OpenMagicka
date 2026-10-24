@@ -181,7 +181,7 @@ public sealed partial class Character : Entity
 
     private bool Dead { get; set; }
 
-    public override bool IsRemovable => Dead && corpseTimer < CorpseRemoval && RemoveAfterDeath;
+    public override bool IsRemovable => (Dead && corpseTimer < CorpseRemoval && RemoveAfterDeath) || (Dead && discarded);
 
     public override bool IsDamageable => true;
 
@@ -275,6 +275,7 @@ public sealed partial class Character : Entity
             IsKnockedDown = IsKnockedDown,
             CanBeKnockedDown = CanBeKnockedDown,
             IsIntangible = IsIntangible,
+            IsLevitating = IsLevitating,
             TurnSpeed = frozen ? 0 : Template.TurnSpeed * castTurn,
         };
     }
@@ -298,6 +299,8 @@ public sealed partial class Character : Entity
         Body.SpeedMultiplier = 1;
         SelfShield?.Update(this, dt);
         SyncShieldMass();
+        UpdateMagicks(dt);
+        UpdateMind(dt);
         CountDownMeleeBoost(dt);
         if (State is not null)
         {

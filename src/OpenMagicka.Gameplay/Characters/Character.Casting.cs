@@ -171,8 +171,7 @@ public sealed partial class Character
 
     /// <summary>
     /// Casts the combined spell now, unless an effect runs (the <c>CastSpell</c> action, the end of a
-    /// charge): an avatar's Weapon cast imbues the weapon or casts what it holds; a magick waits for
-    /// the magicks.
+    /// charge): an avatar's Weapon cast imbues the weapon or casts what it holds; a magick runs its effect.
     /// </summary>
     public void CastSpell(bool fromStaff, string? source = null)
     {
@@ -183,7 +182,7 @@ public sealed partial class Character
         spent = true;
         if (Spell.Element == Elements.All)
         {
-            Spell = default;                                                  // magicks come with OM-37
+            CastMagick();
             return;
         }
         if (!IsPlayer && CastType == CastType.Weapon)

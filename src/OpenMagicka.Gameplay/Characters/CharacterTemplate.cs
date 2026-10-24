@@ -32,6 +32,9 @@ public enum Factions
 /// </summary>
 /// <param name="KnockdownTolerance">The least magnitude that knocks it down; exactly 5000 means never.</param>
 /// <param name="ZapModifier">The speed multiplier for a moment after a lightning hit.</param>
+/// <param name="Fearless">Fear passes it by.</param>
+/// <param name="Uncharmable">Charm passes it by.</param>
+/// <param name="Nonslippery">Grease does not make it slide.</param>
 public sealed record CharacterTemplate(
     string Id,
     Factions Factions,
@@ -56,7 +59,10 @@ public sealed record CharacterTemplate(
     IReadOnlyList<EquipmentTemplate>? Equipment = null,
     float ModelScale = 1,
     IReadOnlyList<Buffs.Aura>? Auras = null,
-    bool HasGibs = false)
+    bool HasGibs = false,
+    bool Fearless = false,
+    bool Uncharmable = false,
+    bool Nonslippery = false)
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;

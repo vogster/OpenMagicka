@@ -29,6 +29,9 @@ public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3
 
 public sealed record CameraShakeCue(Vector3 Position, float Magnitude, float Duration) : AnimationCue;
 
+/// <summary>A visual effect started once at a point in the world (a magick's flash, a marker), facing a direction.</summary>
+public sealed record WorldEffectCue(string Effect, Vector3 Position, Vector3 Direction) : AnimationCue;
+
 /// <summary>
 /// An item's or a missile's effect (a strike's sparks, a missile's trail); a following one stays on
 /// its source until its <see cref="ItemEffectEndCue"/>.
