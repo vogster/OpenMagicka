@@ -151,6 +151,10 @@ public sealed class PhysicsWorld : IDisposable
         {
             body.Damping = (0, 0);
         }
+        if (options.HasFlag(BodyOptions.Static))
+        {
+            body.MotionType = MotionType.Static;
+        }
         var wrapper = new PhysicsBody(this, body, shape);
         body.Tag = wrapper;
         bodies.Add(wrapper);

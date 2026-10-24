@@ -1588,6 +1588,56 @@ model (or a nested model), optional collision mesh (vertices and triangles), col
 (hash and matrix), light, events, ID, and then an optional skeletal part (radius, models, skeleton, animations) for animated
 props. Level props (from `LevelModel`) are created when the scene loads; `spawnPhys` / `spawnAnimProp` are created by triggers.
 
+#### 8.4.1 Physics props at run time (ours: `Gameplay.Props.PhysicsProp`, OM-73)
+
+In the 64 files of the Steam release, 63 props have hit points and 2 move (`bathball`, `Debris00`); the rest stand for good.
+
+**Body:**
+- The original takes the template's **first** collision box only and reads the others for nothing. With no box (the two
+  mesh-only templates, `invisible_mechanism` and `web_spider`) its box has no size; ours gives it a sliver.
+- The box is a corner, sides and a turn in the prop's space; the body sits at the box's centre, turned with the placement.
+- A prop that does not move is static: others collide with it, and pushes, knockbacks and pulls leave it where it is.
+- A moving prop falls and is thrown by them. Characters push it only when it is pushable; otherwise a character is stopped
+  by it but does not move it.
+- A prop that is not solid lets entities pass, but still notes them; the level stops it either way.
+
+**Hits:**
+- Each entity that touches a prop sets off its `Hit | Collision` events, then is not heard again for 0.25 s (the original's
+  hit list).
+- The fire props (`Furnace_fire` and the like) burn whoever walks through them that way.
+
+**Damage** (a damageable prop, as the original's `InternalDamage`):
+1. A knockback (40°) or else a push (10°) throws a prop that moves, and is reported either way.
+2. The resistances count inclusively.
+3. A status attack of fire, cold, water or poison gives that status. As the original, the template's "can have status" flag
+   is read and not looked at.
+4. On a damage attack:
+   - lightning on a wet prop counts threefold;
+   - life thins its poison;
+   - on a frozen prop, physical blows lose 200, then count threefold, at least at magnitude 1;
+   - the damage is the whole part of amount × magnitude.
+5. A blow of no amount (a status alone) counts as deflected, as the original.
+6. Statuses then wear on and hurt it each frame.
+
+**Triggers:** a hit that hurts it sets off its `onDamage` trigger. Both `onDamage` and `onDeath` run with **no sender**, as
+the original.
+
+**Breaking** happens once, at no hit points, or on a kill or a `Remove` event:
+1. its `onDeath` trigger fires;
+2. then its `Death` events (blasts, sounds, effects, camera shakes);
+3. then its pieces fly apart, as a `GibsCue` for the renderer (debris with the trail effect; frozen ones shatter as ice).
+
+The original's prop never fires its `OverKill` groups (two templates have them).
+
+**Effects:** a prop's carried effects play on it while it stands (`PropEffectCue`, ended by `PropEffectsEndCue`).
+
+**Where props come from:**
+- the props the level model places, which stand when the scene starts (the running level makes them);
+- the `spawnPhys` action, which can give a prop a name and triggers. As the original, it runs on every peer (only a joining
+  client's is skipped), not only on the host.
+
+The animated props (`spawnAnimProp`, `AnimatedPhysicsEntity`) come with OM-46.
+
 ---
 
 ## 9. Special abilities (`SpecialAbilities`, 114 files, ~106 types)

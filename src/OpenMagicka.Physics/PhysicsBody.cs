@@ -1,5 +1,6 @@
 using System.Numerics;
 using Jitter2.Dynamics;
+using Jitter2.LinearMath;
 
 namespace OpenMagicka.Physics;
 
@@ -70,7 +71,19 @@ public sealed class PhysicsBody
             var q = Body.Orientation;
             return new Quaternion(q.X, q.Y, q.Z, q.W);
         }
+        set
+        {
+            if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z) || !float.IsFinite(value.W) || value.LengthSquared() < 1e-12f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(Orientation), value, "must be a finite rotation");
+            }
+            var unit = Quaternion.Normalize(value);
+            Body.Orientation = new JQuaternion(unit.X, unit.Y, unit.Z, unit.W);
+        }
     }
+
+    /// <summary>Whether the body never moves (made <see cref="BodyOptions.Static"/>).</summary>
+    public bool IsStatic => Body.MotionType == MotionType.Static;
 
     /// <summary>Setting a velocity wakes the body up.</summary>
     public Vector3 Velocity

@@ -23,9 +23,35 @@ public class ScriptThingActionsTests
         [new AnimatedLevelPartContent("Lever", false, null, [], [], [], 2, [Key(0, 0), Key(2, 4)],
             [new VisualEffectPlacement("ray", new Xna.Vector3(0, 1, 0), new Xna.Vector3(0, -1, 1), 5, "fx_ray")], [], null, null, [])]);
 
-    private sealed class Armoury(ItemTemplate item) : IScriptAssets
+    private sealed class Armoury(ItemTemplate item, OpenMagicka.Gameplay.Props.PropTemplate? prop = null) : IScriptAssets
     {
         public ItemTemplate? Item(string asset) => asset == "data/items/wizard/" + item.Id ? item : null;
+
+        public OpenMagicka.Gameplay.Props.PropTemplate? Prop(string asset) => prop is not null && asset == "data/physicsentities/" + prop.Id ? prop : null;
+    }
+
+    [Fact]
+    public void SpawnPhys_StandsAPropAtThePlace_WithItsNameAndTriggers()
+    {
+        using var world = World();
+        var barrel = new OpenMagicka.Gameplay.Props.PropTemplate("barrel", false, false, true, 140, 100, OpenMagicka.Gameplay.Combat.ResistanceTable.Neutral,
+            new OpenMagicka.Gameplay.Props.PropBox(new Numerics.Vector3(-0.5f, 0, -0.5f), Numerics.Vector3.One, Numerics.Quaternion.Identity), [], "", [], []);
+        var scene = Scene(world, """
+            <Trigger id="put" autorun="false"><Then><spawnPhys object="barrel" area="spot" id="Keg" onDeath="gone"/></Then></Trigger>
+            <Trigger id="gone" autorun="false"><Then><counter name="gone" action="inc" value="1"/></Then></Trigger>
+            <Trigger id="count" autorun="false"><If><physicsPresent nr="1" compareMethod="equal"/></If><Then><counter name="seen" action="inc" value="1"/></Then></Trigger>
+            """);
+        scene.Assets = new Armoury(new ItemTemplate("none"), barrel);
+
+        Fire(scene, "put");
+        var keg = Assert.IsType<OpenMagicka.Gameplay.Props.PhysicsProp>(world.Entities.FindByUniqueId(ScriptScene.Hash("keg")));
+        Assert.Equal(new Numerics.Vector3(3, 1, 0), keg.Position);                                // its box's centre over the spot
+        Fire(scene, "count");
+        Assert.Equal(1, scene.Level.Counter(ScriptScene.Hash("seen")));
+
+        keg.Kill();
+        scene.Update(Tick);
+        Assert.Equal(1, scene.Level.Counter(ScriptScene.Hash("gone")));
     }
 
     private static ScriptScene Scene(GameWorld world, string triggers)

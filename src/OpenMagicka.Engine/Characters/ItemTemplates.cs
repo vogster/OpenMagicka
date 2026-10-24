@@ -176,6 +176,7 @@ public static class ItemTemplates
         EffectEvent f => new Gameplay.Items.EffectEvent(f.Effect, f.Follow, f.WorldAlign),
         RemoveEvent r => new Gameplay.Items.RemoveEvent(r.Bounce),
         SplashEvent s => new Gameplay.Items.SplashEvent(Damage(s.Damage), s.Radius),
+        CameraShakeEvent c => new Gameplay.Items.CameraShakeEvent(c.Ttl, c.Magnitude, c.FromPosition),
         _ => null,
     };
 

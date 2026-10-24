@@ -31,6 +31,13 @@ public sealed class RunningLevel
         }
         (world.Entities.Bestiary, world.Entities.NavMesh) = (Bestiary, NavMesh);
         Scene.Assets = assets;
+        foreach (var placed in model?.PhysicsEntities ?? [])
+        {
+            if (assets?.Prop("data/physicsentities/" + placed.Template) is { } template && world.Entities.Entities.Count < Gameplay.Entities.EntityManager.Capacity)
+            {
+                ScriptProps.Place(world, template, LevelNavigation.ToNumerics(placed.Transform));     // the level's own props stand when it starts
+            }
+        }
         Scene.Enter();
     }
 

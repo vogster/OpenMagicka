@@ -22,7 +22,7 @@ public class ScriptGameScenesTests(ITestOutputHelper output)
         var registry = ScriptRegistry.Engine();
         var library = new OpenMagicka.Engine.Characters.TemplateLibrary(loader);
         var (bestiary, assets) = (new OpenMagicka.Engine.Characters.ContentBestiary(library), new ContentScriptAssets(library));
-        var (scenes, triggers, areas, fired, spawned, items, effects, parts) = (0, 0, 0, 0, 0, 0, 0, 0);
+        var (scenes, triggers, areas, fired, spawned, items, effects, parts, props) = (0, 0, 0, 0, 0, 0, 0, 0, 0);
         var missing = new SortedSet<string>();
         foreach (var path in scenePaths)
         {
@@ -38,6 +38,7 @@ public class ScriptGameScenesTests(ITestOutputHelper output)
             }
             spawned += world.Characters.Count();
             items += world.Entities.Entities.Count(e => e is OpenMagicka.Gameplay.Items.WorldItem);
+            props += world.Entities.Entities.Count(e => e is OpenMagicka.Gameplay.Props.PhysicsProp);
             effects += scene.Effects.All.Count(e => e.IsActive);
             parts += places.Parts.Count(p => p.IsPlaying || p.Time > 0);
             level.Leave();
@@ -51,12 +52,12 @@ public class ScriptGameScenesTests(ITestOutputHelper output)
             (scenes, triggers, areas) = (scenes + 1, triggers + scene.Triggers.Count(), areas + places.Areas.Count() - 1);
         }
         var unknown = registry.Unknown.ToList();
-        output.WriteLine($"{scenes} scenes, {triggers} triggers and points, {areas} areas; {fired} firings, {spawned} characters, {items} items, {effects} effects playing and {parts} parts moved in 2 s each; "
+        output.WriteLine($"{scenes} scenes, {triggers} triggers and points, {areas} areas; {fired} firings, {spawned} characters, {items} items, {props} props, {effects} effects playing and {parts} parts moved in 2 s each; "
             + $"{unknown.Count} kinds still unknown: {string.Join(", ", unknown)}; areas missing: {string.Join(", ", missing)}");
         Assert.True(scenes > 100 && triggers > 2500);
         Assert.True(fired > 0);
         Assert.True(spawned > 100);
-        Assert.True(items > 0 && effects > 0 && parts > 0);
+        Assert.True(items > 0 && props > 0 && effects > 0 && parts > 0);
         Assert.DoesNotContain(unknown, u => u.StartsWith("if:", StringComparison.Ordinal));      // every condition is known
         Assert.Empty(missing);                                                                     // no area condition looks for an area not there
     }

@@ -111,3 +111,53 @@ public sealed class SpawnItemAction : ScriptAction
         item.IsPinned = !PhysicsEnabled;
     }
 }
+
+/// <summary>
+/// <c>spawnPhys object= area= id= onDeath= onDamage=</c>: the physics prop <c>Data/PhysicsEntities/&lt;object&gt;</c>
+/// stands at the place, turned with it; a damageable one sets off its triggers (with no sender, as the
+/// original). The props come from the running level's assets; with none, none is made.
+/// </summary>
+public sealed class SpawnPhysAction : ScriptAction
+{
+    public string Object { get; set; } = "";
+    public string Area { get; set; } = "";
+    public string Id { get; set; } = "";
+    public string OnDeath { get; set; } = "";
+    public string OnDamage { get; set; } = "";
+
+    protected override void Execute()
+    {
+        var world = Scene.World;
+        if (world.Physics.IsDisposed || world.Physics.IsStepping || world.Entities.Entities.Count >= EntityManager.Capacity
+            || Scene.Assets?.Prop("data/physicsentities/" + Object) is not { } template)
+        {
+            return;
+        }
+        var prop = ScriptProps.Place(world, template, Scene.Places.Placement(Hash(Area), Scene.Random));
+        if (Id.Length > 0)
+        {
+            prop.UniqueId = Hash(Id);
+        }
+        (prop.OnDeathTrigger, prop.OnDamageTrigger) = (OnDeath.Length > 0 ? Hash(OnDeath) : 0, OnDamage.Length > 0 ? Hash(OnDamage) : 0);
+    }
+}
+
+/// <summary>Putting a physics prop in a world.</summary>
+public static class ScriptProps
+{
+    public static Gameplay.Props.PhysicsProp Place(Gameplay.GameWorld world, Gameplay.Props.PropTemplate template, Matrix4x4 at)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        var prop = new Gameplay.Props.PhysicsProp(world.Physics, template, at);
+        try
+        {
+            world.Entities.Add(prop);
+        }
+        catch
+        {
+            world.Physics.Remove(prop.Body);
+            throw;
+        }
+        return prop;
+    }
+}

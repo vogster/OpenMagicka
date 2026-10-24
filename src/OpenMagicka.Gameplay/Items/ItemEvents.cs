@@ -55,6 +55,9 @@ public sealed record BlastEvent(IReadOnlyList<DamageEntry> Damage, float Radius)
 /// <summary>A decal on the floor under the source (within twice its radius below), along its flight.</summary>
 public sealed record DecalEvent(string Decal, float Scale) : ItemEvent;
 
+/// <summary>Shakes the camera for a time (from the source's position, or wherever the camera is).</summary>
+public sealed record CameraShakeEvent(float Time, float Magnitude, bool FromPosition) : ItemEvent;
+
 /// <summary>A condition and the events it sets off.</summary>
 public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEvent> Events)
 {
@@ -78,6 +81,7 @@ public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEven
                 EffectEvent f => f.Effect is not null,
                 BlastEvent b => b.Damage is not null && b.Damage.All(d => float.IsFinite(d.Amount) && float.IsFinite(d.Magnitude)) && b.Radius >= 0 && float.IsFinite(b.Radius),
                 DecalEvent d => d.Decal is not null && float.IsFinite(d.Scale),
+                CameraShakeEvent c => float.IsFinite(c.Time) && float.IsFinite(c.Magnitude),
                 _ => e is not null,
             };
             if (!valid)

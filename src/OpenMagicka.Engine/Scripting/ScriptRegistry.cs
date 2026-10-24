@@ -67,6 +67,7 @@ public sealed class ScriptRegistry
         .Action<StartEffectAction>("startEffect")
         .Action<StopEffectAction>("stopEffect")
         .Action<SpawnItemAction>("spawnItem")
+        .Action<SpawnPhysAction>("spawnPhys")
         .Action<CameraMoveAction>("cameraMove")
         .Action<CameraReleaseAction>("cameraRelease")
         .Action<CameraShakeAction>("cameraShake")

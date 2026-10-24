@@ -134,6 +134,7 @@ public sealed class TractorPull() : Magick(MagickType.TractorPull, "cast_area_gr
         Character c => c.Body.Body.Mass,
         Missile => Missile.Mass,
         WorldItem => WorldItem.Mass,
+        Props.PhysicsProp prop => prop.Body.Mass,
         _ => 1,
     };
 }

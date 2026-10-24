@@ -19,6 +19,9 @@ public enum BodyOptions
 
     /// <summary>No velocity is lost to damping: whoever drives the body sets its velocity.</summary>
     Undamped = 8,
+
+    /// <summary>The body never moves (a heavy prop): others collide with it, it stays where it is put.</summary>
+    Static = 16,
 }
 
 /// <summary>One contact of a body during a step, seen from that body.</summary>

@@ -662,7 +662,13 @@ Ours is `ThingActions.cs`, `ScenePart.cs` and `SceneEffects.cs`.
 - `attachTo` waits for OM-74.
 - The items come from the running level's `IScriptAssets` (the game's content); with none, no item is made.
 
-**`spawnPhys`** comes with the physics props (OM-73).
+**`spawnPhys`**:
+- The physics prop `Data/PhysicsEntities/<object>` stands at the place, turned with it, and takes the name and the
+  triggers given.
+- Its triggers run with no sender, as the original.
+- The level model's own props stand when the running level starts the scene.
+- The props come from the running level's `IScriptAssets`.
+- What a prop does is in ENTITIES_AI.md §8.4.1.
 ### 9.3 Ours: the stage's actions (OM-45)
 
 Ours is `StageActions.cs`, `RequestActions.cs` and `ScriptStage.cs`. The level's stage (shared by its scenes, as the
@@ -772,8 +778,7 @@ in.
 
 **Not yet fed:** the dialogs (OM-49), the boss fight, the cutscenes, the deaths on the level, the achievements and the packs
 reach the scripts through `ScriptGame`, which their own tasks fill; until then nothing there is shown, done, won or owned. The
-campaign's loop is the scene's own flag. `physicsPresent` counts entities that are physics objects (`Entity.IsPhysicsObject`),
-none until the props come (`spawnPhys`, OM-73).
+campaign's loop is the scene's own flag. `physicsPresent` counts the physics props (`Entity.IsPhysicsObject`), the damageable ones with `onlyDamagable`.
 
 ## 11. Dialogs (`Levels/Dialog_*.xml`)
 
