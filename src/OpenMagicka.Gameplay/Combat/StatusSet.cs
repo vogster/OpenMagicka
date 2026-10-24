@@ -63,14 +63,13 @@ public sealed partial class StatusSet
     /// <summary>Burning and poison stop regeneration.</summary>
     public bool BlocksRegeneration => (Active & (StatusEffects.Burning | StatusEffects.Poisoned)) != 0;
 
-    /// <summary>The cap cold and poison put on the speed multiplier: cold <c>0.333 + 0.667·0.001^m</c>, poison 0.5.</summary>
+    /// <summary>Cold's slowdown, <c>0.333 + 0.667·0.001^m</c>; 1 when not cold.</summary>
+    public float ColdSlowdown => Has(StatusEffects.Cold) ? 0.333f + 0.667f * MathF.Pow(0.001f, this[StatusEffects.Cold].Magnitude) : 1;
+
+    /// <summary>The cap cold and poison put on the speed multiplier: cold's slowdown, poison 0.5.</summary>
     public float SpeedFactor(bool inCutscene = false)
     {
-        var factor = 1f;
-        if (Has(StatusEffects.Cold))
-        {
-            factor = MathF.Min(factor, 0.333f + 0.667f * MathF.Pow(0.001f, this[StatusEffects.Cold].Magnitude));
-        }
+        var factor = ColdSlowdown;
         if (Has(StatusEffects.Poisoned) && !inCutscene)
         {
             factor = MathF.Min(factor, 0.5f);

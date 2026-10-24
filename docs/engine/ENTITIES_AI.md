@@ -218,8 +218,8 @@ With 4 players this is about −2%. The effect is small, but it is worth replica
 
 ### 2.5 The character's core each frame
 
-What a character does in its own update, leaving out animation, effects, auras, grips and the state
-machine (OM-33), in this order:
+What a character does in its own update, leaving out effects, auras and grips (where the animation and
+the state machine run in it: §5.4), in this order:
 
 1. Hit points are capped at the maximum; the immortality timer runs down (immortal while it is
    above 0). The speed multiplier resets to 1.
@@ -236,8 +236,8 @@ machine (OM-33), in this order:
 5. Frozen (or bloating): no speed, no turning, no movement.
 6. The last attacker is forgotten 8 s after the last hit, counted only while no status is active.
 
-**Death.** A character dies when its hit points reach 0 (in the original, its dead state calls
-`Die` once the death animation starts; OpenMagicka dies on the same frame). An undying character
+**Death.** A character whose hit points reach 0 dies through the dead state, when its death clip ends
+(§5.4); one made without animations (tests, tools) dies on the same frame. An undying character
 (not drowning) starts its revival timer (`UndieTime`, or 0.5 s when it is zero) and rises with
 `UndieHitPoints`; a template that gives none would die again at once, as in the original. An overkill
 sets the hit points to `−MaxHP − 1000` and the corpse timer to −100.
@@ -361,6 +361,47 @@ effect on entering the interval. After passing `end`, `Kill` is called once. The
 
 Example from the data (goblin_warrior): `attack_melee0` → clip `attack_sword_doubleslash`, actions `Move`, `DealDamage`, `Move`, `DealDamage`.
 
+### 4.1 Clip timing (what the state machine and the actions see)
+
+A character plays one clip at a time, with at most one crossfade towards the next (the skinned
+model's controller; only its timing matters to the rules):
+
+- **Time** runs at `dt × speed × clip speed`: the character's animation speed (0 while frozen,
+  the zap modifier, slowed by cold) times the clip's own. A clip that does not loop stops at its
+  end and **has finished**; a looping one wraps and reports a loop each time it does.
+- **A crossfade** to a new clip takes the given blend time. Meanwhile the old clip keeps playing,
+  is not "finished", and keeps its actions. When the blend time is exceeded the new clip starts
+  from 0. Starting another crossfade while one runs queues it (only the last one is kept) and
+  halves what is left of the current blend; the queued one starts when the current one ends.
+  Nothing advances without time: at speed 0 a crossfade never ends. Quirks kept from the original:
+  the loop flag given last is the one the running blend's clip starts with; the clip speed changes
+  to the new clip's as soon as its blend starts; while a blend runs, "looping" still describes the
+  old clip (so `Hit`, which leaves when the clip finishes or loops, leaves on the next frame when
+  entered from a looping idle).
+- **Choosing a clip** (`GoToAnimation(name, blend)`): nothing happens if the same animation is
+  playing and not finished. The set is the default one unless an equipped item (not a staff) has its
+  own set holding that animation; an animation missing from the set falls back to `idle`, not
+  looping. The blend is the clip's own blend time if it has one, else the one asked for. Forcing a
+  clip (`ForceAnimation`) drops any queued crossfade and starts it at once.
+- **Actions** belong to the clip whose crossfade finished. When a crossfade ends, the old clip's
+  actions that had not ended are ended (`Kill`), unless the new clip has the same list; all the
+  "started" and "ended" marks are cleared, and cleared again at every loop. Each frame, after the
+  clip time moved, every action of the current clip is checked at `t = time / duration`: it runs
+  when `t` has reached its start and either `t` is within its end or it has not run yet (so a late
+  start still runs once), told whether this is its first run; when `t` is past its end, an action
+  that ran is ended once. More quirks kept: the actions taken when a blend ends are those of the
+  animation asked for last (even one still queued); leaving a clip ends its actions whether they ran
+  or not, and a loop wrapping on the frame a blend ends ends them all twice; an action that forces
+  another animation hands the rest of that frame's loop to the new clip's actions, by index (and its
+  own "started" mark lands on the new action at its index, which then never gets a first run); a
+  missing animation recorded as `idle` starts its blend over at every request.
+
+In OpenMagicka: `OpenMagicka.Gameplay.Animation` (`AnimationClock`, `CharacterAnimator`), and
+`CharacterAnimationSets` (Engine) reads a template's sets with each clip's duration from its
+skeleton. Across the 338 vanilla templates that is 1,090 sets, 16,475 animations and 16,264 actions;
+only the base template `a_basic_character` names clips its skeleton lacks (8 animations, left out;
+the original would fail on loading it). The first clip is `idle`, started at once.
+
 ---
 
 ## 5. Character state machine (CharacterStates)
@@ -476,6 +517,63 @@ stateDiagram-v2
 | `Jump` / `Land` | `move_jump_up` / `move_jump_mid` → `move_jump_down` when falling → `move_jump_end` | |
 | `Alarm` | `spec_alert0` (Discover) / `spec_alert1` (Danger) | NPC only |
 | `Busy` | `emote_confused0`, movement forbidden | inventory is open (versus/inventory) |
+
+### 5.4 The state machine in the character's frame
+
+Where it runs (the order of §2.5, with animation): the animation clock moves and the current clip's
+actions run (skipped once a corpse's timer is below −10 and its clip has finished with no blend);
+the speed multiplier and the animation speed reset to 1; the self-shield updates; **the state
+updates and may hand over to another** (the old one's exit, then the new one's entry; the old one is
+kept as the previous state); then the zap (it multiplies both speeds), the timers, regeneration and
+statuses follow. Last, the animation speed is scaled: in `Move` (and `Panic`) by the body's speed as
+a share of its maximum (1 when the maximum is 0); otherwise, when cold, by the cold slowdown; frozen
+sets it to 0.
+
+Details the table above leaves out (blend times in seconds):
+
+- **Death goes through `Dead`.** With a state machine, a character whose hit points reach 0 (or
+  that is overkilled) enters `Dead`, plays `die0` or `die1` (half and half when it has both; 0.05),
+  and only **dies when that clip finishes** (an overkill dies on the dead state's first update and its
+  corpse is removed). Meanwhile it is not dead: queries still find it, pushes and statuses still take. An
+  undying character with hit points again and its revival timer running, whose clip stopped, moves
+  to `Ressurection`, which forces `revive` (or `hit` without one) and goes on when it finishes.
+- **`KnockDown`** clears the knocked-down and hit flags on every update (they are only triggers),
+  plays `hit_stun_begin` (0.05), then `hit_stun_end` (0.05), then leaves; freezing also gets it up.
+- **`Hit`** plays `hit` (0.1) and leaves when the clip finishes or loops, or the character freezes;
+  it clears the hit flag on exit and checks only death meanwhile. The hit flag survives death, so a
+  revived character first plays the hit that killed it.
+- **`Flying`** (`hit_fly`, 0.03) clears the hit flag and lands into `KnockDown` (if knocked down) or
+  goes on. **`Pushed`** (`hit_slide`, 0.05) ignores a `Flying` the common checks give and leaves
+  when the push ends. **`Stun`** prefers `stunned`, else `idle_wnd` (0.35).
+- **`Jump`** plays `move_jump_up` (or `move_jump_mid`; 0.2), turns to `move_jump_down` (0.3) once
+  falling, and lands into **`Land`** (`move_jump_end`, 0.13), which waits for the ground and the
+  clip's end. `Land` checks nothing else: a character killed while landing dies once it has landed,
+  and one without a `move_jump_end` clip waits for good (as the original).
+- **`Idle`** picks, on entry: the special idle (0.2), `idle_wnd` when poisoned (0.2), `idle_agg`
+  when aggressive (0.2), `idle` (0.3 coming from `idle_agg`/`idle_wnd`, else 0.2); and when a clip
+  ends with no blend running: `idle_wnd` (0.3), `idle_agg` (0.2), the special idle (0.1) or `idle`
+  (0.5). It leaves for `Alarm`, `Move` (moving), `Dash`, `Attack`, `Block`, or `Entangled`; it allows
+  moving and turning on entry (unless entangled), forbids moving and clears the special idle on
+  exit.
+- **`Move`** plays `move_wnd` when poisoned (0.4), else `move_run` at ≥ 0.6 of the maximum speed,
+  `move_walk` under 0.4 (0.25), keeping the current one in between; during a zap it neither changes
+  the clip nor goes idle (the common checks, dashes, attacks and blocks still apply); it goes idle
+  when the wanted movement is under 0.1. The clip choice uses the 3D speed share (0 when the maximum
+  is 0), the animation speed the flat one (1 when the maximum is 0), as the original.
+- **`Attack`** plays the next attack (or `idle`; 0.075), allows turning during a blend, with the
+  attack-rotate flag, or in the first 0.1 s of the clip (never entangled), chains the next attack
+  (0.2) when the clip ends while still attacking (not after `attack_recoil`), and leaves when no next
+  attack is set and the clip finishes (or loops with no blend), clearing the attacking flag.
+- **`Block`**, **`Dash`** (the next dash animation, 0.2, until its clip ends; with none set it asks
+  for none, which plays `idle` once; clears dashing), **`Alarm`** (`spec_alert0` to discover,
+  `spec_alert1` for danger, 0.2; clears the alert; a pending next attack holds it) and
+  **`Busy`** (`emote_confused0`, 0.2, while busy) as in the table.
+
+OpenMagicka has `Idle`, `Move`, `Hit`, `KnockDown`, `Flying`, `Pushed`, `Stun`, `Entangled`, `Jump`,
+`Land`, `Dead`, `Ressurection`, `Attack`, `Block`, `Dash`, `Alarm` and `Busy` now; `Cast`, `Charge`,
+`PanicCast`, `Panic`, `Boost`, `Gripping`, `GripAttack`, `Drop` and `Bloat`, with the transitions into
+them, come with spells in the world, panic and fear, shields, grips and bloating. A character made
+without animations has no state machine and dies on the frame its hit points reach 0 (§2.5).
 
 ---
 

@@ -31,11 +31,14 @@ public sealed partial class Character : Entity
     private float undieTimer = float.NaN;
     private float corpseTimer;
     private float lastAttackerTimer;
+    private readonly Random random;
     private Vector3 lastPosition;
 
     /// <param name="players">The players in the game, for an enemy's resistances.</param>
-    /// <param name="random">Picks the corpse time (20 to 40 s).</param>
-    public Character(CharacterTemplate template, PhysicsWorld world, Vector3 position, int players = 1, ResistanceTable? staff = null, Random? random = null)
+    /// <param name="random">Picks the corpse time (20 to 40 s) and the death clip.</param>
+    /// <param name="animations">The template's animations; without them there is no state machine and death is immediate.</param>
+    public Character(CharacterTemplate template, PhysicsWorld world, Vector3 position, int players = 1, ResistanceTable? staff = null,
+        Random? random = null, Animation.CharacterAnimations? animations = null)
     {
         ArgumentNullException.ThrowIfNull(template);
         template.Validate();
@@ -46,7 +49,14 @@ public sealed partial class Character : Entity
         Defences = new Defences(template.ResistancesFor(players), staff);
         HitPoints = template.MaxHitPoints;
         IsEthereal = template.IsEthereal;
-        corpseTimer = 20 + 20 * (float)(random ?? Random.Shared).NextDouble();
+        this.random = random ?? Random.Shared;
+        corpseTimer = 20 + 20 * (float)this.random.NextDouble();
+        if (animations is not null)
+        {
+            Animator = new Animation.CharacterAnimator(this, animations);
+            State = States.CharacterStates.Idle;
+            State.Enter(this);
+        }
     }
 
     public CharacterTemplate Template { get; }
@@ -137,7 +147,7 @@ public sealed partial class Character : Entity
         }
     }
 
-    /// <summary>Back on its feet (the state machine's call, once the get-up animation ends).</summary>
+    /// <summary>The knockdown trigger is spent (the knockdown state's call).</summary>
     public void StandUp() => IsKnockedDown = false;
 
     /// <summary>Vines hold the character; not the immortal, not the burning.</summary>
@@ -164,11 +174,11 @@ public sealed partial class Character : Entity
 
     public void ReleaseEntanglement() => Entanglement = 0;
 
-    /// <summary>Dies at once (a kill plane, a script).</summary>
+    /// <summary>Kills (a kill plane, a script): at once without a state machine, through the death clip with one.</summary>
     public void Kill()
     {
         HitPoints = MathF.Min(HitPoints, 0);
-        Die();
+        DieUnlessDying();
     }
 
     /// <summary>Shatters: no corpse, no revival.</summary>
@@ -180,19 +190,27 @@ public sealed partial class Character : Entity
             HitPoints = -MaxHitPoints - 1000;
             corpseTimer = -100;
         }
-        Die();
+        DieUnlessDying();
     }
 
-    private void Die()
+    /// <summary>With a state machine, the dead state dies when the death clip ends; without, now.</summary>
+    private void DieUnlessDying()
+    {
+        if (State is null)
+        {
+            Die();
+        }
+    }
+
+    internal void Die()
     {
         if (Dead)
         {
             return;
         }
-        if (Template.Undying && !IsOverkilled)
-        {
-            undieTimer = Template.UndieTime < float.Epsilon ? 0.5f : Template.UndieTime;   // as the original: 0.5 s only when none is given
-        }
+        undieTimer = Template.Undying && !IsOverkilled
+            ? (Template.UndieTime < float.Epsilon ? 0.5f : Template.UndieTime)       // as the original: 0.5 s only when none is given
+            : float.NaN;
         Dead = true;
         IsKnockedDown = false;
         ReleaseEntanglement();
@@ -225,13 +243,19 @@ public sealed partial class Character : Entity
         }
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);
         immortalTime -= dt;
+        Animate(dt);
         Body.SpeedMultiplier = 1;
         SelfShield?.Update(this, dt);
+        if (State is not null)
+        {
+            ChangeState(State.Update(this, dt));
+        }
         if (zapTimer >= 0)
         {
             if (float.IsFinite(Template.ZapModifier))
             {
                 Body.SpeedMultiplier = Template.ZapModifier;
+                AnimationSpeed *= Template.ZapModifier;
             }
             zapTimer -= dt;
         }
@@ -242,10 +266,12 @@ public sealed partial class Character : Entity
         }
         HitPoints = DamageRules.Regenerate(HitPoints, MaxHitPoints, Template.Regeneration, dt, Statuses);
         TickStatuses(dt);
+        ScaleAnimation();
         if (Statuses.Has(StatusEffects.Frozen))
         {
             Body.SpeedMultiplier = 0;
             Body.Movement = Vector3.Zero;
+            AnimationSpeed = 0;
         }
         if (LastAttacker is not null && !ReferenceEquals(LastAttacker.Manager, Manager))
         {
@@ -258,7 +284,7 @@ public sealed partial class Character : Entity
         }
         if (HitPoints <= 0 && !Dead)
         {
-            Die();
+            DieUnlessDying();
         }
     }
 
@@ -269,7 +295,7 @@ public sealed partial class Character : Entity
             undieTimer -= dt;
             if (undieTimer <= 0)
             {
-                (Dead, undieTimer, HitPoints) = (false, float.NaN, Template.UndieHitPoints);
+                (Dead, HitPoints) = (false, Template.UndieHitPoints);                // the timer stays spent: the dead state sees a revival
             }
         }
         else

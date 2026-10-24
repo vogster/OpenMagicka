@@ -65,7 +65,7 @@ public sealed partial class Character
             {
                 OverKill();
             }
-            Die();
+            DieUnlessDying();
         }
         return result;
     }
