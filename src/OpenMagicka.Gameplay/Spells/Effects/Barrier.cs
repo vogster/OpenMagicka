@@ -76,6 +76,9 @@ public sealed partial class Barrier : Entity
     /// <summary>What a touch deals.</summary>
     public IReadOnlyList<DamageEntry> ContactDamage { get; }
 
+    /// <summary>What it deals, all its magnitudes together.</summary>
+    public override float Danger => ContactDamage.Sum(d => d.Magnitude);
+
     /// <summary>Its cast's shared memory of whom it struck.</summary>
     public BarrierHits Hits { get; }
 

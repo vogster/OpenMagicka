@@ -95,7 +95,7 @@ public sealed class Missile : Entity
     public float HomingTolerance { get; init; } = -0.75f;
 
     /// <summary>How much the AI fears it.</summary>
-    public float Danger { get; }
+    public override float Danger { get; }
 
     public bool FacesVelocity { get; }
 

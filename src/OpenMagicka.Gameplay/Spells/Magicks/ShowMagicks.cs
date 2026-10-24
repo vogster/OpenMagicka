@@ -198,7 +198,7 @@ public sealed class JudgementSpray() : Magick(MagickType.JudgementSpray, GlobalC
 /// <summary>The volley under way. A simulation object.</summary>
 public sealed class JudgementVolley : Entity, IMagickEffect
 {
-    public const float Lifetime = 1, Range = 20, Optimal = 12, Speed = 30, Homing = 0.55f, MissileTime = 2, MissileRadius = 0.25f, Danger = 30;
+    public const float Lifetime = 1, Range = 20, Optimal = 12, Speed = 30, Homing = 0.55f, MissileTime = 2, MissileRadius = 0.25f, MissileDanger = 30;
 
     public const int Count = 20;
 
@@ -255,7 +255,7 @@ public sealed class JudgementVolley : Entity, IMagickEffect
         left = !left;
         var side = Vector3.Cross(left ? Vector3.UnitY : -Vector3.UnitY, up);
         var velocity = side * (Speed / 2 + (0.5f + (float)Caster.NextRandom()) * Speed / 2);
-        var missile = new Missile(Caster.World, Caster, Caster.CastSource, velocity, MissileRadius, Events, Target(manager), Homing, Danger, facesVelocity: false);
+        var missile = new Missile(Caster.World, Caster, Caster.CastSource, velocity, MissileRadius, Events, Target(manager), Homing, MissileDanger, facesVelocity: false);
         try
         {
             manager.Add(missile);

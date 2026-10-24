@@ -61,7 +61,7 @@ public abstract class CharacterState
         {
             return CharacterStates.Jump;
         }
-        if (character.IsFeared && !character.IsEntangled)
+        if ((character.IsPanicking || character.IsStumbling || character.IsFeared) && !character.IsEntangled)
         {
             return CharacterStates.Panic;
         }

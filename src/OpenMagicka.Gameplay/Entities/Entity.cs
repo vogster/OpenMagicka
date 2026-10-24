@@ -56,6 +56,9 @@ public abstract class Entity
     /// <summary>Whether the entity can take damage (protected queries keep only these).</summary>
     public virtual bool IsDamageable => false;
 
+    /// <summary>How much the AI shies from it, and counts it in its own danger (ENTITIES_AI.md §7.7).</summary>
+    public virtual float Danger => 0;
+
     /// <summary>Takes a hit from <paramref name="attacker"/>, struck from <paramref name="attackPosition"/>; things that cannot be hurt ignore it.</summary>
     public virtual Combat.DamageResult Damage(Combat.DamageEntry damage, Entity? attacker, Vector3 attackPosition) => Combat.DamageResult.None;
 

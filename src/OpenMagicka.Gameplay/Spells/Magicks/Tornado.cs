@@ -58,6 +58,9 @@ public sealed class Whirlwind : Entity
 
     public override bool IsDead => ttl < 0;
 
+    /// <summary>Ten times how much of it shows (it fades in over half a second and out over its last one).</summary>
+    public override float Danger => 10 * MathF.Min(Lifetime - ttl, 0.5f) * MathF.Min(ttl, 1) * 2;
+
     public override bool IsRemovable => IsDead;
 
     /// <summary>It dies down over a second.</summary>

@@ -741,6 +741,11 @@ Each of these actions is sent over the network as `CharacterAction(ActionType, P
   Time accumulates per agent in `TimeSinceLastUpdate` and is consumed when it is updated. So the "brain" ticks less often
   than once per frame, but with the correct dt.
 - "Threat" flag for combat music: at least one agent has a current target.
+- **Order.** The window moves on by 20 *before* the minds in it think, so the first frame starts at index 20 % n. Every mind's time is added
+  *after* the thinking, so a mind that thinks each frame works with the previous frame's dt.
+- Ours: `OpenMagicka.Gameplay.AI.AiManager` (the level's `EntityManager.Minds`), run by `GameWorld.Tick` after physics and before the
+  grid and the entities, as the original. A trigger fired from a mind may add or remove minds; the window is taken before.
+- An NPC's ability cooldowns (16 slots) count down every frame, whether or not its mind thinks.
 
 ### 7.2 Agent: data
 
@@ -765,8 +770,16 @@ After `Initialize` the defaults are `Order = Attack`, `ReactTo = None`. Aggressi
 3. `OnExecute` of the top AI state.
 4. `NextAbility.Update`: ability preparation (for example, the NPC "chants" elements).
 
-`HandleMessage(TakingDamage)` → `AddAttackedBy`: damage from a foreign faction is added to the grudge table. Allies of the same faction
-within the alert radius also get a grudge against the attacker. Damage from "own" faction is zeroed (multiplier 0).
+**Grudges.** Every damage entry an NPC takes from a character becomes amount × magnitude of grudge (before anything else, even when
+dead); from a character sharing a faction it is 0 and the entry goes.
+- Only a wizard's blow is shared: the NPCs within the alert radius sharing a faction with the victim (and none with the wizard) hold it
+  too. The victim is among them, so it takes the blow twice.
+- The decay caps at 500 *after* taking 25·dt off; a grudge against a wizard whose staff calms (or deters the undead) halves on every think.
+- **Reactions** fire on every think while provoked: the attack reaction while any grudge is above 0, the nearness one while a visible
+  foe (of none of its factions) is within the alert radius. The trigger's own repeat rules keep it to once. An NPC of no faction counts
+  everyone, itself too, as a foe.
+
+The message dispatcher (`TakingDamage`, `AttackingTarget`) is never sent to: dead code. The grudge is written by the NPC's own damage.
 
 ### 7.4 Target and ability selection (fuzzy)
 
@@ -779,11 +792,16 @@ within the alert radius also get a grudge against the attacker. Damage from "own
 - The best ability desirability against each candidate is added to its score. "Target = myself" is scored separately
   (for abilities with `Target.Self`). The winner is the maximum sum.
 
+- Every pick (the "last spell ability" a recovery follows) is remembered, a pick of nothing or of another kind included, which forgets
+  the last spell.
+
 `ChooseAbility(args)`: iterates abilities that are off cooldown and match by `Target` (Self: only on self; Friendly: an ally,
 not self; Enemy: a foreign faction). If the NPC queue already has elements, only `CastSpell` with the same elements qualifies.
 Desirability = the value of the ability's fuzzy expression (or the built-in `Desirability`), +0.5 for the priority ability
 against the priority target. The maximum > 0 is taken. If nothing qualifies and elements are already chanted, a service
 "spell recovery" ability is set, which finishes casting the queue as the last used one.
+- "Same elements" means the chanted elements begin the ability's (each pair sharing a flag, as far as both go).
+- The recovery's index is 0, so its use starts the first ability's cooldown. It is wanted at 3·10⁻⁴⁵.
 
 ### 7.5 Fuzzy arithmetic (`Arithmetics`): the expression language in templates
 
@@ -816,9 +834,28 @@ Variables:
 Common expressions in real data: `distExp(3)`, `distExp(6)`, `(distexp(0,15)*0.75) - (s.FriendlyDensity*0.5) - Danger(Offensive)`,
 `(s.status(wet)+s.status(cold)+s.status(frozen))*2` (for self-healing or cleansing), `(distExp(6,20))*LOS*!t.shielded*!t.resistance(cold)`.
 
-> Subtlety: with equal priorities (`a - b - c`) the order is determined by the unsorted stability of `List.Sort`
-> in the original .NET, so associativity is formally undefined. For OpenMagicka, choose **left associativity**
-> and verify the results on all expressions from `Data/Characters` (see open questions).
+**Reading, as the original** (code: `OpenMagicka.Gameplay.AI.Fuzzy`):
+- An operator's priority is its bracket depth (shifted up by 8 bits) above its rank. Operators inside a function's brackets
+  (a `(` right after a variable name) are not operators.
+- The operator list is sorted by priority, and the first one within a span splits it.
+- What stands left of a `!` is dropped: `5!0.25` is `0.75`.
+- A span with no operator is a number (its first word, brackets removed) or a variable.
+- **Equal priorities.** The original's `List.Sort` is .NET 2.0–3.5's unstable quicksort (median of three, Hoare partitions,
+  smaller side first). Ours sorts the same way, so ties fall as the original's.
+  On all 292 expressions in `Data/Characters` it regroups 18 of them against plain left-to-right reading, but only inside
+  `+` and `*` chains, where the value is the same. No `-`, `/` or `^` chain is read differently.
+- **Variables.**
+  - Only Danger and Threat read an element. `Resistance(cold)` asks the resistance to no element: characters, shields
+    and barriers answer 1 (so the variable is 0), missiles, mines and eggs 0 (so it is 1).
+  - `HasStatus(a|b)` wants all of them; `HasStatus(None)` is true.
+  - The densities with no scope count around the target, not the thinker.
+  - Scopes the original throws at when weighing (Threat other than the target's; a status, grip, vines or speed with
+    no scope) are refused when read. The game's data has none.
+  - Grips (`Gripped`, `Gripping`, the grip damage) answer 0 until grips exist (OM-33).
+  - Our line of sight skips our running magicks, which are entities only here. Death, an entity there too, is
+    kept.
+  - `distExp(0,0)` (one slime's) is infinite, as the original's.
+- On the game's data: 338 templates, 1,058 abilities, 292 distinct expressions; all read and weigh.
 
 ### 7.6 AI states (stack)
 
@@ -842,6 +879,7 @@ stateDiagram-v2
 ```
 
 - **Idle**. Protection against "hanging": if there is no target and elements have been chanted for more than 2 s, the queue is cleared.
+  The 2 s are counted once for every mind together (a static counter). Idle ends by standing still.
   Then **scripted events** are processed (`giveOrder` with nested tags), with delays:
   - `Move position= speed= facingDirection= delay= trigger=`: walk to a locator (distance < 0.5 m), with `facingDirection`, turn to face it;
   - `Animation animation= blendTime= idleanimation= delay=` (broadcast over the network as `EventAnimation`);
@@ -858,8 +896,22 @@ stateDiagram-v2
   Speed is multiplied by `MoveEvent.Speed`.
 - **Wander**. Wander angle plus forward direction projected onto the navmesh. Constrained by a trigger zone (at the edge, a 180° turn).
   Walks for 10–20 s, stands for 2–5 s, speed `WanderSpeed`.
-- **Panic**. Wander angle plus direction ±1.25 (when stumbling, backward).
-- **BreakFree**. Calls `BreakFree()` every tick.
+- **Panic**. Wander angle plus direction ±1.25 (when stumbling, backward). It lasts while the character panics or stumbles (not while
+  it only fears).
+  - The character's **panic** (ours: `Character.IsPanicking`): each status tick, steam (else a burn) sets it to its magnitude past the
+    template's `MaxPanic`; it panics while that again passes `MaxPanic`. When a burn ends it is 0; the end of steam alone leaves it.
+    `giveOrder` Panic sets it to 10 and enters the panic state. Panicking, the character runs along the wander heading, blended with
+    where it was going by `MaxPanic`, at 0.8 speed.
+- **BreakFree**. Calls `BreakFree()` every tick. An NPC's struggle counts once in 0.5 s: an Earth blow of 0.5 to its vines (and, with
+  grips, a grip counter).
+- **Move**, further:
+  - A corner is passed within 0.5, or once the next is nearer than this one to it; so corners are cut by up to half a metre.
+  - It plans for 1 s (0.333 s when the first corner is on a moving part), then pops; the state below pushes it again.
+  - It pops when off the ground, when its target is dead or its ability no use, when it arrives (within 0.5), or with no path and
+    more than 3 left (a leader).
+  - Ahead within 4: a solid barrier within 60° of its way, or a shield its next 4 m cross, becomes the target of an attack.
+- Without a nav mesh, our moves go straight and keep to no mesh. Defending and wandering zones and locators come from the level
+  (`EntityManager.Places`, with the triggers); `ForceNavMesh`/`ForceCamera` come with the level too.
 
 ### 7.7 Avoidance and flocking
 
@@ -871,7 +923,11 @@ stateDiagram-v2
 - **Danger**: away from other dangerous entities (mines, puddles, missiles).
 The length of the sum is clamped to 1e5. The "must flee" threshold is 20.
 
-`FollowGroup`: up to 8 random neighbors, without repeats. Separation `−r̂·w/|r|` (inversely proportional to distance), Cohesion `r·w`,
+Dangers (`GetDanger`): a character, its chanted elements (a wizard charging, 10); a missile 2 (or its own); a barrier, its damage
+magnitudes; a mine 1 (10,000 while its fuse burns); a grease puddle 0.5 (burning, 10 × its heat); a whirlwind 10 × how much shows; a
+vortex 20 × its mass; Death 1,000; an elemental egg 0.
+
+`FollowGroup`: up to 8 random neighbors, without repeats. Separation `−r̂·w` (`r · w / −|r|`), Cohesion `r·w`,
 Alignment is the leader's direction, Wander is wandering. The sum is normalized to 1 and projected onto the navmesh.
 
 ### 7.8 NPC abilities (`Abilities`, 15 types)
@@ -1762,9 +1818,8 @@ orientation, time, color, spell, splash. NPC spawns from triggers, scene changes
 
 ## 15. Open questions
 
-1. **Associativity of fuzzy expressions.** In the original, with equal priorities the result depends on the unstable sort of .NET 3.5.
-   Either reproduce the behavior of `List<T>.Sort` (CLR 2.0 introsort) empirically on real strings, or make sure the data has no
-   `a - b - c` and `a / b / c` chains where it matters (the data does have them: `x*0.75 - y*0.5 - Danger(...)`).
+1. ~~**Associativity of fuzzy expressions.**~~ Settled (§7.5): we sort as .NET 3.5's quicksort, and on the game's data only
+   `+` and `*` chains regroup, so the order never changes a value.
 2. Exact formulas of `Damage.ApplyResistances` and `StatusEffect` (DPS, durations, Wet / Cold / Frozen / Burning / Steamed interactions):
    a task for the spells document. Only the call order inside the character is described here.
 3. Full binary layout of `Attachment`, the nested types of `AnimationClipAction` (`Grip` with bones, `PlayEffect`), `EventCollection` and

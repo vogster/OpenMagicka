@@ -142,6 +142,8 @@ public sealed class Reaper : Entity, IMagickEffect
 
     public override bool IsDamageable => !IsEthereal;
 
+    public override float Danger => 1000;
+
     public override bool IsDead => Now == Phase.Done;
 
     public override bool IsRemovable => IsDead;

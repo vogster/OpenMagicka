@@ -60,6 +60,7 @@ public sealed partial class Character : Entity
         this.random = random ?? Random.Shared;
         corpseTimer = 20 + 20 * (float)this.random.NextDouble();
         EquipFrom(template);
+        Mind = AI.AiManager.For(this);
         foreach (var aura in template.Auras ?? [])
         {
             AddAura(aura);
@@ -178,6 +179,12 @@ public sealed partial class Character : Entity
     }
 
     public override bool IsDead => Dead;
+
+    /// <summary>Its mind (an NPC whose template has one); a wizard's goes unused.</summary>
+    public AI.Agent? Mind { get; private set; }
+
+    /// <summary>The elements it holds ready; a wizard charging a spell, 10.</summary>
+    public override float Danger => IsPlayer && State == States.CharacterStates.Charge ? 10 : SpellQueue.Count;
 
     private bool Dead { get; set; }
 
@@ -382,6 +389,7 @@ public sealed partial class Character : Entity
         {
             DamageOverTime(damage.Amount, damage.Element);
         }
+        UpdatePanic(dt);
         if (Statuses.SpeedCap() is { } cap)
         {
             Body.SpeedMultiplier = MathF.Min(Body.SpeedMultiplier, cap);

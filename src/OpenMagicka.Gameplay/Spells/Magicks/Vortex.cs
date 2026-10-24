@@ -38,6 +38,8 @@ public sealed class VortexHole : Entity
     private readonly Vector3 centre;
     private readonly HashSet<Entity> swallowed = new(ReferenceEqualityComparer.Instance);
     private float mass = StartMass;
+
+    public override float Danger => mass * 20;
     private float target = StartMass;
 
     internal VortexHole(Character? owner, Vector3 centre) => (Owner, this.centre) = (owner, centre);

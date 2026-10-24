@@ -34,7 +34,11 @@ public enum Factions
 /// <param name="ZapModifier">The speed multiplier for a moment after a lightning hit.</param>
 /// <param name="Fearless">Fear passes it by.</param>
 /// <param name="Uncharmable">Charm passes it by.</param>
+/// <param name="Ai">Its mind: alert radius, weights and abilities (ENTITIES_AI.md §7); none for a player's wizard.</param>
 /// <param name="Nonslippery">Grease does not make it slide.</param>
+/// <param name="CanSeeInvisible">Its mind sees the invisible.</param>
+/// <param name="MoveAbilities">What nav triangles it may cross: its move animations' movements together.</param>
+/// <param name="MaxPanic">How much burning or steam it bears before it panics (twice this, as the original reckons).</param>
 public sealed record CharacterTemplate(
     string Id,
     Factions Factions,
@@ -62,7 +66,11 @@ public sealed record CharacterTemplate(
     bool HasGibs = false,
     bool Fearless = false,
     bool Uncharmable = false,
-    bool Nonslippery = false)
+    bool Nonslippery = false,
+    AI.AiProfile? Ai = null,
+    bool CanSeeInvisible = false,
+    Navigation.NavMovement MoveAbilities = Navigation.NavMovement.Default,
+    float MaxPanic = 0)
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;

@@ -98,6 +98,9 @@ public sealed class SpellMine : Entity
         }
     }
 
+    /// <summary>A mine about to go off is to be fled at all costs.</summary>
+    public override float Danger => fuse > 0 ? 10000 : 1;
+
     public override void Update(float dt)
     {
         if (dead)

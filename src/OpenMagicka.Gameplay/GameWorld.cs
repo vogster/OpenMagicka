@@ -64,6 +64,7 @@ public sealed class GameWorld : IDisposable
         {
             character.ApplyPhysics(character.Body.AfterStep());
         }
+        Entities.Minds.Update(dt);                                            // as the original: after physics, before the grid and the entities
         Entities.RebuildGrid();
         Entities.Update(dt);
         Session?.Tick(dt);

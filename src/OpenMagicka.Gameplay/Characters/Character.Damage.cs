@@ -22,6 +22,10 @@ public sealed partial class Character
         {
             throw new ArgumentOutOfRangeException(nameof(attackPosition), attackPosition, "must be finite");
         }
+        if (attacker is Character striker && Mind is { } mind && !IsPlayer)
+        {
+            mind.Grudge(striker, damage.Amount * damage.Magnitude);              // as the original: before the rest, even when dead
+        }
         if (Dead || IsImmortal)
         {
             return DamageResult.None;

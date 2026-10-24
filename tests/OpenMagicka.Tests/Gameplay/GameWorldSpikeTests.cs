@@ -180,6 +180,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
                 continue;
             }
             using var world = CharacterTests.World();
+            world.Entities.Minds.IsHost = false;                                  // the blow alone: no mind walks it off to cast
             var template = CharacterTemplates.From(loader, path[..^4], content);
             var attacker = new Character(template, world.Physics, new Vector3(20, 0.5f + content.Stats.Radius + content.Stats.Length / 2, -30),
                 random: new Random(1), animations: CharacterAnimationSets.From(loader, path[..^4], content));

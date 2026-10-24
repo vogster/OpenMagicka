@@ -40,7 +40,11 @@ internal static class Panicking
     private static float WrapAngle(float angle) => MathF.IEEERemainder(angle, MathF.Tau);
 }
 
-/// <summary>Fleeing in fear: away from what it fears at 0.8 speed, blending with where it was going (MAGICKS.md §6.1).</summary>
+/// <summary>
+/// Panicking or fleeing in fear (MAGICKS.md §6.1, ENTITIES_AI.md §5): a panic runs along the wander
+/// heading, blended with where it was going by the template's panic limit; a fear runs away from what
+/// it fears, halfway with where it was going. Either at 0.8 speed.
+/// </summary>
 internal sealed class PanicState : CharacterState
 {
     /// <summary>Where it was going is kept, to blend with and to give back.</summary>
@@ -66,14 +70,21 @@ internal sealed class PanicState : CharacterState
         {
             return CharacterStates.Entangled;
         }
-        Panicking.Wander(character, dt);
-        if (!character.IsFeared)
+        var wander = Panicking.Wander(character, dt);
+        if (!character.IsFeared && !character.IsPanicking && !character.IsStumbling)
         {
             return CharacterStates.Idle;
         }
         character.Body.SpeedMultiplier *= Panicking.Slow;
+        var wanted = (character.IsPlayer ? character.WantedMovement : character.Body.Movement) ?? Vector3.Zero;
+        if (character.IsPanicking)
+        {
+            var share = character.Template.MaxPanic;                         // as the original: the limit is the blend
+            character.Body.Movement = wanted.LengthSquared() > 1e-6f ? Panicking.Or(wander * share + wanted * (1 - share), wander) : wander;
+            return null;
+        }
+        wanted = character.WantedMovement ?? Vector3.Zero;
         var away = Panicking.Away(character);
-        var wanted = character.WantedMovement ?? Vector3.Zero;
         character.Body.Movement = wanted.LengthSquared() > 1e-6f ? Panicking.Or(away * 0.5f + wanted * 0.5f, away) : away;
         return null;
     }

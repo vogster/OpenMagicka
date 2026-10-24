@@ -57,6 +57,10 @@ public static class CharacterTemplates
             HasGibs: content.Gibs.Count > 0,                                      // gore is taken as on
             Fearless: content.Fearless,
             Uncharmable: content.Uncharmable,
-            Nonslippery: content.Nonslippery);
+            Nonslippery: content.Nonslippery,
+            Ai: AiProfiles.From(content),
+            CanSeeInvisible: content.CanSeeInvisible,
+            MoveAbilities: content.MoveAnimations.Aggregate(Gameplay.Navigation.NavMovement.Default, (all, m) => all | (Gameplay.Navigation.NavMovement)(byte)m.Movement),
+            MaxPanic: stats.MaxPanic);
     }
 }

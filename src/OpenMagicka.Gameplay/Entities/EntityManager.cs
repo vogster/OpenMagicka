@@ -41,6 +41,12 @@ public sealed class EntityManager
     /// <summary>The scene is indoors (its <c>Indoor</c> flag): no sky for the weather magicks.</summary>
     public bool Indoors { get; set; }
 
+    /// <summary>Where the level's zones and locators are, for minds that defend or wander (the triggers' level answers).</summary>
+    public AI.IAiPlaces? Places { get; set; }
+
+    /// <summary>The level's NPC minds.</summary>
+    public AI.AiManager Minds { get; } = new();
+
     /// <summary>The level's navigation; null for a level without one (then points are used as they are).</summary>
     public Navigation.NavMesh? NavMesh { get; set; }
 
@@ -154,6 +160,10 @@ public sealed class EntityManager
         {
             shields.Add(shield);
         }
+        if (entity is Characters.Character { Mind: { } mind })
+        {
+            Minds.Add(mind);
+        }
         entity.OnAdded();
     }
 
@@ -217,6 +227,10 @@ public sealed class EntityManager
         if (entity is IShield shield)
         {
             shields.Remove(shield);
+        }
+        if (entity is Characters.Character { Mind: { } mind })
+        {
+            Minds.Remove(mind);
         }
         entity.Manager = null;
         entity.OnRemoved();

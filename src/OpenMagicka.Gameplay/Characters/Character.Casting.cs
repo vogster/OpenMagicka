@@ -219,6 +219,9 @@ public sealed partial class Character
     /// <summary>Lets go of a non-Force/Area spell entirely (a reset).</summary>
     public void ResetSpell() => Spell = default;
 
+    /// <summary>Lets go of the elements chanted (an NPC that waited too long with them).</summary>
+    public void ClearQueue() => SpellQueue = SpellQueue.Cleared();
+
     private void CombineSpell() => (Spell, SpellQueue) = (SpellQueue.Combine(), SpellQueue.Cleared());
 
     private void Cast(Spell spell, CastType cast, bool fromStaff)

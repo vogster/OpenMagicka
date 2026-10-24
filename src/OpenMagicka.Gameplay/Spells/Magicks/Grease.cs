@@ -138,6 +138,9 @@ public sealed class GreaseField : Entity
 
     public bool IsBurning { get; private set; }
 
+    /// <summary>A puddle a little; a burning one by its heat.</summary>
+    public override float Danger => IsBurning ? temperature * 10 : 0.5f;
+
     public override Vector3 Position => position;
 
     public override float Radius => FieldRadius;
