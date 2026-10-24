@@ -47,6 +47,7 @@ public sealed partial class Agent
         if (trigger != 0)
         {
             Triggered?.Invoke(this, trigger);
+            Owner.Manager?.Minds.Raise(this, trigger);
         }
     }
 

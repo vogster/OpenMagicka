@@ -888,7 +888,8 @@ stateDiagram-v2
   - `Loop type=Loop|Reverse`.
   A `NaN` delay means "wait for the animation to end".
   - Every event has a trigger and a delay. When a delay runs out (or the clip ends), the trigger of the event before fires; a walk
-    with no delay fires its own at once. Several walks in a row go on without standing still in between.
+    with no delay fires its own at once, and then again when that delay of nothing runs out (only a trigger's repeat rule
+    stops the second). Several walks in a row go on without standing still in between.
   - A walk measures from its leader's place when it follows one. A face toward a name looks for an entity, then a locator; with
     neither it is skipped.
   - A new order copies its events (a reversing loop turns them around in place) and starts them over; the delay is kept unless

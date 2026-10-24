@@ -214,10 +214,7 @@ public sealed partial class Agent
         {
             Order = ReactionOrder;
         }
-        if (ReactionTrigger != 0)
-        {
-            Triggered?.Invoke(this, ReactionTrigger);
-        }
+        Fire(ReactionTrigger);
     }
 
     /// <summary>A foe was seen: the alert turns to danger when the reaction will change the order.</summary>

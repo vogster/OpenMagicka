@@ -19,6 +19,11 @@ public sealed class AiManager
 
     public IReadOnlyList<Agent> Agents => agents;
 
+    /// <summary>A mind fired a script trigger (a reaction, a scripted event): the scene's scripts run it, the mind's character as the sender.</summary>
+    public event Action<Agent, int>? TriggerRaised;
+
+    internal void Raise(Agent agent, int trigger) => TriggerRaised?.Invoke(agent, trigger);
+
     /// <summary>Whether any mind has a target (the music's cue for a fight).</summary>
     public bool Threat { get; private set; }
 

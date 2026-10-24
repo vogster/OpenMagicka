@@ -70,7 +70,11 @@ to use normalized (lower-case) strings as keys.
   AnimatedLevelPart hierarchy (with their current transform applied). When an action needs a "point" by name
   (`area=` on spawn/spawnPhys/setPosition…), a locator is searched first, then a trigger area.
   In that case a **random point inside the box** with a random Y rotation is used.
-- Area `any` is built in: "the whole level" (all EntityManager entities). In
+- Area `any` is built in: "the whole level" (all EntityManager entities).
+  - Ours fills an area once a frame, when first asked after the frame begins: an entity is in when the box comes within its radius of its centre (the
+    original's own reckoning when it fills an area by hand; its physics fills it by contact). The dead are present but not counted
+    (by type, by faction or in all), unless undying; the factions counted are the template's.
+  - Locators of animated parts come with the parts (OM-47). In
   Survival/Versus rules, `any` as a spawn point means a random area from the ruleset's list.
 - **Entities** with a unique `id` (the `id` attribute on spawn/spawnPhys/spawnItem…) are looked up globally
   (`Entity.GetByID`). Avatars are addressed via `player1`..`player4` where this is explicitly
@@ -78,6 +82,8 @@ to use normalized (lower-case) strings as keys.
 - **Character type** (`type=`) is a template name from `Data/Characters/<type>`; the name hash = Type ID.
 - **Triggers** and **OnInteract** live in one scene dictionary (`OnInteract` is keyed by the hash of `locator`).
 - **Counters and timers** are level (`Level`) dictionaries; they survive scene changes.
+- **Minds.** A mind's reaction trigger and its scripted events' triggers run the scene's trigger with conditions, the mind's
+  character as the sender. The scene's areas and locators are the minds' zones and locators.
 
 ## 3. Level file `.lvl`
 
@@ -229,7 +235,22 @@ firing. `clearDelayedActions` clears the queues.
 
 `sender` (initiator): the character that caused the trigger (interaction, AI event, `onDeath`…).
 It is used by `startDialog position="interactor"` (the default!) and the `interactorIs` condition.
-`executeTrigger`/`startDialog` keep a FIFO of senders for each pending run.
+`executeTrigger`/`startDialog` keep a FIFO of senders for each pending run. `clearDelayedActions` drops the pending runs but
+not those senders, so later runs take older senders (as the original).
+
+**Further, as the original** (ours: `OpenMagicka.Engine.Scripting`, `ScriptScene`):
+- The plain actions are the **same objects** in every variant, and every variant's actions are updated each frame. With N random
+  groups, a plain action's delay runs out N times faster (its runs come N times sooner).
+- The conditions are never initialized: the original calls `Initialize` on each block's array, not on its conditions.
+- A target with a lower key than the trigger that fires it has already updated this frame, so its actions run the next frame.
+- The condition blocks short-circuit: within a block at the first that fails, across blocks at the first that holds.
+- Missing targets: `executeTrigger`, `clearDelayedActions` with a name, and `enablePoi`/`disablePoi` for a key that is not there (or
+  not a point) crash the original; ours does nothing.
+- A trigger that sets itself off again with no delay hangs the original (its action's run loop never ends); ours runs only
+  the runs waiting as the frame began, so such a trigger runs once a frame.
+- An unknown tag in `<if>` or `<then>` crashes the original's loading; ours keeps a stand-in (never holds, does nothing) and lists
+  it, while the kinds are being written (OM-44, OM-45, OM-46).
+- On all 141 scenes: 2,801 triggers and points, 1,296 areas; in their first 2 s, 449 firings.
 
 `executeTrigger` calls the target **with condition checks** and the repeat rule: a one-shot trigger that
 already fired will not run again. A typical "function" pattern in scripts:
@@ -269,6 +290,9 @@ is done via `disablePoi`.
   regular (always grow while the level updates) and "played" (`playedTimer=true`, do not grow
   in cutscenes, on pause and after game end). The `TimedObjective` ruleset timer is a regular timer.
 - Both stores belong to the level and are saved in the checkpoint.
+- The level's update (not paused, not over) runs the timers: the played ones out of cutscenes, the plain ones always; the scene
+  updates after. Timers look in the played list first. A timer condition's or counter condition's "less" is the world's value below
+  the attribute's.
 
 ### 5.7 AI events (children of `spawn`, `giveOrder`, `spawnGenericBoss`, `spawnCloneWizards`, `activateDispenser`, `avatarMove/PlayerN`)
 
