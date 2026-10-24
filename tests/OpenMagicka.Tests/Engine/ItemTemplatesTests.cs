@@ -1,6 +1,11 @@
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine.Characters;
 using OpenMagicka.Gameplay.Items;
+using DamageEvent = OpenMagicka.Content.Magicka.DamageEvent;
+using SoundEvent = OpenMagicka.Content.Magicka.SoundEvent;
+using EffectEvent = OpenMagicka.Content.Magicka.EffectEvent;
+using EventCondition = OpenMagicka.Gameplay.Items.EventCondition;
+using AttackProperties = OpenMagicka.Content.Magicka.AttackProperties;
 using ContentElements = OpenMagicka.Content.Magicka.Elements;
 using GameElements = OpenMagicka.Gameplay.Spells.Elements;
 
@@ -25,6 +30,31 @@ public class ItemTemplatesTests
         Assert.Equal((2.5f, true, true, false), (sword.MeleeRange, sword.MeleeMultiHit, sword.Pickable, sword.Bound));
         Assert.Equal((0.5f, -10f), (sword.Resistances![GameElements.Fire].Multiplier, sword.Resistances[GameElements.Fire].Modifier));
         Assert.Equal(1f, sword.Resistances[GameElements.Water].Multiplier);         // a neutral table with overrides
+    }
+
+    [Fact]
+    public void MeleeEvents_CarryOver_AndTheLaterKindsAreLeftOut()
+    {
+        EventCollectionContent[] groups =
+        [
+            new(EventConditionType.Hit, 0, ContentElements.None, 0, 0, true, [
+                new DamageEvent(new DamageContent(AttackProperties.Damage | AttackProperties.Knockdown, ContentElements.Earth, 40, 2), false),
+                new SoundEvent(SoundBanks.Weapons, "sword_hit", 1, false),
+                new SplashEvent(new DamageContent(AttackProperties.Damage, ContentElements.Fire, 10, 1), 3)]),
+            new(EventConditionType.Collision, 0, ContentElements.None, 0.5f, 0, false, [new EffectEvent(true, false, "sparks"), new RemoveEvent(0)]),
+        ];
+
+        var events = ItemTemplates.Events(groups);
+
+        Assert.Equal(2, events.Count);
+        Assert.Equal(new EventCondition(EventTrigger.Hit), events[0].Condition);
+        var damage = Assert.IsType<OpenMagicka.Gameplay.Items.DamageEvent>(events[0].Events[0]);
+        Assert.Equal(new OpenMagicka.Gameplay.Combat.DamageEntry(OpenMagicka.Gameplay.Combat.AttackProperties.Damage | OpenMagicka.Gameplay.Combat.AttackProperties.Knockdown,
+            GameElements.Earth, 40, 2), damage.Damage);
+        Assert.Equal(new OpenMagicka.Gameplay.Items.SoundEvent("sword_hit", (int)SoundBanks.Weapons, 1), events[0].Events[1]);
+        Assert.Equal(2, events[0].Events.Count);                                     // the splash comes with spells
+        Assert.Equal((EventTrigger.Collision, 0.5f, false), (events[1].Condition.Trigger, events[1].Condition.Threshold, events[1].Condition.Repeat));
+        Assert.Equal(new OpenMagicka.Gameplay.Items.EffectEvent("sparks", true, false), Assert.Single(events[1].Events));
     }
 
     [Theory]

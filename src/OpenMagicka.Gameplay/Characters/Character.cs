@@ -101,6 +101,25 @@ public sealed partial class Character : Entity
 
     public override Vector3 Velocity => Body.Body.IsRemoved ? Vector3.Zero : Body.Body.Velocity;
 
+    /// <summary>The physics world the body is in (a melee sweep tests the level in it).</summary>
+    internal PhysicsWorld World => world;
+
+    /// <summary>Within its radius of the capsule's axis, which runs up from half its length below the centre; never when ethereal.</summary>
+    public override bool SegmentIntersect(Segment segment, float radius)
+    {
+        if (!(radius >= 0) || !float.IsFinite(radius))
+        {
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "must not be negative");
+        }
+        if (IsEthereal)
+        {
+            return false;
+        }
+        var axis = new Segment(Position - new Vector3(0, Body.Shape.Length / 2, 0), new Vector3(0, Body.Shape.Length, 0));
+        var reach = radius + Body.Shape.Radius;
+        return Segment.DistanceSquared(axis, segment, out _, out _) <= reach * reach;
+    }
+
     public override bool IsDead => Dead;
 
     private bool Dead { get; set; }
@@ -306,6 +325,10 @@ public sealed partial class Character : Entity
         if (HitPoints <= 0 && !Dead)
         {
             DieUnlessDying();
+        }
+        foreach (var slot in equipment)
+        {
+            slot.Item?.Tick(dt);
         }
         PlaceItems();
     }

@@ -49,7 +49,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 10521;
+    private const int MadeActions = 12518;
 
     [GameContentFact]
     public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()
@@ -89,6 +89,49 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
             items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
         Assert.Equal((286, 591, 86, 291), (equipped, slots, staffs, tipped));      // as ENTITIES_AI §8.1.1 records
+    }
+
+    [GameContentFact]
+    public void EveryArmedTemplate_HitsAnEnemyInFront()
+    {
+        var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var (armed, hitting) = (0, 0);
+        var missed = new List<string>();
+        foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (loader.LoadUncached(path[..^4]).Root is not CharacterTemplateContent content
+                || !content.AnimationSets.Any(set => set.Animations.Any(a => a.Animation == "attack_melee0" && a.Clip.Actions.OfType<DealDamageAction>().Any())))
+            {
+                continue;
+            }
+            using var world = CharacterTests.World();
+            var template = CharacterTemplates.From(loader, path[..^4], content);
+            var attacker = new Character(template, world.Physics, new Vector3(20, 0.5f + content.Stats.Radius + content.Stats.Length / 2, -30),
+                random: new Random(1), animations: CharacterAnimationSets.From(loader, path[..^4], content));
+            if (!attacker.Equipment.Any(s => s.Item?.MeleeEvents.Has(EventTrigger.Hit) == true))
+            {
+                continue;
+            }
+            armed++;
+            var dummy = new Character(CharacterTests.Goblin with { Factions = OpenMagicka.Gameplay.Characters.Factions.Undead, MaxHitPoints = 100000 }, world.Physics,
+                attacker.Position - new Vector3(0, attacker.Position.Y - 0.9f, content.Stats.Radius + 0.4f + 0.6f), random: new Random(2));
+            world.Entities.Add(attacker);
+            world.Entities.Add(dummy);
+            attacker.Target = dummy;
+            CharacterTests.Run(world, 0.3f);
+            (attacker.Attacking, attacker.NextAttackAnimation) = (true, "attack_melee0");
+            CharacterTests.Run(world, 3);
+            if (dummy.HitPoints < 100000)
+            {
+                hitting++;
+            }
+            else
+            {
+                missed.Add(content.Id);
+            }
+        }
+        output.WriteLine($"{armed} armed templates with a melee attack; {hitting} hit the dummy; missed: {string.Join(", ", missed)}");
+        Assert.Equal((206, 165), (armed, hitting));                                 // as ENTITIES_AI §8.1.2 records
     }
 
     [GameContentFact]

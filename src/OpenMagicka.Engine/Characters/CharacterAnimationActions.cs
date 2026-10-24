@@ -2,6 +2,7 @@ using OpenMagicka.Content.Magicka;
 using OpenMagicka.Gameplay.Animation;
 using StatusEffects = OpenMagicka.Gameplay.Combat.StatusEffects;
 using Actions = OpenMagicka.Gameplay.Animation.Actions;
+using Gameplay = OpenMagicka.Gameplay;
 
 namespace OpenMagicka.Engine.Characters;
 
@@ -32,6 +33,7 @@ public static class CharacterAnimationActions
             FootstepAction => new Actions.Footstep(start, end),
             CameraShakeAction a => new Actions.CameraShake(start, end, a.Duration, a.Magnitude),
             WeaponVisibilityAction a => new Actions.WeaponVisibility(start, end, a.Weapon, a.Visible),
+            DealDamageAction a => new Actions.DealDamage(start, end, a.Weapon, (Gameplay.Items.DamageTargets)(byte)a.Targets),
             _ => null,
         };
     }

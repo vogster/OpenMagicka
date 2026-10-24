@@ -6,7 +6,8 @@ namespace OpenMagicka.Gameplay.Animation;
 public abstract record AnimationCue;
 
 /// <param name="Banks">The original's sound bank flags.</param>
-public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing) : AnimationCue;
+/// <param name="Magnitude">The cue's magnitude variable, when the source sets one.</param>
+public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue;
 
 /// <summary>
 /// An effect at a bone; an attached one follows the bone until its <see cref="EffectEndCue"/> (same
@@ -21,3 +22,9 @@ public sealed record EffectEndCue(AnimationAction Source) : AnimationCue;
 public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3 Facing) : AnimationCue;
 
 public sealed record CameraShakeCue(Vector3 Position, float Magnitude, float Duration) : AnimationCue;
+
+/// <summary>An item's effect (a strike's sparks); a following one stays on the item until its <see cref="ItemEffectEndCue"/>.</summary>
+public sealed record ItemEffectCue(string Effect, Vector3 Position, Vector3 Direction, bool Follow, Items.Item Source) : AnimationCue;
+
+/// <summary>The item's following effects end (with the strike).</summary>
+public sealed record ItemEffectEndCue(Items.Item Source) : AnimationCue;

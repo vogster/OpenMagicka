@@ -20,7 +20,7 @@ public sealed partial class Character
     /// entanglement, self-shield, pushes and knockdowns, blocking), steps 6–10 in
     /// <see cref="DamageRules"/>, then death and the last attacker.
     /// </summary>
-    public DamageResult Damage(DamageEntry damage, Entity? attacker, Vector3 attackPosition)
+    public override DamageResult Damage(DamageEntry damage, Entity? attacker, Vector3 attackPosition)
     {
         Finite(damage.Amount, nameof(damage));
         Finite(damage.Magnitude, nameof(damage));

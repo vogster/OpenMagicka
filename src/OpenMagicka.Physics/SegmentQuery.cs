@@ -20,6 +20,7 @@ internal sealed class SegmentQuery
     private Vector3 start;
     private Vector3 direction;
     private object? ignored;
+    private bool levelOnly;
 
     public SegmentQuery() => pre = Visit;
 
@@ -28,9 +29,9 @@ internal sealed class SegmentQuery
     public J.TriangleShape? Triangle { get; private set; }
 
     /// <summary>Walks the tree; our nearest triangle is kept here, the engine's nearest hit comes back.</summary>
-    public bool Run(DynamicTree tree, Vector3 from, Vector3 to, object? ignoreBody, out IDynamicTreeProxy? proxy, out JVector normal, out float lambda)
+    public bool Run(DynamicTree tree, Vector3 from, Vector3 to, object? ignoreBody, bool levelOnly, out IDynamicTreeProxy? proxy, out JVector normal, out float lambda)
     {
-        (start, direction, ignored) = (from, to - from, ignoreBody);
+        (start, direction, ignored, this.levelOnly) = (from, to - from, ignoreBody, levelOnly);
         (Triangle, TriangleLambda) = (null, float.PositiveInfinity);
         try
         {
@@ -44,7 +45,8 @@ internal sealed class SegmentQuery
 
     private bool Visit(IDynamicTreeProxy proxy)
     {
-        if (proxy is not J.RigidBodyShape shape || (ignored is not null && ReferenceEquals(shape.RigidBody, ignored)))
+        if (proxy is not J.RigidBodyShape shape || (ignored is not null && ReferenceEquals(shape.RigidBody, ignored))
+            || (levelOnly && shape.RigidBody.Tag is not StaticMesh))
         {
             return false;
         }

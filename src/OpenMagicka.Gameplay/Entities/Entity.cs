@@ -56,6 +56,19 @@ public abstract class Entity
     /// <summary>Whether the entity can take damage (protected queries keep only these).</summary>
     public virtual bool IsDamageable => false;
 
+    /// <summary>Takes a hit from <paramref name="attacker"/>, struck from <paramref name="attackPosition"/>; things that cannot be hurt ignore it.</summary>
+    public virtual Combat.DamageResult Damage(Combat.DamageEntry damage, Entity? attacker, Vector3 attackPosition) => Combat.DamageResult.None;
+
+    /// <summary>Whether a segment, thickened by <paramref name="radius"/>, touches the entity (a melee sweep).</summary>
+    public virtual bool SegmentIntersect(Segment segment, float radius)
+    {
+        if (!(radius >= 0) || !float.IsFinite(radius))
+        {
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "must not be negative");
+        }
+        return Segment.DistanceSquared(segment, new Segment(Position, Vector3.Zero), out _, out _) <= (radius + Radius) * (radius + Radius);
+    }
+
     /// <summary>One frame of the entity's own logic.</summary>
     public virtual void Update(float dt)
     {

@@ -25,7 +25,8 @@ public static class ItemTemplates
             content.Pickable,
             content.Bound,
             Point(model, "attach0"),
-            Point(model, "attach1"));
+            Point(model, "attach1"),
+            Events(content.Melee.Conditions));
         template.Validate();
         return template;
     }
@@ -76,6 +77,24 @@ public static class ItemTemplates
         }
         return point;
     }
+
+    /// <summary>A source's event groups; the events that wait for later systems are left out (§8.2).</summary>
+    internal static IReadOnlyList<Gameplay.Items.EventGroup> Events(IReadOnlyList<EventCollectionContent> groups) =>
+        [.. groups.Select(g => new Gameplay.Items.EventGroup(
+            new Gameplay.Items.EventCondition((Gameplay.Items.EventTrigger)g.Condition, g.Hitpoints, (Gameplay.Spells.Elements)(int)g.Elements, g.Threshold, g.Time, g.Repeat),
+            [.. g.Events.Select(Event).OfType<Gameplay.Items.ItemEvent>()]))];
+
+    private static Gameplay.Items.ItemEvent? Event(EventContent e) => e switch
+    {
+        DamageEvent d => new Gameplay.Items.DamageEvent(Damage(d.Damage), d.VelocityBased),
+        DamageOwnerEvent d => new Gameplay.Items.DamageOwnerEvent(Damage(d.Damage), d.VelocityBased),
+        SoundEvent s => new Gameplay.Items.SoundEvent(s.Cue, (int)s.Banks, s.Magnitude),
+        EffectEvent f => new Gameplay.Items.EffectEvent(f.Effect, f.Follow, f.WorldAlign),
+        _ => null,
+    };
+
+    internal static Gameplay.Combat.DamageEntry Damage(DamageContent d) =>
+        new((Gameplay.Combat.AttackProperties)(int)d.Attack, (Gameplay.Spells.Elements)(int)d.Elements, d.Amount, d.Magnitude);
 
     /// <summary>Overrides on top of the neutral table, as a template's.</summary>
     internal static ResistanceTable Resistances(IReadOnlyList<ResistanceContent> overrides) =>

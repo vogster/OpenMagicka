@@ -203,7 +203,8 @@ public sealed class PhysicsWorld : IDisposable
     /// nothing.
     /// </summary>
     /// <param name="ignore">A body the segment passes through, such as the caster.</param>
-    public SegmentHit? CastSegment(Vector3 start, Vector3 end, PhysicsBody? ignore = null)
+    /// <param name="levelOnly">Only the static meshes count.</param>
+    public SegmentHit? CastSegment(Vector3 start, Vector3 end, PhysicsBody? ignore = null, bool levelOnly = false)
     {
         ThrowIfDisposed();
         Vectors.ThrowIfNotFinite(start, nameof(start));
@@ -212,7 +213,7 @@ public sealed class PhysicsWorld : IDisposable
         {
             return null;
         }
-        var shapeHit = segments.Run(world.DynamicTree, start, end, ignore?.Identity, out var proxy, out var normal, out var lambda);
+        var shapeHit = segments.Run(world.DynamicTree, start, end, ignore?.Identity, levelOnly, out var proxy, out var normal, out var lambda);
         if (segments.Triangle is { } triangle && (!shapeHit || segments.TriangleLambda <= lambda))
         {
             triangle.GetWorldVertices(out var a, out var b, out var c);

@@ -980,12 +980,91 @@ In OpenMagicka: `OpenMagicka.Gameplay.Items` (`ItemTemplate`, `Item`, `WeaponCla
 `PassiveAbility`) and `Character.Equipment`. `ItemTemplates` and `CharacterTemplates.From(loader, …)`
 (Engine) read the items and fill each template's slots.
 
+### 8.1.2 A melee strike (`DealDamage`)
+
+`DealDamage` (§4.2, 1,997 uses) names an equipment slot and the targets it may hit: the enemy, the
+friendly, things that are not characters, or any mix of these. On its first frame the item forgets
+whom it hit and fires its melee **Default** events. Then, on every frame of the window, the item
+strikes. A slot with no item does nothing.
+
+1. An item with no melee events does nothing. A single-hit item that has already hit someone in
+   this window stops here. So does an item within 0.25 s of glancing off a shield.
+2. The item's cooldown restarts.
+3. **The sweep** is the segment from the item's tip to where the tip was a frame earlier (§4.3).
+   A shield that this sweep, or the segment from the holder to the tip, touches within the melee
+   range turns the blow:
+   - the Hit events fire with no target;
+   - the item glances off for 0.25 s;
+   - the holder blends to `attack_recoil` (0.1);
+   - that frame's strike ends.
+4. **Who is hit.** Gather the damageable things within the melee range + 5 m of the tip that a
+   shield does not protect. Skip the holder and anyone already hit.
+   - The holder's target is always fair game.
+   - Any other character must match the targets: a character sharing a faction bit with the holder
+     needs Friendly, and one sharing none needs Enemy.
+   - Anything that is not a character needs NonCharacters.
+
+   A thing is hit when the sweep passes within the melee range of it. For a character, that is
+   within its radius of the capsule's axis, which runs from half the capsule's length below its
+   centre for the length; an ethereal character cannot be hit. Each new hit joins the list; a
+   single-hit item stops at the first.
+5. **The level.** At most every 0.25 s, if the item has Collision events and the sweep crosses the
+   level (and only the level, from either side), its Collision groups fire (with no target) and
+   the holder recoils.
+6. **The blows.** Each listed thing not yet struck gets the Hit events. They are fired one target
+   at a time, in list order, and a single-hit item stops after the first. A deflected blow makes
+   the holder recoil, unless no one had been hit before this frame and every blow so far this frame
+   knocked back, pushed or killed its target. A group's results are OR-ed together, so one fully
+   resisted entry is enough to deflect, as the original. "Knocked down" counts too, but nothing
+   reports it, in the original or here.
+
+Kept for later systems: the melee boost of buffs, the Tyrfing's teleport, Mjolnir's thunder, the
+sonic screwdriver, the dragon slayer and the weapon death sound.
+
+In the vanilla data, 206 templates have an item with Hit events and an `attack_melee0` that deals
+damage. Of these, 165 hit a goblin standing 1 m beyond their radius in front of them.
+
+The others miss for reasons of geometry:
+- Many of their items have no `attach0`, so the tip is the grip, as in the original.
+- Their claws and tools reach only 0.25 to 0.5 m.
+- Some windows last a few hundredths of a second.
+- Big swings pass over a goblin's head.
+
 ### 8.2 Events: ConditionCollection / EventCollection
 
 Up to 5 "condition → event list" groups. Condition: type (flags: Default 1, Hit 2, Collision 4, Damaged 8, Timer 16, Death 32,
 OverKill 64), HP threshold, elements, threshold, time, repeat flag. Events (`EventType`): Damage, Splash, Sound, Effect, Remove,
 CameraShake, Decal, Blast, Spawn, Overkill, SpawnGibs, SpawnItem, SpawnMagick, SpawnMissile, Light, CastMagick, DamageOwner, Callback.
 The same mechanism is used by items (melee / gun / ranged), character templates and physics object templates.
+
+**When a group fires.** Something happens: a trigger, with a threshold, hit points, elements, a
+time and maybe a position. A group whose trigger shares no bit with it does not fire. Neither does
+a group that has fired already and does not repeat. Otherwise the shared bits are tried from the
+lowest:
+- Default, Hit, Death and OverKill fire.
+- Collision fires when the threshold given reaches the group's.
+- Damaged fires when the hit points given reach the group's and the elements overlap.
+- Timer fires when the time reaches the group's time × (times fired + 1), and counts the firing.
+
+A group that fires runs all its events in order, and the damage results add up. Each source (each
+item in play) keeps its own groups' state.
+
+**What the events do** (melee, so far):
+- Damage: hits the target, as the holder, from the item's position.
+- DamageOwner: hits the holder, with the holder as the attacker, as the original.
+- Velocity-based damage only matters for projectiles (it scales by their speed).
+- Sound: a cue at the given position or the item's, with the magnitude as its variable.
+- Effect: an effect there, pointing up when world-aligned or along the item otherwise; with
+  "follow" it stays on the item while the strike lasts.
+
+Splash (area damage), Light, CastMagick and Remove come with spells, lights, magicks and
+projectiles. In the vanilla items, 258 have melee events:
+
+| Trigger | Groups | Events |
+|---|---|---|
+| Hit | 256 | Damage 351, Sound 237, Effect 13, CastMagick 10, Splash 4, DamageOwner 1 |
+| Default | 235 | Sound 223, Effect 19, Light 4, Splash 3 |
+| Collision | 4 | Remove 4 |
 
 ### 8.3 Buffs and auras
 

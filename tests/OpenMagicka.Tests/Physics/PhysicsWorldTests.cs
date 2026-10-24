@@ -59,6 +59,18 @@ public class PhysicsWorldTests
     }
 
     [Fact]
+    public void ALevelOnlySegment_PassesThroughBodies()
+    {
+        using var world = new PhysicsWorld();
+        AddFloor(world, material: 7);
+        var crate = world.AddBody(new BoxShape(new Vector3(1, 1, 1)), new Vector3(1, 2, 2), mass: 10);
+
+        Assert.Same(crate, world.CastSegment(new Vector3(1, 4, 2), new Vector3(1, -4, 2))!.Value.Body);
+        var level = world.CastSegment(new Vector3(1, 4, 2), new Vector3(1, -4, 2), levelOnly: true);
+        Assert.Equal((7, 0.5f), (level!.Value.Material!.Value, level.Value.Fraction));
+    }
+
+    [Fact]
     public void ASegment_HitsTheFloor_WithItsMaterial()
     {
         using var world = new PhysicsWorld();
