@@ -1023,13 +1023,86 @@ Kept for later systems: the melee boost of buffs, the Tyrfing's teleport, Mjolni
 sonic screwdriver, the dragon slayer and the weapon death sound.
 
 In the vanilla data, 206 templates have an item with Hit events and an `attack_melee0` that deals
-damage. Of these, 165 hit a goblin standing 1 m beyond their radius in front of them.
+damage. Of these, 166 hit a goblin standing 1 m beyond their radius in front of them (one of
+them with a gun).
 
 The others miss for reasons of geometry:
 - Many of their items have no `attach0`, so the tip is the grip, as in the original.
 - Their claws and tools reach only 0.25 to 0.5 m.
 - Some windows last a few hundredths of a second.
 - Big swings pass over a goblin's head.
+
+### 8.1.3 Gunfire (`Gunfire`)
+
+Guns are the items of the Handgun, Rifle, Machinegun and Heavy classes. `Gunfire` (§4.2, 335
+uses) names a slot and an accuracy.
+
+**On the action's first frame** the item forgets whom it hit. If it has gun events:
+- its accuracy becomes the gun's accuracy × the action's;
+- its clip refills to the gun's clip;
+- it starts firing;
+- its cooldown restarts.
+
+If the gun was not already counting down to a shot, the shot timer is set to just above 0, and the
+gun's sound and its shells effect start (at `attach1`).
+
+**When the action ends**, a non-player's gun stops. It empties its clip, its shot timer goes to 0,
+and its sound and shells stop. A player's gun stops the same way if it is:
+- a machinegun, once its holder no longer attacks;
+- a rifle;
+- a handgun.
+
+**Each frame of the holder** (at the end, with the items, §4.3), a gun whose shot timer is above 0
+and that still has rounds counts the timer down. When the timer reaches 0:
+1. A firing gun adds 1 / rate to the timer and spends a round.
+2. The muzzle effect plays at `attach0`.
+3. Unless the holder is playing `pickup_weapon`, it **fires a shot**.
+
+**The shot's direction** starts from `attach1` towards `attach0`, normalised:
+- the spread is `s = (1 − accuracy) × 0.2`;
+- its heading in X and Z is turned by a random amount in ±s/2 and laid flat at unit length;
+- its Y gets a random amount in ±2s added;
+- the whole is normalised again.
+
+As the original, the flat part is therefore always of length 1 before that last normalisation.
+
+**A shot** runs from `attach0` for the gun's range:
+1. The level shortens it where it first meets it.
+2. Of the damageable things around the shot's middle (within half the range, not hidden by a
+   shield, the shooter left out), the nearest whose surface the shot passes within 0.05 m of is
+   hit. The hit point is on its surface, on the side facing the point of the shot that passes its
+   axis closest, not where the shot enters. A shot straight through the axis has no such side: the
+   original's maths gives no number there; OpenMagicka takes the axis point.
+3. If it was hit:
+   - **A character with a Deflect aura of its own** sends the shot on. A held item's Deflect aura
+     does not count, as in the original. The shot reflects off the flattened normal where it enters
+     the character's capsule (or, if it does not enter, the direction from the centre to the hit
+     point). It goes on from the hit point with the range left and leaves that character out, so it
+     can hit the shooter.
+     The tracer of that leg starts later by (distance − 2) / tracer speed.
+   - **Anything else damageable** gets the gun's Hit events at the hit point. A Damage event of a
+     gun strikes from the target's surface towards the gun, not from the gun.
+4. With no target but the level, the gun's Collision events fire at the level's point.
+5. A tracer is drawn from the start to the end of the shot. Every fifth shot uses the tracer
+   sprite if it has one, the others (and those without) the plain one; a sprite of −1 draws
+   nothing. A tracer speed of 0 (some vanilla guns) shows a deflected leg at once.
+
+The item's hit list is cleared but never filled by shots, so any target can be hit again.
+Portals come with the magick that makes them.
+
+**Limits and corner cases:**
+- At most one shot goes per frame. A gun whose rate outruns the frame would find its timer
+  below 0 and stop, as in the original's code. Vanilla rates are 1 to 10 a second, so at
+  60 frames none does.
+- A deflected shot goes on only while range is left. OpenMagicka also stops it after 16
+  bounces, where the original has no limit.
+- A gun that leaves the hand stops its burst.
+- A gun's damage, its melee's included, strikes from the target's surface: the original tests
+  the item's class, not the kind of attack.
+- The vanilla guns' Collision groups have no threshold.
+
+In the vanilla data, 33 items are guns, and 19 of them have gun events (the others never fire).
+Their clips run from 1 to 999,999 rounds.
 
 ### 8.2 Events: ConditionCollection / EventCollection
 

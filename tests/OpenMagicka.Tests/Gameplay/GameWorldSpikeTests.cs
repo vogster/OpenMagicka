@@ -49,7 +49,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 12518;
+    private const int MadeActions = 12853;
 
     [GameContentFact]
     public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()
@@ -90,6 +90,10 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         var itemAuras = items.SelectMany(i => i.Auras ?? []).ToList();
         Assert.Equal((9, 13, 52, 51), (auraTemplates, templateAuras, itemAuras.Count, itemAuras.Count(a => a is OpenMagicka.Gameplay.Buffs.BuffAura)));   // as ENTITIES_AI §8.3.2 records
         Assert.Single(itemAuras.OfType<OpenMagicka.Gameplay.Buffs.DeflectAura>());
+        var guns = items.Where(i => i.Gun is not null).ToList();
+        output.WriteLine($"{guns.Count} guns; {guns.Count(g => g.Gun!.Events.Count > 0)} with gun events; clips {string.Join(",", guns.Select(g => g.Gun!.Clip).Distinct().Order())}");
+        output.WriteLine($"rates {string.Join(",", guns.Select(g => g.Gun!.Rate).Distinct().Order())}; tracer speeds {string.Join(",", guns.Select(g => g.Gun!.TracerVelocity).Distinct().Order())}; ranges {string.Join(",", guns.Select(g => g.Gun!.Range).Distinct().Order())}; collision thresholds {string.Join(",", guns.SelectMany(g => g.Gun!.Events).Where(e => (e.Condition.Trigger & EventTrigger.Collision) != 0).Select(e => e.Condition.Threshold).Distinct())}");
+        Assert.Equal((33, 19), (guns.Count, guns.Count(g => g.Gun!.Events.Count > 0)));   // as ENTITIES_AI §8.1.3 records
         Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
             items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
         Assert.Equal((286, 591, 86, 291), (equipped, slots, staffs, tipped));      // as ENTITIES_AI §8.1.1 records
@@ -155,7 +159,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
             }
         }
         output.WriteLine($"{armed} armed templates with a melee attack; {hitting} hit the dummy; missed: {string.Join(", ", missed)}");
-        Assert.Equal((206, 165), (armed, hitting));                                 // as ENTITIES_AI §8.1.2 records
+        Assert.Equal((206, 166), (armed, hitting));                                 // as ENTITIES_AI §8.1.2 records
     }
 
     [GameContentFact]

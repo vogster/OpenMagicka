@@ -58,6 +58,14 @@ public class ItemTemplatesTests
     }
 
     [Theory]
+    [InlineData("", -1)]
+    [InlineData("7", 7)]
+    [InlineData("C/3", 131)]
+    [InlineData("e/1", 257)]
+    [InlineData("A/5", 5)]                                                         // an unknown sheet adds nothing, as the original
+    public void TracerSprites_ReadAsTheOriginal(string text, int sprite) => Assert.Equal(sprite, ItemTemplates.Sprite(text));
+
+    [Theory]
     [InlineData((byte)27, (byte)0, 0)]
     [InlineData((byte)0, (byte)17, 0)]
     [InlineData((byte)0, (byte)0, -5)]

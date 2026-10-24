@@ -29,6 +29,7 @@ public sealed class Item
         template.Validate();
         Template = template;
         MeleeEvents = new EventGroups(template.Melee ?? []);
+        GunEvents = new EventGroups(template.Gun?.Events ?? []);
         Auras = [.. (template.Auras ?? []).Select(a => new Buffs.ActiveAura(a))];
     }
 
@@ -54,6 +55,23 @@ public sealed class Item
 
     /// <summary>This item's own copy of its melee groups.</summary>
     public EventGroups MeleeEvents { get; }
+
+    /// <summary>This item's own copy of its gun groups.</summary>
+    public EventGroups GunEvents { get; }
+
+    /// <summary>The gun's accuracy for this burst (its own × the action's).</summary>
+    public float GunAccuracy { get; internal set; }
+
+    /// <summary>Rounds left in this burst.</summary>
+    public int Rounds { get; internal set; }
+
+    /// <summary>Time to the next shot; above 0 while a burst runs.</summary>
+    public float ShotTimer { get; internal set; }
+
+    public bool Firing { get; internal set; }
+
+    /// <summary>Shots fired so far: every fifth draws a tracer.</summary>
+    public int Shots { get; internal set; }
 
     /// <summary>Whom the current strike hit, in order.</summary>
     public IReadOnlyList<Entity> HitList => hit;

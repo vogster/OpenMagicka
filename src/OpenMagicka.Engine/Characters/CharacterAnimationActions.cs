@@ -34,6 +34,7 @@ public static class CharacterAnimationActions
             CameraShakeAction a => new Actions.CameraShake(start, end, a.Duration, a.Magnitude),
             WeaponVisibilityAction a => new Actions.WeaponVisibility(start, end, a.Weapon, a.Visible),
             DealDamageAction a => new Actions.DealDamage(start, end, a.Weapon, (Gameplay.Items.DamageTargets)(byte)a.Targets),
+            GunfireAction a => new Actions.Gunfire(start, end, a.Weapon, a.Accuracy),
             _ => null,
         };
     }

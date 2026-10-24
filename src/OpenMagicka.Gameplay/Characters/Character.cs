@@ -106,20 +106,62 @@ public sealed partial class Character : Entity
     /// <summary>The physics world the body is in (a melee sweep tests the level in it).</summary>
     internal PhysicsWorld World => world;
 
-    /// <summary>Within its radius of the capsule's axis, which runs up from half its length below the centre; never when ethereal.</summary>
-    public override bool SegmentIntersect(Segment segment, float radius)
+    /// <summary>
+    /// Within its radius of the capsule's axis, which runs up from half its length below the centre;
+    /// never when ethereal. The hit is on the capsule, towards the segment's nearest point.
+    /// </summary>
+    public override bool SegmentIntersect(Segment segment, float radius, out Vector3 hit)
     {
         if (!(radius >= 0) || !float.IsFinite(radius))
         {
             throw new ArgumentOutOfRangeException(nameof(radius), radius, "must not be negative");
         }
+        hit = default;
         if (IsEthereal)
         {
             return false;
         }
-        var axis = new Segment(Position - new Vector3(0, Body.Shape.Length / 2, 0), new Vector3(0, Body.Shape.Length, 0));
+        var axis = Axis;
         var reach = radius + Body.Shape.Radius;
-        return Segment.DistanceSquared(axis, segment, out _, out _) <= reach * reach;
+        if (Segment.DistanceSquared(axis, segment, out var s, out var t) > reach * reach)
+        {
+            return false;
+        }
+        var towards = segment.At(t) - axis.At(s);
+        hit = axis.At(s) + (towards.LengthSquared() > 1e-12f ? Vector3.Normalize(towards) * Body.Shape.Radius : Vector3.Zero);
+        return true;
+    }
+
+    /// <summary>The capsule's axis, up from half its length below the centre.</summary>
+    private Segment Axis => new(Position - new Vector3(0, Body.Shape.Length / 2, 0), new Vector3(0, Body.Shape.Length, 0));
+
+    /// <summary>
+    /// The capsule's outward direction where the segment enters it, or from the centre towards
+    /// <paramref name="fallback"/> when it does not (a deflected shot).
+    /// </summary>
+    internal Vector3 EntryNormal(Segment segment, Vector3 fallback)
+    {
+        var radius = Body.Shape.Radius;
+        Segment.DistanceSquared(Axis, segment, out _, out var closest);
+        if (Distance(segment.At(closest)) > radius)
+        {
+            return fallback - Position;
+        }
+        var (outside, inside) = (0f, closest);                                 // the distance falls along the segment up to its closest point
+        if (Distance(segment.At(0)) <= radius)
+        {
+            inside = 0;
+        }
+        for (var i = 0; i < 32 && inside > 0; i++)
+        {
+            var middle = (outside + inside) / 2;
+            (outside, inside) = Distance(segment.At(middle)) > radius ? (middle, inside) : (outside, middle);
+        }
+        var entry = segment.At(inside);
+        Segment.DistanceSquared(Axis, new Segment(entry, Vector3.Zero), out var s, out _);
+        return entry - Axis.At(s);
+
+        float Distance(Vector3 point) => MathF.Sqrt(Segment.DistanceSquared(Axis, new Segment(point, Vector3.Zero), out _, out _));
     }
 
     public override bool IsDead => Dead;
@@ -294,6 +336,7 @@ public sealed partial class Character : Entity
         if (!Dead)
         {
             RunItemAuras(dt);                                                 // as the original: held items do nothing for a corpse
+            FireGuns(dt);
         }
     }
 

@@ -145,26 +145,5 @@ public static class Melee
 
     /// <summary>The item's melee groups that the context meets; their events act for the holder.</summary>
     internal static DamageResult Fire(Character owner, Item item, in EventContext context, Entity? target) =>
-        item.MeleeEvents.Fire(context, (e, at) => Run(e, at, owner, item, target));
-
-    private static DamageResult Run(ItemEvent e, Vector3? at, Character owner, Item item, Entity? target)
-    {
-        switch (e)
-        {
-            case DamageEvent damage when target is not null:
-                return target.Damage(damage.Damage, owner, item.Position);
-            case DamageOwnerEvent damage:
-                return owner.Damage(damage.Damage, owner, item.Position);
-            case SoundEvent sound:
-                owner.RaiseCue(new SoundCue(sound.Cue, sound.Banks, at ?? item.Position, owner.Body.Facing, sound.Magnitude));
-                return DamageResult.None;
-            case EffectEvent effect:
-                var along = -new Vector3(item.Transform.M31, item.Transform.M32, item.Transform.M33);
-                var direction = effect.WorldAlign ? Vector3.UnitY : along.LengthSquared() > 1e-8f ? Vector3.Normalize(along) : -Vector3.UnitZ;
-                owner.RaiseCue(new ItemEffectCue(effect.Effect, at ?? item.Position, direction, effect.Follow, item));
-                return DamageResult.None;
-            default:
-                return DamageResult.None;
-        }
-    }
+        item.MeleeEvents.Fire(context, (e, at) => ItemEventRunner.Run(e, at, owner, item, target));
 }

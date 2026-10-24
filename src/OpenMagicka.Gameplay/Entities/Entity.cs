@@ -60,13 +60,23 @@ public abstract class Entity
     public virtual Combat.DamageResult Damage(Combat.DamageEntry damage, Entity? attacker, Vector3 attackPosition) => Combat.DamageResult.None;
 
     /// <summary>Whether a segment, thickened by <paramref name="radius"/>, touches the entity (a melee sweep).</summary>
-    public virtual bool SegmentIntersect(Segment segment, float radius)
+    public bool SegmentIntersect(Segment segment, float radius) => SegmentIntersect(segment, radius, out _);
+
+    /// <summary>
+    /// Whether a segment, thickened by <paramref name="radius"/>, touches the entity, and the point on
+    /// its surface facing the segment's nearest point (a shot).
+    /// </summary>
+    public virtual bool SegmentIntersect(Segment segment, float radius, out Vector3 hit)
     {
         if (!(radius >= 0) || !float.IsFinite(radius))
         {
             throw new ArgumentOutOfRangeException(nameof(radius), radius, "must not be negative");
         }
-        return Segment.DistanceSquared(segment, new Segment(Position, Vector3.Zero), out _, out _) <= (radius + Radius) * (radius + Radius);
+        var centre = new Segment(Position, Vector3.Zero);
+        var touches = Segment.DistanceSquared(segment, centre, out var s, out _) <= (radius + Radius) * (radius + Radius);
+        var towards = segment.At(s) - Position;
+        hit = Position + (towards.LengthSquared() > 1e-12f ? Vector3.Normalize(towards) * Radius : Vector3.Zero);
+        return touches;
     }
 
     /// <summary>One frame of the entity's own logic.</summary>

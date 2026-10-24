@@ -28,3 +28,15 @@ public sealed record ItemEffectCue(string Effect, Vector3 Position, Vector3 Dire
 
 /// <summary>The item's following effects end (with the strike).</summary>
 public sealed record ItemEffectEndCue(Items.Item Source) : AnimationCue;
+
+/// <summary>A gun starts or stops its burst: its sound, and its shells at attach1.</summary>
+public sealed record GunfireCue(Items.Item Source, bool Firing) : AnimationCue;
+
+/// <summary>A gun's muzzle flash at attach0.</summary>
+public sealed record MuzzleCue(Items.Item Source) : AnimationCue;
+
+/// <summary>
+/// A tracer along a shot, drawn after <paramref name="Delay"/> seconds (none or less: now). The
+/// sprite is drawn as a byte, as the original, so 256 and up wrap.
+/// </summary>
+public sealed record TracerCue(Vector3 From, Vector3 To, float Speed, int Sprite, float Delay) : AnimationCue;

@@ -27,7 +27,8 @@ public static class ItemTemplates
             Point(model, "attach0"),
             Point(model, "attach1"),
             Events(content.Melee.Conditions),
-            [.. content.Auras.Select(BuffTemplates.Aura)]);
+            [.. content.Auras.Select(BuffTemplates.Aura)],
+            Gameplay.Items.Guns.IsGun((Gameplay.Items.WeaponClass)content.WeaponClass) ? Gun(content.Ranged) : null);
         template.Validate();
         return template;
     }
@@ -66,6 +67,35 @@ public static class ItemTemplates
             point = matrix;
         }
         return point;
+    }
+
+    /// <summary>A gun's firing, from the item's ranged part (§8.1.3).</summary>
+    private static Gameplay.Items.GunTemplate Gun(ItemRanged ranged) => new(
+        ranged.GunRange, ranged.GunClip, ranged.GunRate, ranged.GunAccuracy, ranged.TracerVelocity, Events(ranged.GunConditions),
+        ranged.GunSound, ranged.GunMuzzleEffect, ranged.GunShellsEffect, Sprite(ranged.TracerSprite), Sprite(ranged.NonTracerSprite));
+
+    /// <summary>
+    /// A tracer sprite: "" is none (−1), "N" is N, and "X/N" adds 64, 128, 192 or 256 for B, C, D or E
+    /// (any other sheet adds nothing), as the original; it draws the sprite as a byte.
+    /// </summary>
+    internal static int Sprite(string text)
+    {
+        if (text.Length == 0)
+        {
+            return -1;
+        }
+        var parts = text.Split('/');
+        var sheet = parts.Length > 1 ? parts[0].ToUpperInvariant() switch
+        {
+            "B" => 64,
+            "C" => 128,
+            "D" => 192,
+            "E" => 256,
+            _ => 0,
+        } : 0;
+        return float.TryParse(parts[parts.Length > 1 ? 1 : 0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var index)
+            ? sheet + (int)index
+            : throw new InvalidDataException($"bad tracer sprite '{text}'");
     }
 
     /// <summary>A source's event groups; the events that wait for later systems are left out (§8.2).</summary>

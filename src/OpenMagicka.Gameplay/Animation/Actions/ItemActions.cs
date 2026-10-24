@@ -31,3 +31,27 @@ public sealed class DealDamage(float start, float end, int slot, DamageTargets t
         }
     }
 }
+
+/// <summary>The gun in a slot fires a burst for the window (docs/engine/ENTITIES_AI.md §8.1.3).</summary>
+public sealed class Gunfire(float start, float end, int slot, float accuracy) : AnimationAction(start, end)
+{
+    public int Slot { get; } = slot is >= 0 and < Character.Slots ? slot : throw new ArgumentOutOfRangeException(nameof(slot), slot, "not a slot");
+
+    public float Accuracy { get; } = Finite(accuracy, nameof(accuracy));
+
+    public override void Run(Character owner, bool first)
+    {
+        if (first && owner.ItemIn(Slot) is { } item)
+        {
+            Guns.Begin(owner, item, Accuracy);
+        }
+    }
+
+    public override void Stop(Character owner)
+    {
+        if (owner.ItemIn(Slot) is { } item)
+        {
+            Guns.End(owner, item);
+        }
+    }
+}

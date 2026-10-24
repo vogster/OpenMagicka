@@ -77,7 +77,11 @@ public sealed partial class Character
         ArgumentNullException.ThrowIfNull(bone);
         EquipmentTemplate.CheckRotation(rotation);
         var (index, attach) = AttachPoint(bone, rotation);
-        equipment[CheckSlot(slot)] = new EquipmentSlot(bone, rotation, item, index, attach);
+        if (equipment[CheckSlot(slot)].Item is { } replaced && !ReferenceEquals(replaced, item))
+        {
+            Guns.Stop(this, replaced);
+        }
+        equipment[slot] = new EquipmentSlot(bone, rotation, item, index, attach);
         item.Held();
         EquipmentChanged();
         item.Place(index >= 0 ? attach * skinned[index] : root);               // in hand at once; the others keep their sweep
@@ -87,9 +91,25 @@ public sealed partial class Character
     public Item? Unequip(int slot)
     {
         var item = equipment[CheckSlot(slot)].Item;
+        if (item is not null)
+        {
+            Guns.Stop(this, item);                                            // a gun leaving the hand stops its burst
+        }
         equipment[slot] = EquipmentSlot.Empty;
         EquipmentChanged();
         return item;
+    }
+
+    /// <summary>Held guns shoot when their timers come due (at the end of the frame, after the items moved).</summary>
+    private void FireGuns(float dt)
+    {
+        foreach (var slot in equipment)
+        {
+            if (slot.Item is { } item)
+            {
+                Guns.Update(this, item, dt);
+            }
+        }
     }
 
     public bool HasPassiveAbility(PassiveAbility ability) =>

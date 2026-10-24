@@ -62,6 +62,7 @@ public enum PassiveAbility : byte
 /// <param name="Attach1">Its second point (a gun's shells); null at the origin.</param>
 /// <param name="Melee">The groups a melee strike fires (§8.1.2, §8.2).</param>
 /// <param name="Auras">What the item spreads around its holder while held (§8.3.2).</param>
+/// <param name="Gun">How a gun fires (§8.1.3); only the gun classes use it.</param>
 public sealed record ItemTemplate(
     string Id,
     WeaponClass WeaponClass = WeaponClass.Default,
@@ -77,7 +78,8 @@ public sealed record ItemTemplate(
     System.Numerics.Matrix4x4? Attach0 = null,
     System.Numerics.Matrix4x4? Attach1 = null,
     IReadOnlyList<EventGroup>? Melee = null,
-    IReadOnlyList<Buffs.Aura>? Auras = null)
+    IReadOnlyList<Buffs.Aura>? Auras = null,
+    GunTemplate? Gun = null)
 {
     /// <summary>Throws on a value the rules cannot use; loaders call it as they read.</summary>
     public void Validate()
@@ -111,6 +113,11 @@ public sealed record ItemTemplate(
         {
             ArgumentNullException.ThrowIfNull(aura, nameof(Auras));
             aura.Validate();
+        }
+        Gun?.Validate();
+        if (Gun is not null && !Guns.IsGun(WeaponClass))
+        {
+            throw new ArgumentException($"{Id}: only the gun classes fire", nameof(Gun));
         }
     }
 }
