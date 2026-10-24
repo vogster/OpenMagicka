@@ -61,7 +61,7 @@ public sealed class TimeWarpEffect : Entity, IMagickEffect
             manager.TimeMultiplier = 1;
             return;
         }
-        var real = dt / manager.TimeMultiplier;
+        var real = dt / (manager.TimeMultiplier * manager.TimeModifier);
         var target = ttl <= Fade ? 1 : Slow;
         ttl -= real;
         manager.TimeMultiplier = Math.Clamp(manager.TimeMultiplier + (target - manager.TimeMultiplier) * real, 0.01f, 1);

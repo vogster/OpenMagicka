@@ -41,6 +41,18 @@ public sealed class EntityManager
     /// <summary>The scene is indoors (its <c>Indoor</c> flag): no sky for the weather magicks.</summary>
     public bool Indoors { get; set; }
 
+    /// <summary>Where the level finds the characters it makes at run time (summons); null for none.</summary>
+    public Characters.IBestiary? Bestiary { get; set; }
+
+    /// <summary>A second scale of the level's time (Death slows it), multiplying <see cref="TimeMultiplier"/>.</summary>
+    public float TimeModifier
+    {
+        get => timeModifier;
+        set => timeModifier = value is > 0 and <= 1 && float.IsFinite(value) ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "must be in (0, 1]");
+    }
+
+    private float timeModifier = 1;
+
     /// <summary>How fast the level's time runs (a time warp slows it); the world's frame is scaled by it.</summary>
     public float TimeMultiplier
     {
@@ -181,7 +193,7 @@ public sealed class EntityManager
         entities.Clear();
         all.ForEach(Release);
         grid.Rebuild(entities);
-        timeMultiplier = 1;
+        (timeMultiplier, timeModifier) = (1, 1);
     }
 
     /// <summary>

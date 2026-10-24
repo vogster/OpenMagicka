@@ -32,6 +32,18 @@ public sealed partial class Character
 
     public bool IsConfused => confuseTimer > 0;
 
+    /// <summary>Called up by a magick: it fights for its master.</summary>
+    public bool IsSummoned => SummonMaster is not null;
+
+    public Character? SummonMaster { get; private set; }
+
+    /// <summary>Called up by a master: it takes the master's factions (its AI follows, OM-40).</summary>
+    public void Summoned(Character master)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        (SummonMaster, factions) = (master, master.Factions);
+    }
+
     /// <summary>Where it was going when fear took over, given back when the fear is done.</summary>
     internal Vector3? WantedMovement { get; set; }
 
@@ -87,7 +99,7 @@ public sealed partial class Character
     public void EndConfusion()
     {
         confuseTimer = 0;
-        factions = null;
+        factions = SummonMaster?.Factions;                                    // a summon keeps its master's side
     }
 
     /// <summary>
@@ -114,6 +126,11 @@ public sealed partial class Character
         StopLevitate();
         (hasteTime, enchantTime) = (0, 0);
         auras.Clear();
+        if (IsSummoned)
+        {
+            Kill();                                                           // a summon is undone with the magick
+            return true;
+        }
         return undone;
     }
 

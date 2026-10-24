@@ -82,6 +82,11 @@ public static class MagickEffects
         new Confuse(),
         new Nullify(),
         new Corporealize(),
+        new SummonUndead(),
+        new SummonElemental(),
+        new SummonPhoenix(),
+        new SummonDeath(),
+        new Portal(),
     }.ToDictionary(m => m.Type);
 
     /// <summary>The magick's effect; null for one that does nothing yet.</summary>

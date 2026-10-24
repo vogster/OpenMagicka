@@ -107,6 +107,16 @@ public sealed partial class CharacterBody
     /// <summary>The horizontal direction the character faces.</summary>
     public Vector3 Facing { get; private set; } = -Vector3.UnitZ;
 
+    /// <summary>Turns at once to face a horizontal direction (and wants it); a zero value is ignored.</summary>
+    public void Face(Vector3 direction)
+    {
+        var flat = Flat(Vectors.ThrowIfNotFinite(direction, nameof(direction)));
+        if (flat.LengthSquared() > Epsilon)
+        {
+            Facing = wantedDirection = Unit(flat);
+        }
+    }
+
     public float MaxSpeed
     {
         get => maxSpeed;

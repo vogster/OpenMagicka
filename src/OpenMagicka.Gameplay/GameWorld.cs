@@ -52,7 +52,7 @@ public sealed class GameWorld : IDisposable
     /// </summary>
     public IReadOnlyList<RemovedEntity> Tick(float dt)
     {
-        dt *= Entities.TimeMultiplier;                                        // a time warp slows the whole level
+        dt *= Entities.TimeMultiplier * Entities.TimeModifier;                // a time warp or Death slows the whole level
         var characters = Characters.ToList();
         foreach (var character in characters)
         {

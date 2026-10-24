@@ -510,18 +510,20 @@ fears and friendship between characters go by these.
 ### 6.4 Nullify (`cast_magick_self`)
 
 - **The running magicks end:** weather, meteor showers, napalm strikes, time warps (the time comes
-  back), revivals on their way, conflagrations, judgement volleys, amalgamations and grease sweeps.
-- **What goes:** whirlwinds, vortices, missiles, barriers, mines, grease fields and shields.
+  back), revivals on their way, conflagrations, judgement volleys, amalgamations, grease sweeps,
+  raisings of the dead, phoenixes on their way down, and Death (the time comes back).
+- **What goes:** whirlwinds, vortices, missiles, barriers, mines, grease fields, shields and both
+  portals.
 - **Every character:**
   - loses its statuses;
   - loses its vines, self-shield, fear, charm, confusion, invisibility, running spell, combined
     spell still to go (a charge, a clip before its action) and queue;
   - loses its levitation, haste, enchantment and auras.
+  - A summoned character is killed.
   - The original spares the auras of a cross's bubble, which comes with that ability.
 - **Glow.** `magick_nullified` plays on the barriers, mines and fields that went, and on each
   character that had any of its vines, self-shield, fear, charm, confusion, invisibility, spell
   or queue.
-- **Later:** summoned characters are killed (with summons); portals close (with the portal).
 - **Sound.** `magick_nullify`; a screen flash (renderer).
 
 ### 6.5 Corporealize (`cast_magick_self`)
@@ -532,4 +534,97 @@ fears and friendship between characters go by these.
 
 ## 7. Summons and the portal
 
-Phase 5.
+- **Summoned characters.** A summon takes its master's factions (and gets them back after a
+  confusion). What it then does comes with the AI (OM-40).
+- **The bestiary.** A level finds the templates it makes at run time by asset name, with their
+  clips. The engine's comes from the game files (attached to a level with level play); a missing
+  or broken asset makes nothing.
+- **Without a nav mesh** (OM-39), every "nearest walkable point" below is a ground probe.
+
+### 7.1 Raise Dead (`cast_magick_direct`)
+
+- **The spot.** 4 ahead of the caster, on the ground (a probe 3 down).
+- **The rising** lasts 8.1 s. One zombie (`data/characters/zombie`) rises at once and one every
+  2 s after, five in all. Each stands at a random spot within ±1.5 of the centre (a probe 10
+  down), faces a random way, plays `spawn` (only the clip: it does not go through the rising
+  state), and is summoned by the caster.
+- **A full level.** The cast still counts; nothing rises.
+- **Presentation.** `magick_summonundead_ground` at the spot, four times its size, for as long as
+  the rising lasts (renderer); `magick_raise_dead`.
+
+### 7.2 Summon Elemental (`cast_magick_direct`)
+
+- **The egg** lies 3 ahead, on the ground (from 1 above, 10 down), with 1 hit point.
+- **Memory.** For each element of a blow among the status elements, Lightning and Arcane, it
+  keeps the blow's amount × magnitude; a later blow of the element replaces it. Other blows do
+  nothing to it. Ours has no body yet, so only blows that reach what is near (areas, beams,
+  sprays) strike it, not missiles.
+- **Hatching.** Each update it picks the element with the largest kept value, and it is done as
+  soon as there is one. As it goes, the elemental of that element
+  (`data/characters/elemental_<element>`) rises where it lay, summoned by the caster, with
+  `special0` as its rising clip.
+- **Killed outright** it would hatch a Shield elemental. But its next update picks again from its
+  blows, and a Shield egg removed first hatches nothing. So, as the original, it never does.
+- **A level's eggs** may have a proximity. Once a second, a wizard within it hatches the egg into
+  one of Arcane, Cold, Poison, Fire, Life, Water, Steam or Lightning, at random.
+- **Presentation.** `magick_summonelemental` at the egg; `magick_summon_elemental`.
+
+### 7.3 Summon Phoenix (`cast_magick_direct`)
+
+- **Indoors** it only cries (`magick_summon_phoenix_indoors`). The original's camera shake there
+  is never reached.
+- **One at a time.** A cast while a phoenix is on its way does nothing, and counts as cast.
+- **The descent.** The phoenix comes down at a random spot within ±2 of the caster, on the
+  ground. When its clip ends (2.083 s):
+  - fire bursts within 6 of the spot (0.5 up): Fire damage 400, a Fire status of 200 at
+    magnitude 5, and a Fire knock-down of 400 at magnitude 2;
+  - each player a revival may raise (§3.5) rises around the phoenix with all its hit points, a
+    quarter turn apart by player number.
+- **Presentation.** `magick_summon_phoenix`; at the burst `magick_phoenix_blast`,
+  `spell_fire_area` and a camera shake of 1 for 1 s.
+
+### 7.4 Summon Death (`cast_magick_direct`)
+
+- **One at a time;** a second cast fails.
+- **The victim.** Of the living characters within 40, undead aside, the one with the smallest
+  share of its hit points (more than none). The scan starts at a random place and a later equal
+  one wins; the caster may be it. With none, it is the caster.
+  - The original searches around its view centre; we search around the caster.
+- **The coming.** Death appears 7 from the victim at a random angle, on the ground (from 1 above,
+  6 down), 1.3 up. It hovers toward 1.2 above the floor (with no floor, it keeps its height).
+- **Time.** While it is about, the world's time eases toward a quarter: each update it moves by
+  its distance times dt over the aim. Death's own time is real time, worked out (as the
+  original) with the modifier it has just set.
+- **The chase.** Ethereal, after 2 s it glides at 8 straight to the victim, turning toward it.
+- **The swing.** Within `1.2·(0.396 + r²)` of the victim (squared, flat; r its radius):
+  - it stops, becomes solid, and raises its scythe (0.833 s);
+  - then it brings it down (1.667 s). From 10% to 80% of the fall, the blade takes all the hit
+    points (as Arcane, plain) of every character it cuts, each once in 1.5 s; the caster too.
+  - The blade follows the scythe's bones in the original. Until those come with the renderer, it
+    cuts whatever stands within 2 (plus its radius) in front of Death.
+- **Going.** After the fall, or when struck by a damaging Life blow while solid, it vanishes
+  (1.042 s) and time eases back. When gone, time is whole again.
+- **Its victim dead** (or gone), it goes at once, in any phase, as the original. So after a kill
+  it does not vanish: time is whole again at once.
+- **Presentation.** `magick_summon_death`, and `magick_timewarp` while it is about;
+  `death_ethereal_spawn` and `boss_death_proximity` (Characters bank) as it comes;
+  `wep_death_scythe_swing` and `wep_death_scythe` (Weapons bank); `boss_death_death` and
+  `death_ethereal_despawn` as it vanishes; the screen at half saturation while it is about
+  (renderer).
+
+### 7.5 Portal (`cast_area_fireworks`)
+
+- **The gates.** A level has two, orange and blue. Each cast opens a gate 2 ahead of the caster
+  (a probe from 2 above, 4 down; 1.5 above the floor). With two gates up, the older one moves
+  there and keeps its colour. The first gate is orange.
+- **Failure.** With no floor there, it fails. The original wants a walkable point within 5.
+- **Connection.** The gates are connected while both are up and within 30 of each other.
+- **Going through.** While connected, a character or missile that touches a gate (an upright
+  capsule, radius 0.5, 2 tall) comes out of the other one. Its offset from the gate it touched,
+  times 0.8, is kept. Barriers, shields and grease fields never go through. Of our other
+  entities, none has a body to move yet.
+- **Ignore memory.** Each touch keeps the entity out of both gates for 0.1 s, so what comes out
+  stays until it steps off.
+- **Presentation.** `magick_teleportb` as a gate opens; `magick_teleporta` for each passage;
+  `magick_portal_orange` / `magick_portal_blue` on each gate while connected (renderer). The
+  pair's `spell_shield` hum, louder the nearer they are, comes with the audio.

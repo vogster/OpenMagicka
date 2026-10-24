@@ -40,14 +40,18 @@ public sealed class Revive() : Magick(MagickType.Revive, SelfClip)
         Player? best = null;
         foreach (var player in session.Players)
         {
-            if (player.Playing && !player.Ressing && player.Avatar is { } avatar && (avatar.IsOverkilled || (avatar.IsDead && !avatar.IsReviving))
-                && player.DeadAge > float.Epsilon && player.DeadAge > (best?.DeadAge ?? 0))
+            if (CanRise(player) && player.DeadAge > (best?.DeadAge ?? 0))
             {
                 best = player;
             }
         }
         return best;
     }
+
+    /// <summary>Whether a revival may raise the player's wizard (see <see cref="Revivee"/>).</summary>
+    public static bool CanRise(Player player) =>
+        player.Playing && !player.Ressing && player.Avatar is { } avatar && (avatar.IsOverkilled || (avatar.IsDead && !avatar.IsReviving))
+        && player.DeadAge > float.Epsilon;
 }
 
 /// <summary>

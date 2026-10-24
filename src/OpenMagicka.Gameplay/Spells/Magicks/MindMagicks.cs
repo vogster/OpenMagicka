@@ -160,6 +160,9 @@ public sealed class Nullify() : Magick(MagickType.Nullify, SelfClip)
             case SpellShield shield:
                 shield.Kill();
                 return false;
+            case PortalGate gate:
+                gate.Kill();
+                return false;
             case Character character:
                 return character.Nullify();
             default:
