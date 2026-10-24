@@ -9,7 +9,8 @@ namespace OpenMagicka.Engine.Characters;
 public static class ItemTemplates
 {
     /// <param name="model">The item's model, whose bones give its points (§4.3); null puts them at its origin.</param>
-    public static Gameplay.Items.ItemTemplate From(ItemContent content, Content.Xna.ModelContent? model = null)
+    /// <param name="projectile">The model of its missile, whose first mesh gives the missile's size (§8.1.4).</param>
+    public static Gameplay.Items.ItemTemplate From(ItemContent content, Content.Xna.ModelContent? model = null, Content.Xna.ModelContent? projectile = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         var template = new Gameplay.Items.ItemTemplate(
@@ -28,7 +29,8 @@ public static class ItemTemplates
             Point(model, "attach1"),
             Events(content.Melee.Conditions),
             [.. content.Auras.Select(BuffTemplates.Aura)],
-            Gameplay.Items.Guns.IsGun((Gameplay.Items.WeaponClass)content.WeaponClass) ? Gun(content.Ranged) : null);
+            Gameplay.Items.Guns.IsGun((Gameplay.Items.WeaponClass)content.WeaponClass) ? Gun(content.Ranged) : null,
+            content.Ranged.RangedConditions.Count > 0 ? Ranged(content, projectile) : null);
         template.Validate();
         return template;
     }
@@ -36,6 +38,12 @@ public static class ItemTemplates
     /// <summary>The item's model, from the item's own asset.</summary>
     internal static Content.Xna.ModelContent? Model(ContentLoader loader, string itemAsset, ItemContent item) =>
         item.Model is { } model ? loader.LoadReference(itemAsset, model).Root as Content.Xna.ModelContent : null;
+
+    /// <summary>The model of the item's missile, from the item's own asset.</summary>
+    internal static Content.Xna.ModelContent? Projectile(ContentLoader loader, string itemAsset, ItemContent item) =>
+        item.Ranged.ProjectileModel is { } model && item.Ranged.RangedConditions.Count > 0 && (Gameplay.Items.WeaponClass)item.WeaponClass != Gameplay.Items.WeaponClass.Heavy
+            ? loader.LoadReference(itemAsset, model).Root as Content.Xna.ModelContent
+            : null;
 
     /// <summary>
     /// A named bone's transform with each parent's multiplied in before it, as the original (the
@@ -67,6 +75,17 @@ public static class ItemTemplates
             point = matrix;
         }
         return point;
+    }
+
+    /// <summary>What the item throws (§8.1.4): the projectile model's first mesh sizes it, except for Heavy guns.</summary>
+    private static Gameplay.Items.RangedTemplate Ranged(ItemContent content, Content.Xna.ModelContent? projectile)
+    {
+        var ranged = content.Ranged;
+        var radius = projectile is { Meshes.Count: > 0 } model && (Gameplay.Items.WeaponClass)content.WeaponClass != Gameplay.Items.WeaponClass.Heavy
+            ? model.Meshes[0].Bounds.Radius
+            : Gameplay.Items.Ranged.DefaultRadius;
+        return new Gameplay.Items.RangedTemplate(ranged.Range, Events(ranged.RangedConditions), ranged.Elevation * MathF.PI / 180, ranged.Homing, ranged.Danger,
+            ranged.Facing, radius > 0 ? radius : Gameplay.Items.Ranged.DefaultRadius);
     }
 
     /// <summary>A gun's firing, from the item's ranged part (§8.1.3).</summary>
@@ -110,6 +129,8 @@ public static class ItemTemplates
         DamageOwnerEvent d => new Gameplay.Items.DamageOwnerEvent(Damage(d.Damage), d.VelocityBased),
         SoundEvent s => new Gameplay.Items.SoundEvent(s.Cue, (int)s.Banks, s.Magnitude),
         EffectEvent f => new Gameplay.Items.EffectEvent(f.Effect, f.Follow, f.WorldAlign),
+        RemoveEvent r => new Gameplay.Items.RemoveEvent(r.Bounce),
+        SplashEvent s => new Gameplay.Items.SplashEvent(Damage(s.Damage), s.Radius),
         _ => null,
     };
 

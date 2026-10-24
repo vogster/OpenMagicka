@@ -31,7 +31,7 @@ public sealed class TemplateLibrary(ContentLoader loader)
         if (!items.TryGetValue(asset, out var item))
         {
             item = Loader.Load(asset).Root is ItemContent content
-                ? ItemTemplates.From(content, ItemTemplates.Model(Loader, asset, content))
+                ? ItemTemplates.From(content, ItemTemplates.Model(Loader, asset, content), ItemTemplates.Projectile(Loader, asset, content))
                 : throw new InvalidDataException($"'{asset}' is not an item");
             items[asset] = item;
         }

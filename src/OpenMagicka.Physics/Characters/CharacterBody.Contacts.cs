@@ -27,6 +27,7 @@ public sealed partial class CharacterBody
     /// <summary>What happened during the last step; clears it for the next one.</summary>
     public CharacterReport AfterStep()
     {
+        TakeStagedPushes();
         if (impactSpeed is null && !knockedDownSelf && knockedDown.Count == 0 && touched.Count == 0)
         {
             return CharacterReport.Quiet;

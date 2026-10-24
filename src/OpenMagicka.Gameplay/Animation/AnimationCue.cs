@@ -23,11 +23,14 @@ public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3
 
 public sealed record CameraShakeCue(Vector3 Position, float Magnitude, float Duration) : AnimationCue;
 
-/// <summary>An item's effect (a strike's sparks); a following one stays on the item until its <see cref="ItemEffectEndCue"/>.</summary>
-public sealed record ItemEffectCue(string Effect, Vector3 Position, Vector3 Direction, bool Follow, Items.Item Source) : AnimationCue;
+/// <summary>
+/// An item's or a missile's effect (a strike's sparks, a missile's trail); a following one stays on
+/// its source until its <see cref="ItemEffectEndCue"/>.
+/// </summary>
+public sealed record ItemEffectCue(string Effect, Vector3 Position, Vector3 Direction, bool Follow, object Source) : AnimationCue;
 
-/// <summary>The item's following effects end (with the strike).</summary>
-public sealed record ItemEffectEndCue(Items.Item Source) : AnimationCue;
+/// <summary>The source's following effects end (the strike ends, the missile is gone).</summary>
+public sealed record ItemEffectEndCue(object Source) : AnimationCue;
 
 /// <summary>A gun starts or stops its burst: its sound, and its shells at attach1.</summary>
 public sealed record GunfireCue(Items.Item Source, bool Firing) : AnimationCue;

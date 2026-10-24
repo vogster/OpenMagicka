@@ -35,8 +35,20 @@ public static class CharacterAnimationActions
             WeaponVisibilityAction a => new Actions.WeaponVisibility(start, end, a.Weapon, a.Visible),
             DealDamageAction a => new Actions.DealDamage(start, end, a.Weapon, (Gameplay.Items.DamageTargets)(byte)a.Targets),
             GunfireAction a => new Actions.Gunfire(start, end, a.Weapon, a.Accuracy),
+            SpawnMissileAction a => new Actions.SpawnMissile(start, end, a.Weapon, ThrowVelocity(a), a.ItemAligned),
             _ => null,
         };
+    }
+
+    /// <summary>A throw's velocity: none when it is (almost) zero, as the original reads it.</summary>
+    private static System.Numerics.Vector3? ThrowVelocity(SpawnMissileAction a)
+    {
+        var v = new System.Numerics.Vector3(a.Velocity.X, a.Velocity.Y, a.Velocity.Z);
+        if (!float.IsFinite(v.X) || !float.IsFinite(v.Y) || !float.IsFinite(v.Z))
+        {
+            throw new InvalidDataException("a missile velocity must be finite");
+        }
+        return v.LengthSquared() > 1e-6f ? v : null;
     }
 
     /// <summary>A status by its name in the data, ignoring case as the original (Life is healing).</summary>

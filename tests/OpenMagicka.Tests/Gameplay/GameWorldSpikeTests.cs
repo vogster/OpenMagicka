@@ -49,7 +49,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 12853;
+    private const int MadeActions = 14640;
 
     [GameContentFact]
     public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()
@@ -94,6 +94,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         output.WriteLine($"{guns.Count} guns; {guns.Count(g => g.Gun!.Events.Count > 0)} with gun events; clips {string.Join(",", guns.Select(g => g.Gun!.Clip).Distinct().Order())}");
         output.WriteLine($"rates {string.Join(",", guns.Select(g => g.Gun!.Rate).Distinct().Order())}; tracer speeds {string.Join(",", guns.Select(g => g.Gun!.TracerVelocity).Distinct().Order())}; ranges {string.Join(",", guns.Select(g => g.Gun!.Range).Distinct().Order())}; collision thresholds {string.Join(",", guns.SelectMany(g => g.Gun!.Events).Where(e => (e.Condition.Trigger & EventTrigger.Collision) != 0).Select(e => e.Condition.Threshold).Distinct())}");
         Assert.Equal((33, 19), (guns.Count, guns.Count(g => g.Gun!.Events.Count > 0)));   // as ENTITIES_AI §8.1.3 records
+        Assert.Equal(69, items.Count(i => i.Ranged is not null));                    // as ENTITIES_AI §8.1.4 records
         Assert.Equal((200, 92, 48, 292, 11), (items.Count(i => i.WeaponClass == WeaponClass.Default), items.Count(i => i.WeaponClass == WeaponClass.Staff),
             items.Count(i => i.WeaponClass == WeaponClass.SlashMedium), items.Count(i => i.BlockValue > 0), items.Count(i => i.PassiveAbility != 0)));
         Assert.Equal((286, 591, 86, 291), (equipped, slots, staffs, tipped));      // as ENTITIES_AI §8.1.1 records
@@ -117,6 +118,52 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
         Assert.All(holders, g => Assert.Single(g.Distinct()));                       // one template, so one object per buff
         Assert.Same(library.Character(loader.Files.ListFiles("Data/Characters", recursive: true).First()[..^4]),
             library.Character(loader.Files.ListFiles("Data/Characters", recursive: true).First()[..^4]));
+    }
+
+    [GameContentFact]
+    public void EveryThrowingTemplate_ThrowsAMissile()
+    {
+        var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var library = new TemplateLibrary(loader);
+        var (throwers, threw, fell) = (0, 0, 0);
+        var silent = new List<string>();
+        foreach (var path in loader.Files.ListFiles("Data/Characters", recursive: true).Where(p => p.EndsWith(".xnb", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (loader.LoadUncached(path[..^4]).Root is not CharacterTemplateContent content)
+            {
+                continue;
+            }
+            var throws = content.AnimationSets.SelectMany(set => set.Animations)
+                .FirstOrDefault(a => a.Clip.Actions.OfType<SpawnMissileAction>().Any(m => content.Equipment.Any(e => e.Slot == m.Weapon && e.Item is not null)));
+            if (throws is null)
+            {
+                continue;
+            }
+            using var world = CharacterTests.World();
+            var thrower = new Character(library.Character(path[..^4]), world.Physics, new Vector3(20, 0.5f + content.Stats.Radius + content.Stats.Length / 2, -30),
+                random: new Random(1), animations: CharacterAnimationSets.From(loader, path[..^4], content));
+            world.Entities.Add(thrower);
+            CharacterTests.Run(world, 0.2f);
+            throwers++;
+            var seen = new HashSet<OpenMagicka.Gameplay.Entities.Missile>();
+            thrower.ForceAnimation(throws.Animation);
+            for (var t = 0f; t < 3; t += CharacterTests.Tick)
+            {
+                world.Tick(CharacterTests.Tick);
+                seen.UnionWith(world.Entities.Entities.OfType<OpenMagicka.Gameplay.Entities.Missile>());
+            }
+            if (seen.Count > 0)
+            {
+                threw++;
+                fell += seen.Any(m => m.IsDead) ? 1 : 0;
+            }
+            else
+            {
+                silent.Add($"{content.Id} ({throws.Animation})");
+            }
+        }
+        output.WriteLine($"{throwers} templates throw; {threw} threw a missile ({fell} ended within 3 s); silent: {string.Join(", ", silent.Take(20))}");
+        Assert.Equal((94, 55, 38), (throwers, threw, fell));                         // as ENTITIES_AI §8.1.4 records
     }
 
     [GameContentFact]

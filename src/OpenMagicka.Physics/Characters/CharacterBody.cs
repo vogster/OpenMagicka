@@ -29,6 +29,7 @@ public sealed partial class CharacterBody
     private CharacterConditions conditions = CharacterConditions.Default;
     private Vector3 pendingVelocity;
     private Vector3 extraForce;
+    private readonly List<(Vector3 Velocity, float LiftOff)> staged = [];
     private float sinceGround;
     private bool leavingGround;
 
@@ -159,9 +160,27 @@ public sealed partial class CharacterBody
         {
             return;
         }
-        pendingVelocity += Vectors.ThrowIfNotFinite(velocity, nameof(velocity));
+        Vectors.ThrowIfNotFinite(velocity, nameof(velocity));
+        if (world.IsStepping)
+        {
+            staged.Add((velocity, liftOff));                                   // a push from a contact: the body changes once the step is over
+            return;
+        }
+        pendingVelocity += velocity;
         IsPushed = true;
         leavingGround |= pendingVelocity.Y > liftOff;
+    }
+
+    /// <summary>Pushes given during the step, taken once it is over.</summary>
+    private void TakeStagedPushes()
+    {
+        foreach (var (velocity, liftOff) in staged)
+        {
+            pendingVelocity += velocity;
+            IsPushed = true;
+            leavingGround |= pendingVelocity.Y > liftOff;
+        }
+        staged.Clear();
     }
 
     /// <summary>

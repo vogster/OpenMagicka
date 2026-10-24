@@ -4,6 +4,8 @@ using OpenMagicka.Gameplay.Items;
 using DamageEvent = OpenMagicka.Content.Magicka.DamageEvent;
 using SoundEvent = OpenMagicka.Content.Magicka.SoundEvent;
 using EffectEvent = OpenMagicka.Content.Magicka.EffectEvent;
+using RemoveEvent = OpenMagicka.Content.Magicka.RemoveEvent;
+using SplashEvent = OpenMagicka.Content.Magicka.SplashEvent;
 using EventCondition = OpenMagicka.Gameplay.Items.EventCondition;
 using AttackProperties = OpenMagicka.Content.Magicka.AttackProperties;
 using ContentElements = OpenMagicka.Content.Magicka.Elements;
@@ -33,7 +35,7 @@ public class ItemTemplatesTests
     }
 
     [Fact]
-    public void MeleeEvents_CarryOver_AndTheLaterKindsAreLeftOut()
+    public void Events_CarryOver_AndTheLaterKindsAreLeftOut()
     {
         EventCollectionContent[] groups =
         [
@@ -52,9 +54,11 @@ public class ItemTemplatesTests
         Assert.Equal(new OpenMagicka.Gameplay.Combat.DamageEntry(OpenMagicka.Gameplay.Combat.AttackProperties.Damage | OpenMagicka.Gameplay.Combat.AttackProperties.Knockdown,
             GameElements.Earth, 40, 2), damage.Damage);
         Assert.Equal(new OpenMagicka.Gameplay.Items.SoundEvent("sword_hit", (int)SoundBanks.Weapons, 1), events[0].Events[1]);
-        Assert.Equal(2, events[0].Events.Count);                                     // the splash comes with spells
+        Assert.Equal(new OpenMagicka.Gameplay.Items.SplashEvent(new OpenMagicka.Gameplay.Combat.DamageEntry(OpenMagicka.Gameplay.Combat.AttackProperties.Damage,
+            GameElements.Fire, 10, 1), 3), events[0].Events[2]);
         Assert.Equal((EventTrigger.Collision, 0.5f, false), (events[1].Condition.Trigger, events[1].Condition.Threshold, events[1].Condition.Repeat));
-        Assert.Equal(new OpenMagicka.Gameplay.Items.EffectEvent("sparks", true, false), Assert.Single(events[1].Events));
+        Assert.Equal(new OpenMagicka.Gameplay.Items.EffectEvent("sparks", true, false), events[1].Events[0]);
+        Assert.Equal(0, Assert.IsType<OpenMagicka.Gameplay.Items.RemoveEvent>(events[1].Events[1]).Bounces);
     }
 
     [Theory]

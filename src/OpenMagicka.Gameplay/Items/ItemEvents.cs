@@ -33,6 +33,9 @@ public abstract record ItemEvent;
 /// <summary>Damages the target, from the source's position.</summary>
 public sealed record DamageEvent(DamageEntry Damage, bool VelocityBased = false) : ItemEvent;
 
+/// <summary>Damages everything around the event (but its source), weaker towards the edge of the radius.</summary>
+public sealed record SplashEvent(DamageEntry Damage, float Radius) : ItemEvent;
+
 /// <summary>Damages the source's owner.</summary>
 public sealed record DamageOwnerEvent(DamageEntry Damage, bool VelocityBased = false) : ItemEvent;
 
@@ -42,6 +45,9 @@ public sealed record SoundEvent(string Cue, int Banks, float Magnitude) : ItemEv
 /// <param name="Follow">Stays on the source while it lives.</param>
 /// <param name="WorldAlign">Points up rather than along the source.</param>
 public sealed record EffectEvent(string Effect, bool Follow, bool WorldAlign) : ItemEvent;
+
+/// <summary>Ends a missile once its bounces are spent (one per firing; each missile counts each such event of its own).</summary>
+public sealed record RemoveEvent(int Bounces) : ItemEvent;
 
 /// <summary>A condition and the events it sets off.</summary>
 public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEvent> Events)
@@ -61,6 +67,7 @@ public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEven
             {
                 DamageEvent d => float.IsFinite(d.Damage.Amount) && float.IsFinite(d.Damage.Magnitude),
                 DamageOwnerEvent d => float.IsFinite(d.Damage.Amount) && float.IsFinite(d.Damage.Magnitude),
+                SplashEvent d => float.IsFinite(d.Damage.Amount) && float.IsFinite(d.Damage.Magnitude) && d.Radius >= 0 && float.IsFinite(d.Radius),
                 SoundEvent s => s.Cue is not null && float.IsFinite(s.Magnitude),
                 EffectEvent f => f.Effect is not null,
                 _ => e is not null,

@@ -22,6 +22,7 @@ public sealed partial class Character
     /// </summary>
     public override DamageResult Damage(DamageEntry damage, Entity? attacker, Vector3 attackPosition)
     {
+        damage = Boosted(damage, attacker);
         Finite(damage.Amount, nameof(damage));
         Finite(damage.Magnitude, nameof(damage));
         if (!float.IsFinite(attackPosition.X) || !float.IsFinite(attackPosition.Y) || !float.IsFinite(attackPosition.Z))

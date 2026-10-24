@@ -79,6 +79,17 @@ public sealed partial class Character
         return (multiplier, bias);
     }
 
+    /// <summary>A hit as a character attacker deals it: its damage boosts for the hit's elements, amount × multiplier + bias, as the original.</summary>
+    public static DamageEntry Boosted(DamageEntry damage, Entities.Entity? attacker)
+    {
+        if (attacker is not Character character)
+        {
+            return damage;
+        }
+        var (multiplier, bias) = character.DamageBoost(damage.Element);
+        return multiplier == 1 && bias == 0 ? damage : damage with { Amount = damage.Amount * multiplier + bias };
+    }
+
     /// <summary>A spell's time or range after the modifier buffs of that kind: × multipliers + modifiers.</summary>
     public float Modify(Modified kind, float value)
     {

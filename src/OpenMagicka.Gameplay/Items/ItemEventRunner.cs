@@ -15,6 +15,8 @@ internal static class ItemEventRunner
         {
             case DamageEvent damage when target is not null:
                 return target.Damage(damage.Damage, owner, StruckFrom(item, target));
+            case SplashEvent splash when owner.Manager is { } manager:
+                return Splash.Hit(manager, owner, owner, at ?? item.Position, splash.Radius, splash.Damage);   // the holder is spared, as the original
             case DamageOwnerEvent damage:
                 return owner.Damage(damage.Damage, owner, item.Position);
             case SoundEvent sound:

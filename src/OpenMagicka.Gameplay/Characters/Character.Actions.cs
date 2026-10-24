@@ -114,7 +114,11 @@ public sealed partial class Character
         }
     }
 
-    internal void RaiseCue(AnimationCue cue) => Cue?.Invoke(this, cue);
+    internal void RaiseCue(AnimationCue cue)
+    {
+        Cue?.Invoke(this, cue);
+        Manager?.RaiseCue(this, cue);
+    }
 
     /// <summary>The timers the actions set count down before them, at the start of the frame.</summary>
     private void CountDownActionTimers(float dt)

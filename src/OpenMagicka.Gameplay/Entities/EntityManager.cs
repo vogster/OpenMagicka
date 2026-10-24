@@ -35,6 +35,14 @@ public sealed class EntityManager
 
     public IReadOnlyList<IShield> Shields => shields;
 
+    /// <summary>
+    /// Presentation any entity asks for (sounds, effects, tracers), for the engine; a character's cues
+    /// come on its own <c>Cue</c> too, so listen to one or the other. It can fire during the physics step.
+    /// </summary>
+    public event Action<Entity, Animation.AnimationCue>? Cue;
+
+    internal void RaiseCue(Entity source, Animation.AnimationCue cue) => Cue?.Invoke(source, cue);
+
     /// <summary>Adds an entity on the server, which gives it the next id; an entity already in keeps its own.</summary>
     public NetId Add(Entity entity)
     {

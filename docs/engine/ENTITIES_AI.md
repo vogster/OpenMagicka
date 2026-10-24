@@ -1104,6 +1104,84 @@ Portals come with the magick that makes them.
 In the vanilla data, 33 items are guns, and 19 of them have gun events (the others never fire).
 Their clips run from 1 to 999,999 rounds.
 
+### 8.1.4 Missiles (`SpawnMissile`)
+
+`SpawnMissile` (§4.2, 1,787 uses) names a slot, a velocity (zero means none) and whether that
+velocity is in the item's frame or the holder's. On its first frame, an item with ranged events
+throws a missile:
+- **Cooldown.** The item's cooldown restarts.
+- **Position.** The missile starts at the item's `attach0`.
+- **Velocity.**
+  - Given a velocity, it is turned from the holder's frame or the item's (no translation) into
+    the world.
+  - Otherwise the holder's facing is used. With a ranged elevation above 0 it is tipped up by that
+    angle; else its Y is set to 0.05, unnormalised. Either way it is multiplied by twice the ranged
+    range.
+  - An AI throwing through its Ranged ability aims ballistically at its target instead, and homes
+    in on it (§7, with the AI).
+- **Size.** The radius is that of the projectile model's first mesh, or 0.25 without a model (and
+  for Heavy guns).
+- **Other settings.** The danger (for the AI) and whether the missile faces its velocity come from
+  the item. The Gungnir and Master Sword passives come with their weapons.
+
+**A missile** is a box of side 2 × radius, mass 4, falling with gravity, its friction 0.8 and
+bounciness 0.1.
+- **Starting.** It copies the item's ranged groups (each missile its own state, as a Remove event's
+  bounce count). It notes whether any Damage event pierces, ignores its thrower's body, and fires
+  its Default events at once.
+- **Touching something:**
+  - **The level** (water and lava too, later) stops it, and notes a collision with the speed²
+    it had.
+  - **A body that is not an entity** stops it and counts as a collision, as the level (a prop
+    will be the Collision events' target, with props).
+  - It passes through:
+    - the dead;
+    - what cannot be damaged;
+    - ethereal characters;
+    - its thrower's other missiles;
+    - (later) pickups, grease, mines, eggs, tornadoes and non-solid barriers.
+  - **Something it struck in the last 0.25 s** stops it again, unless the missile pierces: then it
+    passes. Shields and barriers always stop it (once spell shields have bodies).
+  - **Anything else damageable** gets its Hit events at once. What happens next depends on the
+    result:
+    - **Overkilled or pierced (or a barrier killed):** the missile passes through and leaves that
+      thing alone for 5 s. Unless pierced, its next velocity is 0.9 × its speed along its way,
+      plus 0.3 × its speed away from the thing's centre.
+    - **Otherwise:** the thing is noted as struck for 0.25 s. The missile stops on shields and
+      barriers, and on a blow that was deflected or hit; it passes through otherwise.
+- **Each frame**, after physics:
+  1. Its timers run.
+  2. A pending velocity is applied.
+  3. **Homing:** with a homing power above 0, its velocity turns towards the target. Its
+     last-known position is followed, raised by the target's radius. The turn is an angle of
+     dt × 10 × power, about velocity × to-target. If the target falls 139° or more behind (dot
+     ≤ −0.75), homing stops for good.
+  4. **Events** fire as one context. Timer always, with the time alive. Collision, with the
+     collision's speed² as its threshold, only on the frame of a level collision; further ones
+     count only 0.15 s later. Damaged, with the damage taken that frame (amount cut to whole
+     points, elements), when the missile took any.
+  5. Below y = −50 it is gone.
+
+  Once it has ended, OpenMagicka skips its frame (no late blast or effect).
+  - **No room.** With the level full, a throw throws nothing, much as the original's pool of
+    missiles running dry.
+  - **Pushes from contacts.** Pushes that a missile's blow gives during the physics step take
+    effect on the character once the step is over.
+  - **Owner and target gone.** A thrower or target removed from the level counts as gone.
+- **Events of a missile:**
+  - **Damage** hits its target as the thrower, from the missile. Velocity-based damage scales by
+    speed / 50.
+  - **DamageOwner** hits the thrower (while it is in the level).
+  - **Sound and Effect** play at the missile. A following effect stays on it while it lives.
+  - **Remove** ends the missile once its bounces are spent, one bounce per firing.
+- **Being damaged.** A missile can be damaged: the damage only counts towards its Damaged events.
+
+In the vanilla data, 69 items have ranged events. 94 templates have an animation that throws from
+a filled slot; 55 of them throw a missile. 38 of those missiles end within 3 s; the rest lie where
+they fell, since their data has no Timer or Remove to end them. The templates that throw nothing are mostly
+wizards whose `attack_melee0` throws from a slot whose item has no ranged events, which throws
+nothing, as in the original.
+
 ### 8.2 Events: ConditionCollection / EventCollection
 
 Up to 5 "condition → event list" groups. Condition: type (flags: Default 1, Hit 2, Collision 4, Damaged 8, Timer 16, Death 32,
@@ -1123,16 +1201,20 @@ lowest:
 A group that fires runs all its events in order, and the damage results add up. Each source (each
 item in play) keeps its own groups' state.
 
-**What the events do** (melee, so far):
+**What the events do** (melee, guns, missiles):
 - Damage: hits the target, as the holder, from the item's position.
 - DamageOwner: hits the holder, with the holder as the attacker, as the original.
 - Velocity-based damage only matters for projectiles (it scales by their speed).
+- Splash: everything damageable within the radius of the event's point (counting its radius,
+  not ethereal, not hidden by a shield) takes the damage, its magnitude × (1 − (distance − its
+  radius) / the splash's radius), as the holder or thrower. An item's holder is spared, and a missile's splash
+  spares the missile. Water and steam together electrocute, and splashes freeze liquids; both come
+  with spells and liquids.
 - Sound: a cue at the given position or the item's, with the magnitude as its variable.
 - Effect: an effect there, pointing up when world-aligned or along the item otherwise; with
   "follow" it stays on the item while the strike lasts.
 
-Splash (area damage), Light, CastMagick and Remove come with spells, lights, magicks and
-projectiles. In the vanilla items, 258 have melee events:
+Light and CastMagick come with lights and magicks. Remove ends a missile (§8.1.4). In the vanilla items, 258 have melee events:
 
 | Trigger | Groups | Events |
 |---|---|---|
@@ -1178,8 +1260,16 @@ projectiles. In the vanilla items, 258 have melee events:
     the aura's owner, or the character itself when no aura gave the buff. A negative amount heals.
 - **Read by other rules:**
   - Resistance buffs join the resistances (docs/gameplay/SPELLS.md §8).
-  - BoostDamage: for an element its damage covers, spells add its amount and multiply by its
-    magnitude.
+  - BoostDamage: every hit dealt as the character whose elements its damage covers has its amount
+    multiplied by its magnitude, then its amount added. As the original does on any damage dealt by
+    a character, this covers:
+    - melee, shots, missiles and splashes;
+    - spells (which must not boost again);
+    - damage buffs it gave;
+    - a wall impact it caused as the last attacker;
+    - its own DamageOwner events.
+
+    A shot can also end on a flying missile, as missiles take damage.
   - ModifySpellTTL and ModifySpellRange: a spell's time or range × the multipliers + the modifiers.
   - ReduceAgro: the AI's aggro × the amounts.
   - Boost: an avatar's boosts are the product of its Boost auras' magnitudes, those of its slot-1
