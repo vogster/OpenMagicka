@@ -6,8 +6,8 @@ using OpenMagicka.Gameplay.Combat;
 namespace OpenMagicka.Gameplay.Spells.Effects;
 
 /// <summary>
-/// A spell with Shield: a disc, sphere or wall; on oneself a bubble, armour or a ward (docs/gameplay/SPELLS.md §5.6).
-/// Mines and barriers come with phase 5b.
+/// A spell with Shield: a disc, sphere or wall, or with other elements mines or barriers; on oneself
+/// a bubble, armour or a ward (docs/gameplay/SPELLS.md §5.6).
 /// </summary>
 public sealed class ShieldEffect : SpellEffect
 {
@@ -40,7 +40,9 @@ public sealed class ShieldEffect : SpellEffect
         if (Others == Elements.None)
         {
             Raise(caster, ShieldShape.Disc, caster.Position - caster.Body.Facing * DiscBack, DiscHitPoints);
+            return;
         }
+        Lay(caster, CastType.Force);
     }
 
     protected override void Area(Character caster)
@@ -49,7 +51,9 @@ public sealed class ShieldEffect : SpellEffect
         if (Others == Elements.None)
         {
             Raise(caster, ShieldShape.Sphere, caster.Position, SphereHitPoints);
+            return;
         }
+        Lay(caster, CastType.Area);
     }
 
     protected override void Weapon(Character caster) => cast = false;   // the wall rises when the clip's action ends
@@ -116,6 +120,22 @@ public sealed class ShieldEffect : SpellEffect
         if (Others == Elements.None)
         {
             Raise(caster, ShieldShape.Wall, caster.Position + caster.Body.Facing * (caster.Radius + WallAhead), WallHitPoints);
+            return;
+        }
+        Lay(caster, CastType.Weapon);
+    }
+
+    /// <summary>Mines with Arcane or Life and no Earth or Ice; barriers otherwise.</summary>
+    private void Lay(Character caster, CastType cast)
+    {
+        switch (ShieldRules.For(Spell, cast))
+        {
+            case Mines:
+                ShieldLayouts.LayMines(caster, Spell, cast);
+                break;
+            case Barriers rules:
+                ShieldLayouts.RaiseBarriers(caster, Spell, cast, rules);
+                break;
         }
     }
 

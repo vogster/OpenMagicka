@@ -704,8 +704,8 @@ from attacks with the Damage/Status flags (`amount × magnitude`), others are re
 - Area: a full circle of radius 4 around the caster.
 - Weapon: a line forward: `2 + trunc(max(Total/2, 1))` mines with step 2.5.
 - Mine: radius 1; activates when the spawn animation ends; triggers **0.5 s**
-  after being touched by a character/boss zone/projectile (not ethereal and not levitating; the owner must
-  first step off the mine); `FullBlast` radius **3** with damage `(Shield, Force|Area|Weapon)`.
+  after being touched by a character/boss zone/projectile (not ethereal and not levitating; the owner
+  too, see "In the world" below); `FullBlast` radius **3** with damage `(Shield, Force)`.
   Explodes if the owner is farther than 30 units. New barriers spawning on top of a mine detonate it.
 
 **Otherwise → barriers/walls (`Barrier`):**
@@ -809,6 +809,86 @@ In the world (OM-71), shields and self-shields:
   - Before the auras start, the ward ends the caster's earlier self-cast auras, and its
     self-shield (as the original, armour too) unless this cast also made armour.
   - Making a bubble or armour ends the self-cast auras too.
+
+In the world (OM-71), mines and barriers:
+- **Chains.** A layout places its first links; each link grows the next after a delay (0.1 s for a
+  mine, 0.075 s for a barrier), while the chain's range lasts.
+  - Each link spends one spacing of the range. A link grows the next only while what is left after
+    its own spacing is above zero.
+  - The next link stands at the link's ground plus a step. Along a ring the step turns by one link's
+    angle at each link, and so does the facing.
+  - The next link's ground is looked for 0.75 above that spot, 1.5 down, on the level only. A
+    mine looks from 0.75 above its own height (0.85 over its ground), as the original.
+  - There is no next link when no floor is found, or when a shield stands on the line from the
+    link to that probe point (a shield's segment test with tolerance 1).
+- **Layouts.** A ring of radius r and n links:
+  - The first two links are r ahead, turned half a link's angle (π/n) each way.
+  - The step is the chord between them; each chain goes its own way round.
+  - The first links' ground is looked for 4 down from the ring point. Force barriers look from
+    1 higher; lines look from 1 (mines) or 2 (barriers) higher.
+  - **Mines:** n = ⌊πr⌋ = 12 for r = 4.
+    - Force: centred 1 behind the caster, range `2π·4/8` each way (four mines).
+    - Area: centred on the caster, range `π·4 − chord` each way (the full ring).
+  - **Barriers:** n = ⌊2πr / (2R)⌋ with R = 1.25 (solid) or 0.75 (elemental).
+    - Each barrier is scaled by `1 + frac/n` to close the ring.
+    - Force: r = 4, range `2π·4/8` each way. It is centred 2 behind for a spell with no status
+      element and no Lightning, else on the caster. Its blows have a quarter of the magnitude.
+    - Area: r = S + 3, range `(2πr − chord)/2` each way. As the original, with an odd n each
+      chain makes `(n + 1)/2` barriers, so the last two stand on each other (one cast's barriers
+      spare each other).
+    - Force and Area barriers shake the camera, 0.25..0.75 for `0.5·S` s.
+  - **Lines** (Weapon, raised when the cast clip's action ends, as the wall):
+    - The first link is `radius + 2.5` ahead, then a link every 2.5.
+    - There are `2 + ⌊max(Total/2, 1)⌋` links.
+    - Each faces across the line.
+- **A mine.**
+  - **Placing.** It stands 0.1 above its ground. Laying it sets off the mines and breaks the
+    barriers within 1.
+  - **Arming.** It arms when its rising clip ends (2.167 s at 3×, about 0.72 s).
+  - **Fuse.** Once armed, a touch within 0.9 lights a 0.5 s fuse: a character that is neither
+    ethereal nor levitating, or a missile.
+    - Its owner too. The original keeps a hold for the owner standing on it, but it only lasts
+      until the mine is armed, so in effect it never holds.
+  - **Blows.** A Damage or Status blow of any strength sets the fuse to 0.1 s.
+  - **Going off.** It goes off when its fuse runs out, or when its owner is farther than 30: a
+    full blast of radius 3 with `(Shield, Force)` damage, sparing itself.
+- **A barrier.**
+  - **Placing.** It stands `R·scale + 0.05` over its ground.
+    - Raising it breaks the barriers of other casts within `0.8·R·scale` and sets off the mines
+      there. A chain's later links clear `1.5·R·scale`.
+    - Then everyone within `1.25·R·scale` but its owner, and not its own cast's barriers, is put
+      on the cast's shared hit list.
+    - A solid barrier also strikes them with `(Projectile, Area)` damage.
+  - **Hit list.** All barriers of one cast share one list. A target stays on it for 0.25 s, timed
+    by the cast's first barrier still standing.
+  - **Touch.** It strikes anything damageable that touches it, once per 0.25 s, its owner too.
+    Other barriers and ethereal characters are spared.
+    - The touch reaches `R` around its centre, and `R` (elemental) or `2R` (solid) around its foot.
+    - A solid barrier strikes only while its effect lasts; an elemental one always.
+    - With Lightning, the strike is a bolt to the toucher from 1 (elemental) or R (solid) above
+      the barrier's centre. A bolt that chains on is not modelled.
+  - **Solid barriers** stand in the world as a ball of radius `R·scale`: characters and missiles meet it.
+  - **Effect times** (solid):
+    - Ice: I s, or Z s with Lightning (a tesla). An ice geyser (another element of Water, Cold,
+      Fire, Steam or Poison, and no Arcane or Life) instead uses the dominant element's magnitude.
+    - Earth: only as a volcano (Water, Cold, Fire, Steam or Poison, no Arcane or Life), five times
+      the dominant element's magnitude.
+    - The dominant element is Lightning if present, else the strongest of Water, Cold, Fire and
+      Steam (the first on a tie). As the original, Water wins with magnitude 0 when none of them is
+      in the spell.
+    - A barrier whose physical part is Ice alone melts (its hit points go to 0) after I s, or Z s
+      for a tesla.
+  - **Hit points** wear away by 10 every 0.2 s (as the original, at most once a frame).
+  - **Blows** follow the rules above, with Arcane taken out of the blow first.
+    - A solid barrier's contradicting element puts out its effect (the effect time goes to 0) and
+      does no harm.
+    - A blow its armour stops entirely is deflected.
+    - A solid barrier loses the amount, not `amount × magnitude`.
+  - **Going.** At no hit points it breaks.
+    - A solid barrier with Arcane or Life blasts (full, radius 5, its touch damage) and goes.
+    - Another solid barrier sinks for 0.25 s first, still in the characters' way.
+    - A broken barrier leaves its cast's hit list at once.
+    - An elemental wall goes at once.
 
 ### 5.7 Magick: see section 10.
 
