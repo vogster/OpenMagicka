@@ -562,6 +562,76 @@ In the world (OM-71):
 - **Self**: the collection `(Beam, Self)` is applied to self (Life heals).
 - **Weapon**: `ArcaneBlade`; instant arc strike of radius `1.5 + Total/2`, angle 81° (9π/20).
 
+In the world (OM-71):
+- **Force.**
+  - **The effect.** It lives `1 + 2·(A + L)` s, after the caster's spell-time buffs. It ends earlier
+    when its beam dies, when the caster dies, or when the caster's cast type is none (any caster,
+    not only avatars).
+  - **Each frame** the effect moves the first beam to the cast source and the caster's facing.
+- **The beam** is a segment that runs from its position along its direction. Its length grows by
+  90/s, up to 75.
+- **What it meets, each frame:**
+  - **Entities.** The nearest damageable entity the segment touches, thickened by 0.25. Searched
+    within 1.25 × the length; none is hidden behind a shield. It never meets its only owner, or a
+    grease field, or a barrier that is not solid. Meeting an entity cuts the beam there. Meeting
+    nothing restarts the damage timer at 0.25.
+  - **The level** cuts the beam where the segment meets it. Seen from behind, the segment is first
+    moved 0.1 along. A level face of the Reflect material, met from the front, reflects it.
+  - **Other beams** (not its parents, child or dead). A beam that comes within 1 of another,
+    within the parts each one may meet, is cut there:
+    - **They explode** when they share an owner (unless it met the other's start), when their
+      extra elements are inclusive opposites, or when one is arcane and the other not. The
+      explosion comes after 0.25 s, at the meeting point, and the chain is locked until then.
+    - **Otherwise they merge.** Meeting the other's start (within 1) with no child of its own, it
+      joins that beam as a parent and hands it its damage; an owner it already holds makes them
+      explode. Then:
+      - their mean direction shorter than 0.2 → explode;
+      - else, with no child yet, a child leaves the meeting point along the mean direction with
+        both as parents, one level deeper (at most 6 deep).
+  - Without a meeting, a beam's child dies, unless the beam is reflecting (off a shield, a bubble,
+    or a Reflect face). As the original, this also kills a beam joined at its start the frame
+    after (it is the child now, so no longer met); and the meeting test measures the other beam's
+    part with this beam's length.
+- **A first beam** dies when its caster leaves the level; a release during an explosion's fuse ends
+  the chain, and with it the explosion, as the original.
+- **On what it meets:**
+  - **A shield or a character in a bubble** reflects it, the normal flattened.
+    - A reflection that comes back almost on itself (dot < −0.99) explodes at the first junction
+      instead.
+    - Otherwise a child leaves the hit point along the reflection (6 deep at most), and then
+      follows the hit point each frame.
+  - **Anything else damageable** takes each owner's damage at ×0.25 once the damage timer is at or
+    below 0, struck from the hit point; the timer then gains 0.25. For a character, each Arcane or
+    Life entry that leaves it at no hit points bloat-kills it (below).
+  - The timer runs down by the frame time while the beam meets something.
+- **A child beam** dies when all its parents are dead. One with two parents sits at the mean of
+  their ends, along the mean of their directions.
+- **The explosion.**
+  - The chain is killed back to its first beam, and so is the companion's (OpenMagicka primes a pair
+    once: a beam that is priming or locked is not met again).
+  - Each owner's damage, of this beam and of its companion, blasts in full at the meeting point
+    with radius 3 + the number of owners, as that owner.
+  - Then a knockback (500, magnitude 2) blasts with radius 5, with no owner.
+- **Bloating** (any character): a bloat kill marks it as bloating with no hit points, when its
+  template has gibs. 0.333 s later it bursts:
+  - a full blast of radius `radius + 2.5`, its element as Damage (Life −180 or Arcane 225), with
+    magnitude `1 + MaxHitPoints/5000`, as the killer;
+  - then it is overkilled.
+
+  A character with no gibs that a beam brought to no hit points simply dies, as the original (a
+  bloat kill of a living one bursts at once and kills it). A bloating character goes to the bloat
+  state and from there to death.
+- **Area.** At once, a full blast of radius `BlastSize·10` around the caster, the caster spared,
+  with the `spell_arcane_area` or `spell_life_area` sound. The effect ends on its first frame.
+- **Self.** On the effect's first frame, the Self collection on the caster. It lives 1 s, ending at
+  once when the caster dies or (an avatar) its cast type is none.
+- **Weapon.** At once, everything damageable that the arc test from the caster along its facing
+  passes takes the Weapon collection, from where the test hit: range `1.5 + Total/2`, angle 9π/20,
+  2 of height. The caster itself is not hit (the arc misses at its own centre). The blade is
+  presentation. The effect follows the base rules (§4.1).
+- **With other systems.** Portals (the beam passes through them) come with the Portal magick.
+  The beam's looks are presentation: its cut, light and sounds.
+
 ### 5.5 Lightning
 
 | | Force / Weapon | Area | Self |
@@ -579,6 +649,36 @@ direction, not behind a shield; the candidate with the smaller angle and smaller
 from the hit target, the nearest new target is searched within radius `remaining_range − traveled`,
 in a sector of ±45° from the bolt direction. The chain does not continue from barriers, shields and boss zones.
 A blocking character absorbs the lightning into their weapon (adds Lightning to the item's queue).
+
+In the world (OM-71), as the original's spell actually casts it:
+- **The bolts.** The effect fires its bolts `1/bolts` s apart, the first at once (Force and Weapon
+  8, Area 32, each with its share of the magnitude). It ends once all are fired; it also follows
+  the base rules (§4.1). Turning is ×0.1.
+- **Each bolt:**
+  - Its hit list is emptied, then holds the caster.
+  - It goes along the facing from the cast source (the weapon's tip for Weapon).
+  - A wet caster without the `WetLightning` passive switches to range 2 all around from that bolt
+    on.
+  - All around: the n-th bolt turns `(n mod 8)·π/4` from the facing and leaves from the cast
+    source.
+  - The range is the spell's, after the caster's spell-range buffs.
+- **A bolt picks its target** among damageable entities within its range of its source: not dead,
+  not on the hit list, not frozen, a character only if not ethereal. One behind a shield (the line
+  from the source to it crosses a shield) is skipped, unless it is the shield itself, which is
+  aimed at its nearest point.
+  - Going through them in order, a candidate within ±90° (flat) of the bolt's direction replaces
+    the best so far when both its angle and its distance are smaller; one on the source always
+    does.
+- **The hit.**
+  - A blocking character takes nothing. Its slot-0 weapon takes the caster's spell into its queue
+    (lightning first), and the chain stops there.
+  - Anything else takes the bolt's damage from the source.
+  - Unless the target is a shield or a barrier, the chain goes on from the target's position,
+    towards it, with the same range and hit list.
+- **No target.** The bolt wanders ±π/16 and fades, drawn up to the level. The hit list is emptied.
+- **Self.** At once, the Self collection on the caster; no bolts. The effect lasts until the base
+  rules end it.
+- **Cues.** A lightning cue for each bolt, from where it leaves to where it ends.
 If there is no target, the bolt is drawn with a random deviation of ±π/16 and fades.
 
 ### 5.6 Shield (contains Shield)

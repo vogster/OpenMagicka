@@ -60,3 +60,9 @@ internal sealed class RessurectionState : CharacterState
 
     protected internal override void Exit(Character character) => character.Body.AllowRotate = true;
 }
+
+/// <summary>Bloating from a beam: the character swells until it bursts (SPELLS.md §5.4).</summary>
+internal sealed class BloatState : CharacterState
+{
+    protected internal override CharacterState? Update(Character character, float dt) => character.IsBloatKilled ? CharacterStates.Dead : null;
+}

@@ -343,7 +343,8 @@ public sealed partial class Character : Entity
             lastAttackerTimer -= dt;
             LastAttacker = lastAttackerTimer < 0 ? null : LastAttacker;
         }
-        if (HitPoints <= 0 && !Dead)
+        UpdateBloat(dt);
+        if (HitPoints <= 0 && !Dead && !IsBloating)
         {
             DieUnlessDying();
         }
@@ -394,6 +395,7 @@ public sealed partial class Character : Entity
     /// <summary>The body leaves the physics world with the character (nothing to do once that world is gone).</summary>
     protected internal override void OnRemoved()
     {
+        StopSpell();                                                          // its spell ends with it
         if (world.IsDisposed || Body.Body.IsRemoved)
         {
             return;

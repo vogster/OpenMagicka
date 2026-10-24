@@ -119,6 +119,8 @@ public static class SpellEffects
         SpellType.Push => new PushEffect(),
         SpellType.Spray => new SprayEffect(),
         SpellType.Projectile => new ProjectileEffect(),
+        SpellType.Lightning => new LightningEffect(),
+        SpellType.Beam => new BeamEffect(),
         _ => null,
     };
 }

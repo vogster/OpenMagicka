@@ -55,7 +55,8 @@ public sealed record CharacterTemplate(
     bool Flies = false,
     IReadOnlyList<EquipmentTemplate>? Equipment = null,
     float ModelScale = 1,
-    IReadOnlyList<Buffs.Aura>? Auras = null)
+    IReadOnlyList<Buffs.Aura>? Auras = null,
+    bool HasGibs = false)
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
@@ -105,6 +106,9 @@ public interface ISelfShield
 
     /// <summary>A solid shield (armour) stops pushes.</summary>
     bool IsSolid { get; }
+
+    /// <summary>A bubble: beams reflect off the character inside (docs/gameplay/SPELLS.md §5.4).</summary>
+    bool IsBubble => false;
 
     /// <summary>Takes its share of an entry; it may change or empty the entry.</summary>
     DamageResult Absorb(Character owner, ref DamageEntry damage, Entity? attacker, Vector3 attackPosition);

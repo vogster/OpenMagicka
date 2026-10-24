@@ -19,9 +19,10 @@ public abstract class CharacterState
 
     public override string ToString() => GetType().Name.Replace("State", "", StringComparison.Ordinal);
 
-    /// <summary>The first common check (§5.1): death (bloating comes with bloating).</summary>
+    /// <summary>The first common check (§5.1): bloating, then death.</summary>
     protected static CharacterState? Death(Character character) =>
-        character.IsOverkilled || character.HitPoints <= 0 ? CharacterStates.Dead : null;
+        character.IsBloating ? CharacterStates.Bloat
+        : character.IsOverkilled || character.HitPoints <= 0 ? CharacterStates.Dead : null;
 
     /// <summary>The second common check (§5.1): flying, vines, a push, a knockdown, a hit, a stun.</summary>
     protected static CharacterState? Hits(Character character)
@@ -80,6 +81,7 @@ public static class CharacterStates
     public static readonly CharacterState Jump = new JumpState();
     public static readonly CharacterState Cast = new CastState();
     public static readonly CharacterState Charge = new ChargeState();
+    public static readonly CharacterState Bloat = new BloatState();
     public static readonly CharacterState Land = new LandState();
     public static readonly CharacterState Dead = new DeadState();
     public static readonly CharacterState Ressurection = new RessurectionState();

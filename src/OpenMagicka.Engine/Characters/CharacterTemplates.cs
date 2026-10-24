@@ -53,6 +53,7 @@ public static class CharacterTemplates
             IsEthereal: content.IsEthereal,
             Flies: content.MoveAnimations.Any(m => m.Movement.HasFlag(MovementProperties.Fly)),
             ModelScale: content.Models.Count > 0 && content.Models[0].Scale > 0 ? content.Models[0].Scale : 1,   // the first variant until spawns pick
-            Auras: [.. content.Auras.Select(BuffTemplates.Aura)]);                // the template's own buff list is never used, as in the original
+            Auras: [.. content.Auras.Select(BuffTemplates.Aura)],                 // the template's own buff list is never used, as in the original
+            HasGibs: content.Gibs.Count > 0);                                     // gore is taken as on
     }
 }
