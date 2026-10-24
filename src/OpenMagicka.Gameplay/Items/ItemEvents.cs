@@ -49,6 +49,12 @@ public sealed record EffectEvent(string Effect, bool Follow, bool WorldAlign) : 
 /// <summary>Ends a missile once its bounces are spent (one per firing; each missile counts each such event of its own).</summary>
 public sealed record RemoveEvent(int Bounces) : ItemEvent;
 
+/// <summary>A full blast of the damage at the source, as its owner, sparing the source (docs/gameplay/SPELLS.md §5.8).</summary>
+public sealed record BlastEvent(IReadOnlyList<DamageEntry> Damage, float Radius) : ItemEvent;
+
+/// <summary>A decal on the floor under the source (within twice its radius below), along its flight.</summary>
+public sealed record DecalEvent(string Decal, float Scale) : ItemEvent;
+
 /// <summary>A condition and the events it sets off.</summary>
 public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEvent> Events)
 {
@@ -70,6 +76,8 @@ public sealed record EventGroup(EventCondition Condition, IReadOnlyList<ItemEven
                 SplashEvent d => float.IsFinite(d.Damage.Amount) && float.IsFinite(d.Damage.Magnitude) && d.Radius >= 0 && float.IsFinite(d.Radius),
                 SoundEvent s => s.Cue is not null && float.IsFinite(s.Magnitude),
                 EffectEvent f => f.Effect is not null,
+                BlastEvent b => b.Damage is not null && b.Damage.All(d => float.IsFinite(d.Amount) && float.IsFinite(d.Magnitude)) && b.Radius >= 0 && float.IsFinite(b.Radius),
+                DecalEvent d => d.Decal is not null && float.IsFinite(d.Scale),
                 _ => e is not null,
             };
             if (!valid)

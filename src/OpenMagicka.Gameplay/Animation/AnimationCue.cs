@@ -9,6 +9,9 @@ public abstract record AnimationCue;
 /// <param name="Magnitude">The cue's magnitude variable, when the source sets one.</param>
 public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue;
 
+/// <summary>A decal on the level: where, its surface's normal, the way it faces and its scale.</summary>
+public sealed record DecalCue(string Decal, Vector3 Position, Vector3 Normal, Vector3 Direction, float Scale) : AnimationCue;
+
 /// <summary>The cue's sounds playing from the source stop (a charge's, when the charge ends).</summary>
 public sealed record SoundStopCue(string Cue) : AnimationCue;
 

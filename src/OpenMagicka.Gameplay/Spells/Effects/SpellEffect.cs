@@ -118,6 +118,7 @@ public static class SpellEffects
     {
         SpellType.Push => new PushEffect(),
         SpellType.Spray => new SprayEffect(),
+        SpellType.Projectile => new ProjectileEffect(),
         _ => null,
     };
 }

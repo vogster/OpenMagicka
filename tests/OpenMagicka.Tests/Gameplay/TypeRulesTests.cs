@@ -55,12 +55,12 @@ public class TypeRulesTests
     }
 
     [Fact]
-    public void ABoulderWithIce_BlastsAsAProjectile_SizedByItsEarthOrIce()
+    public void AnIceBoulder_NeverBlasts_AndGoesOnItsFirstHit()
     {
         var volley = ProjectileRules.Force(new Spell(earth: 2, ice: 1, arcane: 1), 0);
 
-        Assert.Equal(SpellType.Projectile, volley.RemainderType);
-        Assert.Equal(10 * MathF.Sqrt(2f / 5), volley.RemainderBlastRadius, 4);   // Earth still counts
+        Assert.Null(volley.RemainderType);
+        Assert.Equal(0f, volley.RemainderBlastRadius);
         Assert.Equal(0, volley.Pierces);
         Assert.Equal("IceEarth2", volley.Model);
     }

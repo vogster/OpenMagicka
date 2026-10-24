@@ -46,7 +46,7 @@ public sealed class Missile : Entity
     private Vector3 lastKnownTarget;
 
     public Missile(PhysicsWorld world, Entity? owner, Vector3 position, Vector3 velocity, float radius, IReadOnlyList<EventGroup> events,
-        Entity? target = null, float homing = 0, float danger = 2, bool facesVelocity = true)
+        Entity? target = null, float homing = 0, float danger = 2, bool facesVelocity = true, bool canHitOwner = false)
     {
         this.world = world ?? throw new ArgumentNullException(nameof(world));
         ArgumentNullException.ThrowIfNull(events);
@@ -64,7 +64,11 @@ public sealed class Missile : Entity
         }
         this.radius = radius;
         lastPosition = position;
-        (Owner, Target, Homing, Danger, FacesVelocity) = (owner, target, homing, danger, facesVelocity);
+        (Owner, Target, Homing, Danger, FacesVelocity, CanHitOwner) = (owner, target, homing, danger, facesVelocity, canHitOwner);
+        if (canHitOwner && owner is not null)
+        {
+            passed[owner] = StrikeMemory;                                     // a spell's own missile passes its caster at first, as one it just hit
+        }
         Events = new EventGroups(events);
         Piercing = events.SelectMany(g => g.Events).OfType<DamageEvent>().Any(d => d.Damage.Attack.HasFlag(AttackProperties.Piercing));
         Body = world.AddBody(new BoxShape(new Vector3(2 * radius)), position, Mass, BodyOptions.Fast);
@@ -75,8 +79,11 @@ public sealed class Missile : Entity
 
     public PhysicsBody Body { get; }
 
-    /// <summary>Who threw it: it passes through them, and strikes as them.</summary>
+    /// <summary>Who threw it: it passes through them (unless it may hit them), and strikes as them.</summary>
     public Entity? Owner { get; }
+
+    /// <summary>A spell's missile may hit its caster, once its first 0.25 s are over.</summary>
+    public bool CanHitOwner { get; }
 
     /// <summary>What it homes in on.</summary>
     public Entity? Target { get; }
@@ -269,6 +276,17 @@ public sealed class Missile : Entity
             case EffectEvent effect:
                 Manager?.RaiseCue(this, new ItemEffectCue(effect.Effect, at ?? Position, effect.WorldAlign ? Vector3.UnitY : Heading, effect.Follow && !dead, this));
                 return DamageResult.None;
+            case BlastEvent blast when Manager is { } manager:                // on a hit this runs in the physics step: nothing it damages may add or remove a body
+                return Spells.Blasts.Full(manager, world, Owner, this, blast.Radius, at ?? Position, blast.Damage, source: this);
+            case DecalEvent decal:
+                var along = Body.IsRemoved || world.IsDisposed ? Vector3.Zero : Body.Velocity with { Y = 0 };
+                if (!Body.IsRemoved && !world.IsDisposed
+                    && world.CastSegment(at ?? Position, (at ?? Position) - new Vector3(0, 2 * radius, 0), Body, levelOnly: true) is { Normal.Y: > 0.7f } floor)
+                {
+                    Manager?.RaiseCue(this, new DecalCue(decal.Decal, floor.Position, floor.Normal,
+                        along.LengthSquared() > 1e-12f ? Vector3.Normalize(along) : Vector3.Zero, decal.Scale));
+                }
+                return DamageResult.None;
             case RemoveEvent remove:
                 var left = bouncesLeft.TryGetValue(remove, out var count) ? count : remove.Bounces;
                 if (left <= 0)
@@ -311,7 +329,7 @@ public sealed class Missile : Entity
             collisionSpeed = MathF.Max(collisionSpeed, Body.Velocity.LengthSquared());
             return ContactResponse.Collide;
         }
-        if (ReferenceEquals(entity, Owner) || entity.IsDead || !entity.IsDamageable || entity is Character { IsEthereal: true }
+        if ((ReferenceEquals(entity, Owner) && !CanHitOwner) || entity.IsDead || !entity.IsDamageable || entity is Character { IsEthereal: true }
             || (entity is Missile other && ReferenceEquals(other.Owner, Owner)) || passed.ContainsKey(entity))
         {
             return ContactResponse.Ignore;

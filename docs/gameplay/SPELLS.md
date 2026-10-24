@@ -458,12 +458,17 @@ In the world (OM-71):
 - Hit: damage `(Projectile, Force)` (section 6.3); for stone projectiles the first entry
   is scaled by speed: `amount × |v| / 50`. Ice shards are Piercing, magnitudes ×`1/N`.
 - A boulder's blast: `remainder_type` = the type of its elements without Earth, and the radius
-  `BlastSizeAs(remainder_type)·10` measured on **all** the magnitudes (Earth's included). If the
-  radius is above 0, on hit/collision the boulder blasts with `CalculateDamage(remainder_type, Area)`
-  of the full spell and is removed; otherwise it pierces up to 25 targets. So a boulder with Ice
-  blasts as a projectile sized by `max(E, I)`, one with Arcane or Life as a beam, one with a spray
-  element as a spray; Earth alone, or with Lightning (a blast size of 0), pierces.
+  `BlastSizeAs(remainder_type)·10` measured on **all** the magnitudes (Earth's included).
+  - **An ice boulder (Earth and Ice) never blasts**, whatever the radius. It goes on its first hit,
+    and on its second collision with the level (one bounce, then gone).
+  - **A boulder without Ice** with a radius above 0 blasts on a hit or a collision with
+    `CalculateDamage(remainder_type, Area)` of the full spell, and is removed. A boulder with Arcane
+    or Life blasts as a beam, and one with a spray element as a spray.
+  - **Otherwise** (Earth alone, or with Lightning: a blast size of 0) its removal counts 25 hits
+    down and takes it on the 26th, after that hit's damage. It is not piercing: it bounces off what
+    it hits. It goes on its second collision with the level.
 - Collision with the environment: `Crater` decal.
+- The mass `1 + 50·E` is worked out but never given to the missile: every missile has mass 4.
 
 **Area**: `GroundBlast` of radius `BlastSize·10` (Earth/Ice), no falloff, ignores
 levitating targets; with Ice, ice spikes appear (`IceSpikes`). Damage `(Projectile, Area)`.
@@ -474,6 +479,65 @@ of radius 6 at height +10, the last one (or the single boulder) from height +8 s
 **Weapon**: with Ice, an ice blade (`IceBlade`) of length `3.75 + 1.25·I`; with Earth, when the
 strike animation ends, an underground wave (`UnderGroundAttack`) is launched with speed 40, range 15;
 each target takes damage once.
+
+In the world (OM-71):
+- **The cast.**
+  - The charge is the caster's spell power for an avatar, 0.5 for anything else.
+  - The launch speed comes from the spell power, which then goes back to 0.
+  - The interval and count are those above. The splash radius is `BlastSize·10` of the spell with
+    Earth's element left out (its magnitude kept).
+- **Each frame** (Force and Self), the shot timer runs down by the frame time. While it is at or
+  below 0:
+  - It gains the interval and one projectile is used up.
+  - **The shield check (Force).** If the segment from the caster to the cast source crosses a
+    shield (thickened by `0.1 + 0.075·E`), that projectile is lost against the shield.
+  - **All but the last.**
+    - Force: turned at random within ±`(π/4)(1 − charge)` about the facing.
+    - Self: launched from a random point on a circle of radius 6, 10 above the cast source,
+      towards the caster.
+    - Either way at `v0·(1.25 + 0.75·rand)`.
+  - As the original, the frame's shots fire before the caster's death is looked at.
+  - **The last.** Force: straight along the facing at `v0`. Self: from 8 above the cast source,
+    straight down (direction (0.001, −1, 0)) at `v0`.
+  - The effect ends once no projectile is left, so a single boulder ends it on its first frame.
+- **The missile.** Radius `0.075 + 0.075·E`, from the cast source. It may hit its caster, but not
+  within its first 0.25 s, and it pierces when its damage does. Its events:
+  - **On start:** for each element the spell has, the missile's sound and trail effect.
+  - **On a hit:**
+    - the damage (§6.3, the first entry scaled by speed);
+    - for an ice boulder, removal;
+    - for a boulder, the blast and removal, or for one with no blast a 25-hit count;
+    - shards' damage is piercing and ×`1/N`, its first four entries only.
+  - **On a collision:**
+    - a `Crater` decal (scale `E + I − 1` for an ice boulder, `1 + (E − 1)/2` for a boulder);
+    - the blast and removal; an ice boulder or a boulder with no blast goes on its second
+      collision, and a shard on its first;
+    - the hit effects and sounds per element.
+  - **After 10 s:** removal.
+  - The effect and sound names come from the original's per-element tables: `projectile_<e>4`
+    trails, `projectilehit_big_<e>` hits, `projectiletrail_<e>` and `projectilehit_<e>` for shards,
+    and the `spell_<e>_projectile`, `spell_<e>_hit` and `spell_<e>_blast` sounds.
+- **A blast from a missile** strikes at the missile, as its owner, sparing the missile itself (its
+  caster is not spared).
+- **Area.** At once, the ground blast of radius `BlastSize·10` around the caster, the caster
+  spared. It also plays the `spell_<e>_area` sounds. The effect ends on its first frame.
+- **Weapon.**
+  - **With Ice:** an ice blade of the length above rides the slot-0 weapon. When the cast clip's
+    action ends, or the effect stops, the blade strikes once. It hits along the facing from the
+    caster for its length: every damageable entity within half the length of the segment's middle
+    that the segment, thickened by 1, touches takes `(Projectile, Weapon)` of the spell without
+    Earth, from the point it was struck.
+  - **With Earth,** when the cast clip's action ends (once, while the effect runs and the caster
+    lives; the vanilla `cast_sword_projectile` window ends at 0.45), an underground wave leaves the weapon's tip
+    along the facing at 40/s for 15. It carries `(Projectile, Weapon)` of the spell without Ice.
+    - It starts only over a floor (normal Y ≥ 0.7, within 4 below a point 1 above the tip).
+    - Each frame it follows the floor ahead (within 2 below a point 1 above). It ends at a drop, a
+      steep slope, a shield (the step thickened by 1) or a wall (the step, raised 1).
+    - It hits each damageable entity within 1 of it once, the caster never.
+  - No projectile cast stops for a released button, as the original. A weapon cast's effect lasts
+    until its cast state ends it.
+- **With other systems.** The missile light, the Area cast's ice spikes, and the blade's model and
+  trail are presentation.
 
 ### 5.4 Beam (Arcane/Life, "railgun")
 

@@ -33,8 +33,8 @@ public static class ProjectileRules
 
     /// <summary>
     /// The volley for a forward cast at the given charge (spell power). A boulder's blast is sized
-    /// by the type of its elements without Earth, on all the magnitudes: with Ice it is a projectile
-    /// blast sized by Earth or Ice, with Arcane a beam blast, with a spray element a spray blast;
+    /// by the type of its elements without Earth, on all the magnitudes: with Arcane a beam blast,
+    /// with a spray element a spray blast. An ice boulder never blasts (it goes on its first hit);
     /// a blast of no size (Earth alone, or with Lightning) lets the boulder pierce instead.
     /// </summary>
     public static ProjectileVolley Force(Spell spell, float spellPower)
@@ -52,7 +52,8 @@ public static class ProjectileRules
             speed *= 0.5f + 0.5f / spell.Earth;
         }
         var remainderType = SpellTypes.Of(elements & ~Elements.Earth);
-        var splash = boulder ? spell.BlastSizeAs(remainderType) * 10 : 0;
+        var iceBoulder = boulder && (elements & Elements.Ice) != 0;
+        var splash = boulder && !iceBoulder ? spell.BlastSizeAs(remainderType) * 10 : 0;
         return new ProjectileVolley(
             count, speed,
             Mass: 1 + 50 * spell.Earth,
@@ -62,7 +63,7 @@ public static class ProjectileRules
             MagnitudeScale: count == 0 ? 0 : 1f / count,
             RemainderType: splash > 0 ? remainderType : null,
             RemainderBlastRadius: splash,
-            Pierces: boulder && splash <= 0 ? BoulderPierces : 0,
+            Pierces: boulder && !iceBoulder && splash <= 0 ? BoulderPierces : 0,
             Model(spell));
     }
 

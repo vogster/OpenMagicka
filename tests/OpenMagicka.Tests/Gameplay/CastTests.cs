@@ -281,8 +281,8 @@ public class CastTests
 
         ChargeAndRelease(world, wizard, CastType.Force, 0.3f);
         Run(world, Tick * 2);
-        Assert.Same(CharacterStates.Cast, wizard.State);
         Assert.Equal(default, wizard.Spell);                                         // cast as the charge ended
+        Assert.Single(world.Entities.Entities.OfType<Missile>());                    // the boulder flies; its one shot ends the cast
         Run(world, 0.8f);
 
         Assert.Null(wizard.CurrentSpell);                                            // no push from the cast clip
