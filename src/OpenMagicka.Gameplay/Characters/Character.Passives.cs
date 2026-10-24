@@ -54,7 +54,17 @@ public sealed partial class Character
         }
     }
 
-    /// <summary>Each held item's ability, at the end of the frame once the items moved.</summary>
+    /// <summary>Uses the slot's item's special ability if it is ready (§8.1.7); false when it is not.</summary>
+    public bool UseSpecialAbility(int slot) => HeldItem(slot) is { } item && SpecialAbilities.Use(this, item);
+
+    /// <summary>Attacks with an animation (a pick-up, a special ability).</summary>
+    public void PlayAttack(string animation, bool allowRotate)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(animation);
+        (NextAttackAnimation, Attacking, AllowAttackRotate) = (animation, true, allowRotate);
+    }
+
+    /// <summary>Each held item's passive and special recharge, at the end of the frame once the items moved.</summary>
     private void RunPassives(float dt)
     {
         foreach (var slot in equipment)
@@ -62,6 +72,11 @@ public sealed partial class Character
             if (slot.Item is { IsAttached: true } item)
             {
                 Passives.Run(this, item, dt);
+                if (item.TickSpecial(dt))
+                {
+                    RaiseCue(new Animation.ItemEffectCue(SpecialAbilities.ReadyEffect, item.Tip, Body.Facing, Follow: false, item.PassiveSource));
+                    RaiseCue(new Animation.SoundCue(SpecialAbilities.RechargeSound, SpecialAbilities.WeaponsBank, item.Tip, Body.Facing));
+                }
             }
         }
     }

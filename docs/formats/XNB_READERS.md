@@ -810,8 +810,9 @@ EventStorage: `u8 EventType`, then:
 
 ### 5.5 SpecialAbility (on items and in the SpecialAbility AnimationAction)
 
-`string typeName` (class from `Abilities.SpecialAbilities`), `string animation` (`""` → cast_self), `string effect`
-(→lower hash, optional), `i32 n`, n × `i32 Elements`. The constructor is chosen based on the presence of elements/effect.
+`string typeName` (class from `Abilities.SpecialAbilities`), `string animation` (`""` → cast_self), `string displayName`
+(a text key such as `#item_specab_bash`, →lower hash, optional), `i32 n`, n × `i32 Elements`. The constructor is chosen
+based on the presence of elements/display name.
 
 ### 5.6 Ability (character AI abilities)
 

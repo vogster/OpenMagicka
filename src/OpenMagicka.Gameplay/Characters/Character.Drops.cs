@@ -26,7 +26,7 @@ public sealed partial class Character
             return null;
         }
         var pickable = item.Template.Pickable;
-        var dropped = Drop(item, pickable ? new Item(item.Template) : item, pickable ? Vector3.Zero : velocity);
+        var dropped = Drop(item, pickable ? new Item(item.Template) { SpecialCooldown = item.SpecialCooldown } : item, pickable ? Vector3.Zero : velocity);
         EquipmentChanged();
         return dropped;
     }
@@ -86,7 +86,7 @@ public sealed partial class Character
         }
         lying.Take();
         Equip(slot, lying.Item, held.BoneName, held.Rotation);
-        (NextAttackAnimation, Attacking, AllowAttackRotate) = (slot == ResistanceSlot ? "pickup_staff" : "pickup_weapon", true, false);
+        PlayAttack(slot == ResistanceSlot ? "pickup_staff" : "pickup_weapon", allowRotate: false);
         return true;
     }
 

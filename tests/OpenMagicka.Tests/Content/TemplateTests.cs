@@ -80,7 +80,7 @@ public class TemplateTests
         Assert.IsType<FootstepAction>(idle.Clip.Actions[0]);
         Assert.Equal("hand", Assert.IsType<CastSpellAction>(idle.Clip.Actions[1]).Source);
         var special = Assert.IsType<SpecialAbilityAction>(idle.Clip.Actions[2]);
-        Assert.Equal(("Blink", "blink_fx", Elements.Arcane), (special.Ability!.TypeName, special.Ability.Effect, special.Ability.Elements[0]));
+        Assert.Equal(("Blink", "blink_fx", Elements.Arcane), (special.Ability!.TypeName, special.Ability.DisplayName, special.Ability.Elements[0]));
     }
 
     [Fact]

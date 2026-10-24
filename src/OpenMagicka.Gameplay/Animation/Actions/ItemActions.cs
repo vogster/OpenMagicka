@@ -90,3 +90,41 @@ public sealed class DetachItem(float start, float end, int slot, System.Numerics
         }
     }
 }
+
+/// <summary>
+/// On its first frame, uses the slot's item's special ability, or (with no slot) runs its own ability
+/// directly, with no animation or recharge (docs/engine/ENTITIES_AI.md §8.1.7).
+/// </summary>
+public sealed class SpecialAbility : AnimationAction
+{
+    public SpecialAbility(float start, float end, int slot, SpecialAbilityTemplate? ability) : base(start, end)
+    {
+        if (slot >= Character.Slots || (slot < 0 && ability is null))
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot), slot, "a slot, or no slot with an ability of its own");
+        }
+        ability?.Validate();
+        (Slot, Ability) = (slot < 0 ? -1 : slot, slot < 0 ? ability : null);
+    }
+
+    /// <summary>The item's slot; -1 for the action's own ability.</summary>
+    public int Slot { get; }
+
+    public SpecialAbilityTemplate? Ability { get; }
+
+    public override void Run(Character owner, bool first)
+    {
+        if (!first)
+        {
+            return;
+        }
+        if (Ability is { } own)
+        {
+            SpecialAbilities.Execute(owner, own);
+        }
+        else
+        {
+            owner.UseSpecialAbility(Slot);
+        }
+    }
+}

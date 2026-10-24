@@ -1,4 +1,5 @@
 using System.Numerics;
+using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Characters;
 using OpenMagicka.Gameplay.Entities;
 using OpenMagicka.Physics;
@@ -85,6 +86,11 @@ public sealed class WorldItem : Entity
         {
             timeLeft -= dt;
             taken = timeLeft < 0;
+        }
+        if (!taken && Item.TickSpecial(dt))                                   // a lying item recharges too, as the original; a taken one is its holder's
+        {
+            Manager?.RaiseCue(this, new ItemEffectCue(SpecialAbilities.ReadyEffect, Position, Vector3.UnitY, Follow: false, Item.PassiveSource));
+            Manager?.RaiseCue(this, new SoundCue(SpecialAbilities.RechargeSound, SpecialAbilities.WeaponsBank, Position, Vector3.UnitY));
         }
         if (Body.IsRemoved || world.IsDisposed)
         {

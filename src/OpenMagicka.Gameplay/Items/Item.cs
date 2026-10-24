@@ -82,6 +82,14 @@ public sealed class Item
     /// <summary>Restarts with each strike; abilities read it.</summary>
     public float Cooldown { get; internal set; }
 
+    /// <summary>Time until the special ability is ready again (§8.1.7); at or below 0 it is.</summary>
+    public float SpecialCooldown { get; internal set; }
+
+    public bool IsSpecialReady => SpecialCooldown <= 0 && Template.Special is not null;
+
+    /// <summary>The emissive light while the special ability recharges, <c>min(0.05^cooldown, 1)</c>; 1 otherwise.</summary>
+    public float SpecialLight => SpecialCooldown > 0 ? MathF.Min(MathF.Pow(0.05f, SpecialCooldown), 1) : 1;
+
     /// <summary>The passive ability's pulse timer (§8.1.6).</summary>
     internal float PassiveTimer { get; set; }
 
@@ -125,6 +133,14 @@ public sealed class Item
 
     /// <summary>Let go: it no longer acts from its slot, and shows again, as the original's lying items.</summary>
     internal void Detach() => (IsAttached, PassiveEffect, IsVisible) = (false, false, true);
+
+    /// <summary>The special cooldown runs down; true when it just came ready (crossing 0 from above).</summary>
+    internal bool TickSpecial(float dt)
+    {
+        var cooling = SpecialCooldown > 0;
+        SpecialCooldown -= dt;
+        return cooling && SpecialCooldown <= 0;
+    }
 
     /// <summary>The item's timers run down (its holder's call, each frame).</summary>
     internal void Tick(float dt)

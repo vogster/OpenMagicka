@@ -450,7 +450,7 @@ the window; "once" means the first frame only.
   the ground material and the character's mass, only on the ground and not levitating; a camera
   shake at the character's position.
 - **With items:** `DealDamage` (1,997), `SpawnMissile` (1,787), `Gunfire` (335), `SpecialAbility`
-  (84), `DetachItem` (17, §8.1.5), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
+  (84, §8.1.7), `DetachItem` (17, §8.1.5), `SetItemAttach` (unused). `WeaponVisibility` (767) is in §8.1.1.
 - **With spells:** `CastSpell` (1,371).
 - **With grips:** `Grip` (48), `DamageGrip` (48), `ReleaseGrip` (24), `ThrowGrip` (15),
   `OverkillGrip` (15).
@@ -1299,6 +1299,49 @@ where an area ability is centred. The value comes from the item file.
 - The Gungnir and steam effects themselves are presentation; the Gungnir glow effect comes with the
   renderer.
 
+### 8.1.7 Item special abilities (`SpecialAbility`)
+
+**What an item has.** An item may carry a special ability (§9) and its recharge time:
+- 64 vanilla items have one: 61 staffs, two of class Default and one handgun.
+- The ability names its type, the animation its holder plays (empty means `cast_self`), a display
+  name (a text key for the HUD) and a list of elements.
+- The type is found by name, ignoring case.
+
+**Recharge.**
+- An item's special cooldown runs down each frame while it is held, attached and its holder lives.
+  Like the rest of a held item's frame, it does not run for a corpse, nor for the detached item a
+  release leaves in the slot. An item lying in the world recharges on its own, as the original's.
+- When the cooldown crosses 0 from above, the item is ready again. A `special_ready` effect plays at
+  its tip, and the `staff_recharge01` sound plays from the Weapons bank.
+- An item is ready while its cooldown is at or below 0 and it has an ability.
+- While cooling down, the item's emissive light is `min(0.05^cooldown, 1)` (for the renderer).
+- A dropped item's copy starts with its cooldown, and so does a swapped one.
+
+**Using it** (the `SpecialAbility` action with a slot; an avatar's input on the spell-source item
+and the AI's `SpecialAbilityAbility` come with input and the AI):
+- If the item is ready, its holder plays the ability's animation as an attack, without turning.
+- Then the ability runs, and the cooldown starts at the recharge time. It starts whether or not
+  the ability did anything.
+- Using it while not ready does nothing. The one exception: an `IceCacoon` breaks its ice.
+- Kept from the original: a use from an action inside an attack clip queues the ability's
+  animation after that clip (a staff whose clip is its own animation plays it twice), and a dead
+  holder's clip still uses it.
+
+**The `SpecialAbility` action** (84 uses), on its first frame:
+- With a slot (5 uses), it uses that slot's item as above.
+- Without one (79 uses), it runs its own inline ability directly: no animation, no cooldown.
+
+**Abilities that work now:**
+- **`SpecialAnimation`** (7 items): the animation is the whole ability.
+- **`Invisibility`**: the holder turns invisible for 15 s, with the `magick_invisibility` sound from
+  the Spells bank. Used from an item, it marks the holder so that the attack its animation starts
+  does not end the invisibility at once. As the original, only entering the attack state clears the
+  mark: used while already attacking, the mark stays until the next attack, which then keeps the
+  invisibility too.
+
+The others come with the spells and magicks (§9, OM-41). Until then they run as nothing, but the
+animation and the cooldown still happen.
+
 ### 8.2 Events: ConditionCollection / EventCollection
 
 Up to 5 "condition → event list" groups. Condition: type (flags: Default 1, Hit 2, Collision 4, Damaged 8, Timer 16, Death 32,
@@ -1445,7 +1488,7 @@ props. Level props (from `LevelModel`) are created when the scene loads; `spawnP
 ## 9. Special abilities (`SpecialAbilities`, 114 files, ~106 types)
 
 These are implementations of **magicks** and item special abilities: a shared base class, creation by string name
-(name, animation (default `cast_self`), effect, element list). `Execute` variants: from the caster, from the caster with elements,
+(name, animation (default `cast_self`), display name, element list). How items hold and use them is §8.1.7. `Execute` variants: from the caster, from the caster with elements,
 at a point. For the network there is a `GetNetworkMessage` / `NetworkMessage` pair via `NetworkSpellCast`, plus `NetworkConditionsMet`:
 on the client the effect is started **only by the local owner**, the host executes for the others.
 

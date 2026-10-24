@@ -102,6 +102,6 @@ public sealed record AttachedEffectContent(string Bone, string Effect);
 
 /// <summary>
 /// A special ability (class name from Abilities.SpecialAbilities) with its cast animation
-/// (empty means cast_self), effect and elements.
+/// (empty means cast_self), its display name (a text key, optional) and elements.
 /// </summary>
-public sealed record SpecialAbilityContent(string TypeName, string Animation, string Effect, IReadOnlyList<Elements> Elements);
+public sealed record SpecialAbilityContent(string TypeName, string Animation, string DisplayName, IReadOnlyList<Elements> Elements);

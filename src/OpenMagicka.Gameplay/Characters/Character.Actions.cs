@@ -66,6 +66,9 @@ public sealed partial class Character
 
     public void RemoveInvisibility() => invisibleTime = 0;
 
+    /// <summary>An item's Invisibility was just used: its own cast animation does not end it (§8.1.7).</summary>
+    public bool JustCastInvisible { get; set; }
+
     /// <summary>Ends the given statuses at once.</summary>
     public void StopStatuses(StatusEffects types) => Statuses = Statuses.Without(types);
 

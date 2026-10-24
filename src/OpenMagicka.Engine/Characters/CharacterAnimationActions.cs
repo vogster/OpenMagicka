@@ -37,6 +37,7 @@ public static class CharacterAnimationActions
             GunfireAction a => new Actions.Gunfire(start, end, a.Weapon, a.Accuracy),
             SpawnMissileAction a => new Actions.SpawnMissile(start, end, a.Weapon, ThrowVelocity(a), a.ItemAligned),
             DetachItemAction a => new Actions.DetachItem(start, end, a.Item, new System.Numerics.Vector3(a.Velocity.X, a.Velocity.Y, a.Velocity.Z)),
+            SpecialAbilityAction a => new Actions.SpecialAbility(start, end, a.Weapon, a.Ability is { } own ? ItemTemplates.Special(own) : null),
             _ => null,
         };
     }

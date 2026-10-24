@@ -65,6 +65,8 @@ public enum PassiveAbility : byte
 /// <param name="Gun">How a gun fires (§8.1.3); only the gun classes use it.</param>
 /// <param name="Ranged">What it throws (§8.1.4).</param>
 /// <param name="Bounds">Its model's bounds (§8.1.5); null without a model, and then it never leaves its slot.</param>
+/// <param name="Special">Its special ability (§8.1.7); null without one.</param>
+/// <param name="SpecialRechargeTime">How long its special ability recharges after a use.</param>
 public sealed record ItemTemplate(
     string Id,
     WeaponClass WeaponClass = WeaponClass.Default,
@@ -83,7 +85,9 @@ public sealed record ItemTemplate(
     IReadOnlyList<Buffs.Aura>? Auras = null,
     GunTemplate? Gun = null,
     RangedTemplate? Ranged = null,
-    ItemBounds? Bounds = null)
+    ItemBounds? Bounds = null,
+    SpecialAbilityTemplate? Special = null,
+    float SpecialRechargeTime = 0)
 {
     /// <summary>Throws on a value the rules cannot use; loaders call it as they read.</summary>
     public void Validate()
@@ -93,7 +97,12 @@ public sealed record ItemTemplate(
         {
             throw new ArgumentOutOfRangeException(nameof(BlockValue), BlockValue, "must not be negative");
         }
-        foreach (var (value, name) in new[] { (PassiveValue, nameof(PassiveValue)), (CooldownTime, nameof(CooldownTime)), (MeleeRange, nameof(MeleeRange)) })
+        if (SpecialRechargeTime < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(SpecialRechargeTime), SpecialRechargeTime, "must not be negative");
+        }
+        foreach (var (value, name) in new[] { (PassiveValue, nameof(PassiveValue)), (CooldownTime, nameof(CooldownTime)), (MeleeRange, nameof(MeleeRange)),
+            (SpecialRechargeTime, nameof(SpecialRechargeTime)) })
         {
             if (!float.IsFinite(value))
             {
@@ -120,6 +129,7 @@ public sealed record ItemTemplate(
         }
         Gun?.Validate();
         Ranged?.Validate();
+        Special?.Validate();
         if (Bounds is { Min: var min, Max: var max } && !(Finite(min) && Finite(max) && min.X <= max.X && min.Y <= max.Y && min.Z <= max.Z))
         {
             throw new ArgumentOutOfRangeException(nameof(Bounds), Bounds, "must be finite, its minimum within its maximum");

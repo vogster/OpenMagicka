@@ -31,9 +31,22 @@ public static class ItemTemplates
             [.. content.Auras.Select(BuffTemplates.Aura)],
             Gameplay.Items.Guns.IsGun((Gameplay.Items.WeaponClass)content.WeaponClass) ? Gun(content.Ranged) : null,
             content.Ranged.RangedConditions.Count > 0 ? Ranged(content, projectile) : null,
-            Bounds(model));
+            Bounds(model),
+            content.SpecialAbility is { } special ? Special(special) : null,
+            content.SpecialRechargeTime ?? 0);
         template.Validate();
         return template;
+    }
+
+    /// <summary>A special ability as the rules need it: an empty animation is <c>cast_self</c>, an empty display name none (§8.1.7).</summary>
+    internal static Gameplay.Items.SpecialAbilityTemplate Special(SpecialAbilityContent content)
+    {
+        var ability = new Gameplay.Items.SpecialAbilityTemplate(content.TypeName,
+            string.IsNullOrEmpty(content.Animation) ? Gameplay.Items.SpecialAbilities.DefaultAnimation : content.Animation,
+            string.IsNullOrEmpty(content.DisplayName) ? null : content.DisplayName,
+            [.. content.Elements.Select(e => (Gameplay.Spells.Elements)(int)e)]);
+        ability.Validate();
+        return ability;
     }
 
     /// <summary>The item's model, from the item's own asset.</summary>
