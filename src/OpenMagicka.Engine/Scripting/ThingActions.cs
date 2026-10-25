@@ -28,6 +28,9 @@ public sealed class PlayAnimationAction : ScriptAction
 /// </summary>
 public sealed class SpawnEffectAction : ScriptAction
 {
+    /// <summary>A replay spawns it again (the original: only an effect that is not one-shot; ours does not know the kind yet).</summary>
+    public override void Replay() => Execute();
+
     public string Effect { get; set; } = "";
     public string Name { get; set; } = "";
     public string Area { get; set; } = "";
@@ -39,6 +42,9 @@ public sealed class SpawnEffectAction : ScriptAction
 /// <summary><c>startEffect name=</c>: a stopped named effect plays again. With no name it asks a new key, so it starts none (as the original).</summary>
 public sealed class StartEffectAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Name { get; set; } = "";
 
     protected override void Execute() => Scene.Effects.Start(Name.Length == 0 ? Scene.Effects.Generated() : Hash(Name));
@@ -47,6 +53,9 @@ public sealed class StartEffectAction : ScriptAction
 /// <summary><c>stopEffect name=</c>: the named effect (the level's or a spawned one) stops.</summary>
 public sealed class StopEffectAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Name { get; set; } = "";
 
     protected override void Execute() => Scene.Effects.Stop(Hash(Name));

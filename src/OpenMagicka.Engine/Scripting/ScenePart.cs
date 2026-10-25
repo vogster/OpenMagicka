@@ -131,6 +131,17 @@ public sealed class ScenePart
         }
     }
 
+    /// <summary>Where its clip is, for a checkpoint.</summary>
+    public readonly record struct State(float Time, float Start, float End, float Speed, bool Playing, bool Looping);
+
+    public State Save() => new(time, start, end, speed, IsPlaying, IsLooping);
+
+    /// <summary>Its clip back where it was (it takes that pose on its next frame).</summary>
+    public void Load(State state) => (time, start, end, speed, IsPlaying, IsLooping) = (state.Time, state.Start, state.End, state.Speed, state.Playing, state.Looping);
+
+    /// <summary>It and every part under it, the parent first.</summary>
+    public IEnumerable<ScenePart> Self() => [this, .. children.Values.SelectMany(c => c.Self())];
+
     /// <summary>A locator of the part or of its children, where it is now.</summary>
     public Numerics.Matrix4x4? Locator(int key)
     {

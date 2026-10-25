@@ -221,6 +221,9 @@ public sealed class ScriptPlaces : IAiPlaces
         return part;
     }
 
+    /// <summary>Every part, the top ones and those under them, in a fixed order.</summary>
+    public IEnumerable<ScenePart> AllParts => parts.Values.SelectMany(p => p.Self());
+
     /// <summary>A frame of the parts: each plays on, its children with it.</summary>
     public void UpdateParts(float dt)
     {

@@ -218,7 +218,54 @@ public sealed class ScriptScene
 
     internal void Fired(ScriptTrigger trigger, int variant, Character? sender) => TriggerFired?.Invoke(trigger, variant, sender);
 
-    internal void Executed(ScriptAction action) => ActionExecuted?.Invoke(action);
+    internal void Executed(ScriptAction action)
+    {
+        if (action is SpawnAction)
+        {
+            log.Remove(action);                                                // as the original: a spawn run again moves to the end
+        }
+        log.Add(action);
+        ActionExecuted?.Invoke(action);
+    }
+
+    private readonly List<ScriptAction> log = [];
+
+    /// <summary>The actions that ran, in order (what a checkpoint replays).</summary>
+    public IReadOnlyList<ScriptAction> Log => log;
+
+    /// <summary>The scene's scripts for a checkpoint: each trigger's state by key, the log, and the animated parts' states.</summary>
+    public sealed record Snapshot(IReadOnlyDictionary<int, ScriptTrigger.State> Triggers, IReadOnlyList<ScriptAction> Log,
+        IReadOnlyList<ScenePart.State> Parts);
+
+    public Snapshot Save() => new(triggers.Values.ToDictionary(t => t.Key, t => t.Save()), [.. log], [.. Places.AllParts.Select(p => p.Save())]);
+
+    /// <summary>
+    /// The scripts back as saved, the ignored triggers as if they never fired; returns what to replay (the log,
+    /// the ignored triggers' actions left out), as the original.
+    /// </summary>
+    public IReadOnlyList<ScriptAction> Load(Snapshot snapshot, IReadOnlyCollection<int>? ignored)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        foreach (var trigger in triggers.Values)
+        {
+            if (ignored?.Contains(trigger.Key) == true)
+            {
+                trigger.Reset();
+            }
+            else if (snapshot.Triggers.TryGetValue(trigger.Key, out var state))
+            {
+                trigger.Load(state);
+            }
+        }
+        foreach (var (part, state) in Places.AllParts.Zip(snapshot.Parts))
+        {
+            part.Load(state);
+        }
+        Places.UpdateParts(0);                                                 // the parts in their saved poses before the replay
+        log.Clear();
+        log.AddRange(snapshot.Log);
+        return [.. snapshot.Log.Where(a => ignored?.Contains(a.Parent.Key) != true)];
+    }
 
     private void Add(ScriptTrigger trigger)
     {

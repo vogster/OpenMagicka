@@ -35,6 +35,12 @@ public sealed class LevelScene
 
     /// <summary>The entities kept while it is left (its NPCs, props and items, with saveNPCs).</summary>
     internal List<Entity> Kept { get; } = [];
+
+    /// <summary>The entities a checkpoint's load gave it, made when it is next entered.</summary>
+    internal List<EntityState> Pending { get; } = [];
+
+    /// <summary>The actions a checkpoint's load gave it to replay when it is next entered (its startup actions).</summary>
+    internal List<ScriptAction> Replay { get; } = [];
 }
 
 /// <summary>
@@ -46,7 +52,7 @@ public sealed class LevelScene
 /// the camera at their centre), then the transition comes back in. A frame runs the world, the level's
 /// timers, the scene; the stage's requests other systems answer are passed on (<see cref="TakeRequests"/>).
 /// </summary>
-public sealed class PlayedLevel
+public sealed partial class PlayedLevel
 {
     private readonly Dictionary<int, LevelScene> scenes = [];
     private readonly ILevelContent content;
@@ -65,6 +71,7 @@ public sealed class PlayedLevel
         Services = services ?? new LevelServices();
         Game = Services.Game ?? new ScriptGame();
         registry = Services.Registry ?? ScriptRegistry.Engine();
+        Level.Stage.Requested += OnRequested;
         foreach (var path in definition.Scenes)
         {
             var scene = new LevelScene(content.Scene(path));
@@ -118,17 +125,13 @@ public sealed class PlayedLevel
     public void End()
     {
         Current?.Scripts?.Leave();
+        foreach (var entity in scenes.Values.SelectMany(s => s.Kept).Concat(waitingAvatars).Distinct().ToList())
+        {
+            World.Entities.Discard(entity);
+        }
         foreach (var scene in scenes.Values)
         {
-            foreach (var entity in scene.Kept)
-            {
-                World.Entities.Restore(entity);
-            }
             scene.Kept.Clear();
-        }
-        foreach (var avatar in waitingAvatars.Where(a => a is not Character { Body.Body.IsRemoved: true }))
-        {
-            World.Entities.Restore(avatar);
         }
         waitingAvatars.Clear();
         World.Entities.Clear();
@@ -172,11 +175,9 @@ public sealed class PlayedLevel
             {
                 ChangeScene(new SpawnPoint(Content.LegacyStringHash.Lower(change.Scene), change.SpawnPoints, change.SpawnPlayers), change.Transition,
                     change.Time, change.SaveNpcs);
+                continue;
             }
-            else
-            {
-                requests.Enqueue(request);
-            }
+            requests.Enqueue(request);                                        // a checkpoint was taken as it was asked (OnRequested)
         }
         if (pending is not null && (transitionLeft -= dt) <= 0)
         {
@@ -185,6 +186,15 @@ public sealed class PlayedLevel
         else if (Level.Stage.Transition is { Out: false } && (transitionInLeft -= dt) <= 0)
         {
             Level.Stage.Transition = null;
+        }
+    }
+
+    /// <summary>A checkpoint is taken the moment its action runs, as the original's (then passed on, for the saves, the text and the fairy).</summary>
+    private void OnRequested(ScriptRequest request)
+    {
+        if (request is CheckpointRequest checkpoint)
+        {
+            TakeCheckpoint(checkpoint.SpawnPoints, checkpoint.Ignore);
         }
     }
 
@@ -259,8 +269,21 @@ public sealed class PlayedLevel
             World.Entities.Restore(entity);
         }
         scene.Kept.Clear();
+        foreach (var state in scene.Pending)
+        {
+            if (World.Entities.Entities.Count < EntityManager.Capacity - GameSession.MaxPlayers)
+            {
+                World.Entities.Add(state.Make(World));                        // the players' room kept
+            }
+        }
+        scene.Pending.Clear();
         scene.Scripts!.Enter();
         PlacePlayers(point, scene.Scripts);
+        foreach (var action in scene.Replay)
+        {
+            action.Replay();                                                  // as the original: the startup actions, last of the entry
+        }
+        scene.Replay.Clear();
     }
 
     /// <summary>

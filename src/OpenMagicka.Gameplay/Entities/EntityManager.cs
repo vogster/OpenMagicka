@@ -267,6 +267,9 @@ public sealed partial class EntityManager
         }
     }
 
+    /// <summary>The entities are being updated or taken out right now (a change of them must wait).</summary>
+    public bool IsBusy => busy;
+
     private Guard Busy()
     {
         if (busy)

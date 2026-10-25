@@ -47,6 +47,17 @@ public sealed partial class EntityManager
         Add(entity);
     }
 
+    /// <summary>Lets go for good of an entity <see cref="Store"/> handed out (it never comes back): its bodies leave the world.</summary>
+    public void Discard(Entity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (entity.Manager is not null)
+        {
+            throw new InvalidOperationException("the entity is in a manager: remove it there");
+        }
+        entity.OnRemoved();
+    }
+
     private static bool IsKept(Entity entity) => entity switch
     {
         Props.PhysicsProp => true,

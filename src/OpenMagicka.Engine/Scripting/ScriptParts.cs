@@ -96,6 +96,35 @@ public abstract class ScriptAction
     /// <summary>Drops the waiting runs (what an action keeps per run stays, as the original).</summary>
     public void ClearDelayed() => queued = 0;
 
+    /// <summary>
+    /// Its replay when a checkpoint is loaded (the original's QuickExecute, LEVELS_TRIGGERS.md §6.2): by
+    /// default nothing (what it did is in the saved state, or passed); kinds that rebuild the world say.
+    /// </summary>
+    public virtual void Replay()
+    {
+    }
+
+    /// <summary>What it keeps besides its waiting runs (a spawn's survivors), copied for a checkpoint.</summary>
+    protected virtual object? SaveTag() => null;
+
+    protected virtual void LoadTag(object? tag)
+    {
+    }
+
+    /// <summary>Its waiting runs and what it keeps, for a checkpoint.</summary>
+    public readonly record struct State(float Countdown, int Queued, object? Tag);
+
+    public State Save() => new(countdown, queued, SaveTag());
+
+    public void Load(State state)
+    {
+        (countdown, queued) = (state.Countdown, state.Queued);
+        LoadTag(state.Tag);
+    }
+
+    /// <summary>No run waits (an ignored trigger's, as the original: what it keeps stays).</summary>
+    internal void ResetRuns() => (countdown, queued) = (0, 0);
+
     protected abstract void Execute();
 
     /// <summary>The script hash of a name, lowered (the original's string hash).</summary>

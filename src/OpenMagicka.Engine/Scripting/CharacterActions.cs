@@ -67,10 +67,11 @@ public sealed class SpawnAction : ScriptAction
     public bool CannotDieWithoutExplicitKill { get; set; }
 
     private readonly List<Character> spawned = [];
+    private List<float> toRestore = [];
 
-    /// <summary>The characters it made that still live, with their hit points (what a checkpoint replays, OM-47).</summary>
+    /// <summary>The characters it made that still live (in the scene, or waiting outside it), with their hit points (what a checkpoint replays).</summary>
     public IEnumerable<(Character Character, float HitPoints)> Survivors =>
-        spawned.Where(c => c.HitPoints > 0 && c.Manager is not null).Select(c => (c, c.HitPoints));
+        spawned.Where(c => c.HitPoints > 0 && !c.Body.Body.IsRemoved).Select(c => (c, c.HitPoints));
 
     public override void Initialize()
     {
@@ -81,6 +82,34 @@ public sealed class SpawnAction : ScriptAction
         events = Node is { } node ? ScriptEvents.Read(node, Scene.Places, Scene.Random) : [];
     }
 
+    /// <summary>The survivors' hit points (what a checkpoint keeps of a spawn).</summary>
+    protected override object? SaveTag() => Survivors.Select(s => s.HitPoints).Concat(toRestore).ToList();
+
+    protected override void LoadTag(object? tag) => toRestore = tag is List<float> hitPoints ? [.. hitPoints] : [];
+
+    /// <summary>A replay makes the survivors again, each with the hit points it had, as the original.</summary>
+    public override void Replay()
+    {
+        var manager = Scene.World.Entities;
+        spawned.Clear();
+        if (!Scene.IsHost || manager.Bestiary?.Find("data/characters/" + Type) is not { } found)
+        {
+            return;
+        }
+        var (template, animations) = found;
+        foreach (var hitPoints in toRestore)
+        {
+            if (manager.Entities.Count >= EntityManager.Capacity)
+            {
+                break;
+            }
+            var character = Make(template, animations);
+            character.SetHealth(character.MaxHitPoints > 0 ? hitPoints / character.MaxHitPoints : 0);
+            spawned.Add(character);
+        }
+        toRestore = [];
+    }
+
     protected override void Execute()
     {
         var manager = Scene.World.Entities;
@@ -89,7 +118,7 @@ public sealed class SpawnAction : ScriptAction
             return;
         }
         var (template, animations) = found;
-        spawned.RemoveAll(c => c.HitPoints <= 0 || c.Manager is null);
+        spawned.RemoveAll(c => c.HitPoints <= 0 || c.Body.Body.IsRemoved);
         for (var i = 0; i < Nr && manager.Entities.Count < EntityManager.Capacity; i++)
         {
             spawned.Add(Make(template, animations));
@@ -164,6 +193,9 @@ public sealed class SpawnAction : ScriptAction
 /// </summary>
 public sealed class GiveOrderAction : ScriptAction
 {
+    /// <summary>A replay gives the order again, the areas looked at anew (as the original).</summary>
+    public override void Replay() => ReplayOrder();
+
     private AiEvent[] events = [];
 
     public Order Order { get; set; }
@@ -189,6 +221,12 @@ public sealed class GiveOrderAction : ScriptAction
             throw new InvalidDataException("<giveOrder>: speed must be finite");
         }
         events = Node is { } node ? ScriptEvents.Read(node, Scene.Places, Scene.Random) : [];
+    }
+
+    private void ReplayOrder()
+    {
+        Scene.Places.Refill(Scene.World.Entities);
+        Execute();
     }
 
     protected override void Execute()
@@ -282,6 +320,9 @@ public sealed class AvatarMoveAction : ScriptAction
 /// </summary>
 public sealed class SetPositionAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Id { get; set; } = "";
     public string Area { get; set; } = "";
     public bool FacingDirection { get; set; }
@@ -319,6 +360,9 @@ public sealed class SetPositionAction : ScriptAction
 /// </summary>
 public sealed class RemoveAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public Factions Factions { get; set; }
     public string Id { get; set; } = "";
     public string Type { get; set; } = "";

@@ -74,6 +74,19 @@ public sealed partial class Character
 
     protected internal override IEnumerable<Physics.PhysicsBody> Bodies => [Body.Body];
 
+    /// <summary>
+    /// A new wizard for the same player (a checkpoint's restart): its template, clips, script name and player, whole,
+    /// at a point; not yet in a level.
+    /// </summary>
+    public Character Successor(System.Numerics.Vector3 position, int players = 1) =>
+        new(Template, world, position, players, animations: Animator?.Animations)
+        {
+            IsPlayer = IsPlayer,
+            Player = Player,
+            RemoveAfterDeath = RemoveAfterDeath,
+            UniqueId = UniqueId,
+        };
+
     /// <summary>Its spell ends as it waits outside (the spell's entities went with the scene).</summary>
     protected internal override void OnWithdrawn() => StopSpell();
 

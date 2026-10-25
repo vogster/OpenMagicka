@@ -22,6 +22,10 @@ public sealed partial class PhysicsProp
 
     public float HitPoints { get; private set; }
 
+    /// <summary>Its hit points as saved (a checkpoint's), at most its template's.</summary>
+    public void SetHitPoints(float hitPoints) =>
+        HitPoints = float.IsFinite(hitPoints) ? MathF.Min(hitPoints, Template.MaxHitPoints) : throw new ArgumentOutOfRangeException(nameof(hitPoints), hitPoints, "must be finite");
+
     public StatusSet Statuses { get; private set; } = StatusSet.Empty;
 
     /// <summary>The script trigger its breaking sets off (with no sender, as the original); 0 for none.</summary>

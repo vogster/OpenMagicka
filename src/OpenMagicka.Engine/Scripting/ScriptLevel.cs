@@ -18,6 +18,28 @@ public sealed class ScriptLevel
         public bool Paused { get; set; }
     }
 
+    /// <summary>The counters and timers as they are now (a checkpoint's).</summary>
+    public sealed record Snapshot(IReadOnlyDictionary<int, int> Counters, IReadOnlyList<(int Id, float Time, bool Paused)> Timers,
+        IReadOnlyList<(int Id, float Time, bool Paused)> Played);
+
+    public Snapshot Save() => new(new Dictionary<int, int>(counters), [.. timers.Select(t => (t.Id, t.Time, t.Paused))],
+        [.. played.Select(t => (t.Id, t.Time, t.Paused))]);
+
+    /// <summary>The counters and timers back as they were saved, every other one gone.</summary>
+    public void Load(Snapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        counters.Clear();
+        foreach (var (id, value) in snapshot.Counters)
+        {
+            counters[id] = value;
+        }
+        timers.Clear();
+        timers.AddRange(snapshot.Timers.Select(t => new Clock(t.Id, t.Time) { Paused = t.Paused }));
+        played.Clear();
+        played.AddRange(snapshot.Played.Select(t => new Clock(t.Id, t.Time) { Paused = t.Paused }));
+    }
+
     private readonly Dictionary<int, int> counters = [];
     private readonly List<Clock> timers = [];
     private readonly List<Clock> played = [];

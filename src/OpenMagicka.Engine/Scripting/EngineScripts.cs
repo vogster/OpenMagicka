@@ -34,6 +34,9 @@ public sealed class CounterAction : ScriptAction
 /// <summary><c>addTimer name= value= playedTimer=</c>: starts a level timer (one already going is left).</summary>
 public sealed class AddTimerAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Name { get; set; } = "";
 
     public float Value { get; set; }
@@ -46,6 +49,9 @@ public sealed class AddTimerAction : ScriptAction
 /// <summary><c>timer name= value= paused=</c>: sets a timer's time and/or pauses it (what is given).</summary>
 public sealed class TimerAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Name { get; set; } = "";
 
     public float? Value { get; set; }
@@ -83,7 +89,23 @@ public sealed class ExecuteTriggerAction : ScriptAction
         senders.Enqueue(sender);
     }
 
-    protected override void Execute() => Scene.ExecuteTrigger(Hash(Trigger), senders.Count > 0 ? senders.Dequeue() : null);
+    protected override void Execute()
+    {
+        var sender = senders.Count > 0 ? senders.Dequeue() : null;
+        Scene.ExecuteTrigger(Hash(Trigger), sender is { Body.Body.IsRemoved: true } ? null : sender);   // ours: one gone (a restart's) sends nothing
+    }
+
+    /// <summary>The senders still waiting, copied for a checkpoint.</summary>
+    protected override object? SaveTag() => senders.ToList();
+
+    protected override void LoadTag(object? tag)
+    {
+        senders.Clear();
+        foreach (var sender in tag as List<Character?> ?? [])
+        {
+            senders.Enqueue(sender);
+        }
+    }
 }
 
 /// <summary><c>clearDelayedActions trigger=</c>: drops the waiting runs of a trigger, of all ("all", or none named), or of all but this one ("allbutthis").</summary>
@@ -107,6 +129,9 @@ public sealed class ClearDelayedActionsAction : ScriptAction
 /// <summary><c>enablePoi id=</c>: an interactable can be used again.</summary>
 public sealed class EnablePoiAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Id { get; set; } = "";
 
     protected override void Execute()
@@ -121,6 +146,9 @@ public sealed class EnablePoiAction : ScriptAction
 /// <summary><c>disablePoi id=</c>: an interactable can no longer be used.</summary>
 public sealed class DisablePoiAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     public string Id { get; set; } = "";
 
     protected override void Execute()

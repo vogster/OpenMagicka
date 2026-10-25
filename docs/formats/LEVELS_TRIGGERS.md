@@ -391,6 +391,49 @@ counters, entities — or temporary: sound, camera, dialog, titles).
 their initial state (as if they never fired), and their actions are excluded from the replay. This
 is how encounters that repeat after death are made.
 
+
+**Ours** (`PlayedLevel.TakeCheckpoint` / `RestartAtCheckpoint`, `LevelCheckpoint`, OM-47). The level takes the checkpoint the
+moment a `triggerCheckpoint` runs, as the original, and passes the request on, for the saves, the text and the fairy.
+
+**What a checkpoint keeps:**
+- the scene it was taken in, the counters and timers, and the magicks the players had unlocked (all of them, joined);
+- for each scene:
+  - whether it was entered;
+  - its scripts: each trigger's fired flag, its cooldown, its actions' waiting runs, and what they keep (a spawn's
+    survivors' hit points, an `executeTrigger`'s waiting senders);
+  - its log of executed actions (a spawn run again moves to the end);
+  - its animated parts' clip states;
+  - its standing props (template, place, hit points, triggers, name) and its pickable items;
+  - its spawns' survivors, those of a scene left with saveNPCs too, and those still waiting for a replay.
+- The scene's named effects are not kept, as the original's: what changed after the checkpoint stays, and the replay of
+  `spawnEffect`, `startEffect` and `stopEffect` acts on top of it.
+- The NPCs come back by their spawns' replay; dialogs (OM-49), music (OM-51) and weapons are not kept yet.
+- Writing it to disk goes with the saves (OM-55).
+
+**Restarting at it**, as the original:
+1. The cutscene, fade, transition and input holds end, the running magicks end, and the world is emptied (what waited outside
+   too).
+2. Each scene takes its kept state. A scene entered only after the checkpoint is as never entered.
+3. In the checkpoint's scene, the ignored triggers (`<ignore trigger=>`) are reset as if they never fired, and their actions
+   are left out of the replay.
+4. The checkpoint's scene is entered: its kept props and items stand, its repeat timers reset, then its log is replayed. The
+   other scenes replay theirs when next entered.
+5. The counters and timers come back (after the replay, as the original).
+6. Fresh wizards, whole, stand at the checkpoint's spawn points (a player past them at the first), from where onto the floor up
+   to 5 below (none found: the world's origin, as the original), their radius and half length over it. The old wizards, the
+   dead left behind too, are let go.
+7. "A player has died on this level" now holds; the other systems are told of the scene (`SceneChangedRequest`).
+- An `executeTrigger` sender that is gone (an old wizard) sends nothing (ours).
+- A full level (512 entities) leaves room for the players' wizards; one that still cannot come in waits for a revival.
+
+**Replay** (QuickExecute), per kind:
+- **again, as when run:** `setPosition`, `remove`, `startEffect`, `stopEffect`, `disableInput`, `enableInput`, `timer`, `addTimer`,
+  `enablePoi`, `disablePoi`;
+- `spawnEffect` spawns again. The original does so only for an effect that is not one-shot; ours does not know the kind yet.
+- `spawn` makes its survivors again, each with the hit points it had;
+- `giveOrder` gives its order again, the areas looked at anew;
+- `cutscene` / `endCutscene` begin and end it with the bars at once;
+- **nothing:** every other kind (what it did is in the state, or it passed).
 ## 7. Rulesets
 
 ### 7.1 Survival (`<Ruleset type="survival" waves="N">`, 17 scenes — challenge arenas)

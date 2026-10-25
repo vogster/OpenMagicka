@@ -109,7 +109,14 @@ public sealed class ScriptStage
         }
     }
 
-    public void Request(ScriptRequest request) => requests.Enqueue(request ?? throw new ArgumentNullException(nameof(request)));
+    public void Request(ScriptRequest request)
+    {
+        requests.Enqueue(request ?? throw new ArgumentNullException(nameof(request)));
+        Requested?.Invoke(request);
+    }
+
+    /// <summary>A request was made, at once (the level takes a checkpoint as its action runs).</summary>
+    public event Action<ScriptRequest>? Requested;
 
     /// <summary>The requests made since the last time, in order.</summary>
     public IReadOnlyList<ScriptRequest> TakeRequests()
@@ -120,4 +127,17 @@ public sealed class ScriptStage
     }
 
     internal void Update(float dt) => unlockDelay = MathF.Max(0, unlockDelay - dt);
+
+    /// <summary>
+    /// As a checkpoint's restart leaves it: no cutscene, fade, transition or input hold, the HUD shown, the
+    /// camera following the players, the requests not yet taken dropped.
+    /// </summary>
+    public void Reset()
+    {
+        (Fade, Transition, IsUiEnabled, CutsceneSkipTrigger, CutsceneSkipsBarMove, IsCutsceneSkipped, ShowsSkipTip) = (null, null, true, 0, false, false, false);
+        locks.Clear();
+        unlockDelay = 0;
+        requests.Clear();
+        Camera = Camera.Release(0.001f);
+    }
 }

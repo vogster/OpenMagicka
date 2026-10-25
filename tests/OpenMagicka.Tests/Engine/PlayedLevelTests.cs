@@ -167,6 +167,95 @@ public class PlayedLevelTests
     }
 
     [Fact]
+    public void ARestartAtTheCheckpoint_BringsBackItsState_TheSurvivorsAndFreshWizardsAtItsSpawnPoints()
+    {
+        var (level, world, first) = Level("""
+            <Trigger id="guards"><Then><spawn type="orc" nr="2" area="door0" order="idle"/></Then></Trigger>
+            <Trigger id="save" autorun="false"><Then><counter name="n" action="set" value="3"/><triggerCheckpoint spawnPoint="door"/></Then></Trigger>
+            <Trigger id="later" autorun="false"><Then><counter name="n" action="set" value="9"/></Then></Trigger>
+            """);
+        using var _ = world;
+        level.Start();
+        Run(level, 0.3f);
+        var scene = level.Current!.Scripts!;
+        var orcs = world.Characters.Where(c => !c.IsPlayer).ToArray();
+        orcs[0].Damage(new OpenMagicka.Gameplay.Combat.DamageEntry(OpenMagicka.Gameplay.Combat.AttackProperties.Damage,
+            OpenMagicka.Gameplay.Spells.Elements.Earth, 100, 1), null, orcs[0].Position);
+        var hurt = orcs[0].HitPoints;
+        scene.ExecuteTrigger(ScriptScene.Hash("save"), null);
+        Run(level, 0.1f);
+        Assert.NotNull(level.Checkpoint);
+
+        orcs[1].Kill();
+        scene.ExecuteTrigger(ScriptScene.Hash("later"), null);
+        Run(level, 0.5f);
+        var oldAvatar = first.Avatar!;
+        Assert.True(level.RestartAtCheckpoint());
+        Run(level, 0.1f);
+
+        Assert.Equal(3, level.Level.Counter(ScriptScene.Hash("n")));
+        var back = world.Characters.Where(c => !c.IsPlayer).ToArray();
+        Assert.Equal(2, back.Length);                                                             // both lived at the checkpoint
+        Assert.Contains(back, o => MathF.Abs(o.HitPoints - hurt) < 0.01f);
+        Assert.NotSame(oldAvatar, first.Avatar);
+        Assert.Equal(8, first.Avatar!.Position.X, 1);                                             // at the checkpoint's spawn point
+        Assert.True(level.Game.PlayerDiedInLevel);
+        Assert.Single(world.Entities.Entities.OfType<PhysicsProp>());                             // the scene's prop, as it was saved
+    }
+
+    [Fact]
+    public void AnIgnoredTrigger_IsResetAtTheRestart_AndItsActionsAreNotReplayed()
+    {
+        var (level, world, _) = Level("""
+            <Trigger id="ambush"><Then><spawn type="orc" area="door0" order="idle"/><counter name="ambushes" action="inc" value="1"/></Then></Trigger>
+            <Trigger id="save" autorun="false"><Then><triggerCheckpoint spawnPoint="start"><ignore trigger="Ambush"/></triggerCheckpoint></Then></Trigger>
+            """);
+        using var _ = world;
+        level.Start();
+        Run(level, 0.3f);
+        Assert.Single(world.Characters, c => !c.IsPlayer);
+        level.Current!.Scripts!.ExecuteTrigger(ScriptScene.Hash("save"), null);
+        Run(level, 0.1f);
+
+        Assert.True(level.RestartAtCheckpoint());
+        Run(level, 0.3f);
+
+        Assert.Single(world.Characters, c => !c.IsPlayer);                                  // not replayed; fired anew instead
+        Assert.Equal(2, level.Level.Counter(ScriptScene.Hash("ambushes")));
+    }
+
+    [Fact]
+    public void TheNPCsOfASceneLeftWithThemKept_SurviveARestart_AndTheNextCheckpointToo()
+    {
+        var (level, world, first) = Level("""
+            <Trigger id="guards"><Then><spawn type="orc" nr="2" area="door0" order="idle"/></Then></Trigger>
+            <Trigger id="go" autorun="false"><Then><changeScene scene="town_s2" spawnPoint="gate" saveNPCs="true" spawnPlayers="true" transition="none"/></Then></Trigger>
+            """, """
+            <Trigger id="save"><Then><triggerCheckpoint spawnPoint="gate"/></Then></Trigger>
+            <Trigger id="back" autorun="false"><Then><changeScene scene="town_s1" spawnPoint="start" spawnPlayers="true" transition="none"/></Then></Trigger>
+            """);
+        using var _ = world;
+        level.Start();
+        Run(level, 0.3f);
+        level.Current!.Scripts!.ExecuteTrigger(ScriptScene.Hash("go"), null);
+        Run(level, 0.3f);                                                                         // in s2: the checkpoint, the orcs waiting in s1
+        Assert.NotNull(level.Checkpoint);
+        var oldAvatar = first.Avatar!;
+
+        Assert.True(level.RestartAtCheckpoint());
+        Run(level, 0.1f);
+        Assert.True(oldAvatar.Body.Body.IsRemoved);
+        level.TakeCheckpoint([Numerics.Matrix4x4.Identity], []);                                // before s1 is entered again
+        Assert.True(level.RestartAtCheckpoint());
+        level.Current!.Scripts!.ExecuteTrigger(ScriptScene.Hash("back"), null);
+        Run(level, 0.3f);
+
+        Assert.Equal("town_s1", level.Current!.Definition.Name);
+        Assert.Equal(2, world.Characters.Count(c => !c.IsPlayer));                                // replayed on the way back
+        Assert.Equal(1, world.Entities.Entities.Count(e => e is Character { IsPlayer: true }));
+    }
+
+    [Fact]
     public void ASuspendedBody_TouchesNothing_AndComesBackAsItWas()
     {
         using var world = World();

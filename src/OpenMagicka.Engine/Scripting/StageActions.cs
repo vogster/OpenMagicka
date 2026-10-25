@@ -89,6 +89,9 @@ public sealed class FadeAction : ScriptAction
 /// </summary>
 public sealed class CutsceneAction : ScriptAction
 {
+    /// <summary>A replay begins it again, the bars in at once (as the original).</summary>
+    public override void Replay() => Scene.BeginCutscene(OnSkip.Length > 0 ? Hash(OnSkip) : 0, skipBarMove: true, KillDialogs);
+
     public string OnSkip { get; set; } = "";
     public bool SkipBarMove { get; set; }
     public bool KillDialogs { get; set; } = true;
@@ -99,6 +102,9 @@ public sealed class CutsceneAction : ScriptAction
 /// <summary><c>endCutscene skipBarMove=</c>: the cutscene ends, the HUD back, the dialogs ended.</summary>
 public sealed class EndCutsceneAction : ScriptAction
 {
+    /// <summary>A replay ends it again, the bars out at once (as the original).</summary>
+    public override void Replay() => Scene.EndCutscene(skipBarMove: true);
+
     public bool SkipBarMove { get; set; }
 
     protected override void Execute() => Scene.EndCutscene(SkipBarMove);
@@ -107,11 +113,17 @@ public sealed class EndCutsceneAction : ScriptAction
 /// <summary><c>disableInput</c>: the level holds the players' input back.</summary>
 public sealed class DisableInputAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     protected override void Execute() => Scene.Stage.LimitInput(Scene.Level);
 }
 
 /// <summary><c>enableInput</c>: the level's hold on input goes (others stay).</summary>
 public sealed class EnableInputAction : ScriptAction
 {
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
     protected override void Execute() => Scene.Stage.UnlimitInput(Scene.Level);
 }

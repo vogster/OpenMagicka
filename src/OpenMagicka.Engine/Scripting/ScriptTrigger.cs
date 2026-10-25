@@ -125,6 +125,38 @@ public class ScriptTrigger
 
     /// <summary>The repeat cooldown starts over (a scene is entered).</summary>
     internal void ResetTimers() => sinceRepeat = 0;
+
+    /// <summary>A trigger's state for a checkpoint: whether it fired, its cooldown, its actions' runs (variant by variant).</summary>
+    public sealed record State(bool HasTriggered, float SinceRepeat, ScriptAction.State[][] Actions, bool? Enabled);
+
+    public State Save() => new(HasTriggered, sinceRepeat, [.. variants.Select(v => v.Select(a => a.Save()).ToArray())], (this as ScriptInteractable)?.Enabled);
+
+    public void Load(State state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        (HasTriggered, sinceRepeat) = (state.HasTriggered, state.SinceRepeat);
+        for (var v = 0; v < variants.Length && v < state.Actions.Length; v++)
+        {
+            for (var a = 0; a < variants[v].Length && a < state.Actions[v].Length; a++)
+            {
+                variants[v][a].Load(state.Actions[v][a]);
+            }
+        }
+        if (this is ScriptInteractable point && state.Enabled is { } enabled)
+        {
+            point.Enabled = enabled;
+        }
+    }
+
+    /// <summary>As if it never fired (an ignored trigger at a checkpoint's load): no cooldown, no waiting runs.</summary>
+    public void Reset()
+    {
+        (HasTriggered, sinceRepeat) = (false, 0);
+        foreach (var action in variants.SelectMany(v => v))
+        {
+            action.ResetRuns();
+        }
+    }
 }
 
 /// <summary>
