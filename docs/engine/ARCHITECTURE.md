@@ -1879,8 +1879,10 @@ alone). Checkpoints are not kept across runs yet: continuing a slot starts its c
 
 **Starting** (the launcher, without `--level`, `--viewer`, `--check-effects` or `--placeholder`):
 - Magicka is found where the player said (`--content`, `MAGICKA_DIR`), else where the settings remember, else in
-  Steam's libraries (`MagickaInstall`). Without it a box says what is needed. A version other than 1.10.4.2 is
-  logged as a warning.
+  Steam's libraries (`MagickaInstall`). Without it (a copy outside Steam) the player is asked for its folder
+  (`InstallChooser`, through SDL's message box and folder dialog: `SdlQuestions`), again until the folder has the
+  game's content or the player quits; the folder is remembered. Where SDL has no folder dialog, a box tells how to
+  start with `--content`. A version other than 1.10.4.2 is logged as a warning.
 - The settings (`GameSettings`), the saves and the log live in OpenMagicka's data folder (`DataFolder`: the local
   application data, or the temporary folder without one). The log (`logs/openmagicka.log`, the run before kept as
   `openmagicka.old.log`) has everything the game writes, headed with the version and the system.

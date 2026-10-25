@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>OpenMagicka</AssemblyName>
+    <!-- SDL's message box takes its texts as pointers (SdlQuestions). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <FnaLibs>$(RootDir)lib/fnalibs/</FnaLibs>
     <HostArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</HostArch>
     <!-- The native libraries follow the runtime published for (tools/package_beta.ps1), else the building system. -->

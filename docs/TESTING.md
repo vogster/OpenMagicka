@@ -5,7 +5,8 @@ OpenMagicka is a free, open-source re-creation of Magicka's engine. It has none 
 
 ## What you need
 
-- Magicka installed through Steam (any library folder). OpenMagicka only reads its files and never changes them.
+- Your own copy of Magicka, version 1.10.4.2: the Steam version is found by itself, any other copy by its folder.
+  OpenMagicka only reads its files and never changes them.
 - Windows 10/11 (64-bit) or Linux (x64). No .NET or other runtime to install: the beta carries its own.
 - On Linux: `ffmpeg` installed (`sudo apt install ffmpeg` or your distribution's package), for the game's music and
   voices. Without it the game runs, but some of its sound is missing.
@@ -18,13 +19,11 @@ OpenMagicka is a free, open-source re-creation of Magicka's engine. It has none 
 3. The first start converts the game's sound into a format OpenMagicka can play. This happens once and takes a minute
    or two. The window may show the menu before the conversion finishes.
 
-If Magicka is not found (it lives outside Steam, say), start OpenMagicka with its folder:
-
-```
-OpenMagicka --content "D:\Games\Magicka"
-```
-
-Or set the `MAGICKA_DIR` environment variable to that folder. Once found, the folder is remembered in the settings.
+If Magicka is not in Steam's libraries, OpenMagicka asks for its folder: choose the one with `Magicka.exe` and the
+`Content` folder in it. The folder is remembered for the next start. (Where there is no folder dialog, some Linux
+systems without a desktop portal or `zenity`, start OpenMagicka with the folder instead:
+`./OpenMagicka --content "/path/to/Magicka"`, or set `MAGICKA_DIR` to it.) To switch to another copy later, start
+once with `--content` and its folder, or delete `settings.json` (see below).
 
 ## What is in the beta
 

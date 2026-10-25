@@ -52,12 +52,16 @@ internal static class Program
     {
         var settings = GameSettings.Load(GameSettings.DefaultPath);
         var given = new[] { options.ContentDirectory, settings.MagickaFolder };
-        if (MagickaInstall.Find(given, MagickaInstall.SteamRoots()) is not { } install)
+        var install = MagickaInstall.Find(given, MagickaInstall.SteamRoots());
+        if (install is null && options.Screenshot is null)
         {
-            const string missing = "OpenMagicka needs Magicka's own files (the Steam version, 1.10.4.2). Install Magicka through Steam, "
-                + "or start OpenMagicka with --content <Magicka folder>, or set MAGICKA_DIR to that folder.";
-            Console.Error.WriteLine($"OpenMagicka: {missing}");
-            SDL3.SDL.SDL_ShowSimpleMessageBox(SDL3.SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "OpenMagicka", missing, IntPtr.Zero);
+            Console.WriteLine("OpenMagicka: Magicka is not in Steam's libraries; asking for its folder");
+            using var questions = new SdlQuestions();
+            install = InstallChooser.Ask(questions, settings.MagickaFolder);  // a copy outside Steam: the player shows where
+        }
+        if (install is null)
+        {
+            Console.Error.WriteLine("OpenMagicka: no Magicka (pass --content <Magicka folder> or set MAGICKA_DIR)");
             return 2;
         }
         if (install.IsKnownVersion)
