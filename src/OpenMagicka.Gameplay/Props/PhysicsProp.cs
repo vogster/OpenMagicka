@@ -101,6 +101,8 @@ public sealed partial class PhysicsProp : Entity
 
     public override bool IsPhysicsObject => true;
 
+    protected internal override IEnumerable<PhysicsBody> Bodies => [Body];
+
     public override bool IsDamageable => Template.IsDamageable;
 
     public override bool IsDead => dead || (Template.IsDamageable && HitPoints <= 0);

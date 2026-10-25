@@ -94,12 +94,28 @@ public sealed class PhysicsWorld : IDisposable
     /// <summary>Takes a mesh that is not the level out of the world (a shield gone).</summary>
     public void RemoveStaticMesh(StaticMesh mesh)
     {
-        ThrowIfStepping();
         ArgumentNullException.ThrowIfNull(mesh);
         if (mesh.IsLevel)
         {
             throw new InvalidOperationException("the level stays");
         }
+        RemoveMesh(mesh);
+    }
+
+    /// <summary>Takes a level's mesh out of the world: its scene is left for another.</summary>
+    public void RemoveLevelMesh(StaticMesh mesh)
+    {
+        ArgumentNullException.ThrowIfNull(mesh);
+        if (!mesh.IsLevel)
+        {
+            throw new InvalidOperationException("not a level mesh");
+        }
+        RemoveMesh(mesh);
+    }
+
+    private void RemoveMesh(StaticMesh mesh)
+    {
+        ThrowIfStepping();
         if (mesh.IsRemoved)
         {
             return;

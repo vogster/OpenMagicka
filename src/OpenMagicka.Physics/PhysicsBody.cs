@@ -45,6 +45,7 @@ public sealed class PhysicsBody
         ArgumentNullException.ThrowIfNull(shape);
         var live = Body;
         owner.ThrowIfStepping();
+        ThrowIfSuspended();
         var collider = PhysicsWorld.ToJitter(shape);
         var old = live.Shapes.ToList();
         live.AddShape(collider, MassInertiaUpdateMode.Preserve);
@@ -83,7 +84,56 @@ public sealed class PhysicsBody
     }
 
     /// <summary>Whether the body never moves (made <see cref="BodyOptions.Static"/>).</summary>
-    public bool IsStatic => Body.MotionType == MotionType.Static;
+    public bool IsStatic => (IsSuspended ? suspendedMotion : Body.MotionType) == MotionType.Static;
+
+    private List<Jitter2.Collision.Shapes.RigidBodyShape>? suspendedShapes;
+    private MotionType suspendedMotion;
+    private Vector3 suspendedVelocity, suspendedSpin;
+
+    /// <summary>The body is out of the simulation for a while (its scene left): it touches nothing and stays where it was.</summary>
+    public bool IsSuspended => suspendedShapes is not null;
+
+    /// <summary>Takes the body out of the simulation, keeping its place, turn, velocity and settings; not during a step.</summary>
+    public void Suspend()
+    {
+        var live = Body;
+        owner.ThrowIfStepping();
+        if (IsSuspended)
+        {
+            return;
+        }
+        (suspendedMotion, suspendedVelocity, suspendedSpin) = (live.MotionType, live.Velocity.ToNumerics(), live.AngularVelocity.ToNumerics());
+        suspendedShapes = [.. live.Shapes];
+        live.RemoveShapes(suspendedShapes, MassInertiaUpdateMode.Preserve);
+        live.MotionType = MotionType.Static;
+    }
+
+    private void ThrowIfSuspended()
+    {
+        if (IsSuspended)
+        {
+            throw new InvalidOperationException("the body is suspended");
+        }
+    }
+
+    /// <summary>Puts a suspended body back into the simulation as it was; not during a step.</summary>
+    public void Resume()
+    {
+        if (IsRemoved || suspendedShapes is not { } shapes)
+        {
+            return;
+        }
+        var live = Body;
+        owner.ThrowIfStepping();
+        live.MotionType = suspendedMotion;
+        live.AddShapes(shapes, MassInertiaUpdateMode.Preserve);
+        suspendedShapes = null;
+        if (suspendedMotion != MotionType.Static)
+        {
+            (live.Velocity, live.AngularVelocity) = (suspendedVelocity.ToJitter(), suspendedSpin.ToJitter());
+        }
+        live.SetActivationState(true);
+    }
 
     /// <summary>Setting a velocity wakes the body up.</summary>
     public Vector3 Velocity
@@ -103,6 +153,7 @@ public sealed class PhysicsBody
     public void SetMass(float mass)
     {
         owner.ThrowIfStepping();
+        ThrowIfSuspended();
         if (!(mass > 0) || !float.IsFinite(mass))
         {
             throw new ArgumentOutOfRangeException(nameof(mass), mass, "must be positive");

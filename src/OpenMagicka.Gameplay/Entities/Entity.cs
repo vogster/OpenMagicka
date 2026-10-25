@@ -113,6 +113,14 @@ public abstract class Entity
         return t is >= 0 and <= 1 ? t : null;
     }
 
+    /// <summary>It waits outside the level (its scene left with it kept): what it was doing in the world stops.</summary>
+    protected internal virtual void OnWithdrawn()
+    {
+    }
+
+    /// <summary>The physics bodies it owns: a scene left suspends them while it is kept away.</summary>
+    protected internal virtual IEnumerable<Physics.PhysicsBody> Bodies => [];
+
     /// <summary>One frame of the entity's own logic.</summary>
     public virtual void Update(float dt)
     {

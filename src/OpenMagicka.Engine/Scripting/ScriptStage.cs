@@ -40,6 +40,12 @@ public sealed record CheckpointRequest(IReadOnlyList<Matrix4x4> SpawnPoints, IRe
 public sealed record ChangeSceneRequest(string Scene, IReadOnlyList<int> SpawnPoints, ScriptTransition Transition, float Time, bool SpawnPlayers, bool SaveNpcs)
     : ScriptRequest;
 
+/// <summary>The level left one scene for another (the sound pauses the old scene's sounds when its NPCs were kept, else stops them).</summary>
+public sealed record SceneChangedRequest(int From, int To, bool Kept) : ScriptRequest;
+
+/// <summary>A scene change's screen transition: out over the time, the change, then back in.</summary>
+public sealed record SceneTransition(ScriptTransition Kind, float Time, bool Out);
+
 /// <summary>A screen fade: in (to the colour) or out, over a time; an override cancels the scene change's own.</summary>
 public sealed record ScreenFade(bool In, Vector4 Color, float Time, bool Override);
 
@@ -66,6 +72,9 @@ public sealed class ScriptStage
     private GameCamera camera = GameCamera.Initial;
 
     public ScreenFade? Fade { get; internal set; }
+
+    /// <summary>The scene change under way, for the renderer's transition; none when there is none.</summary>
+    public SceneTransition? Transition { get; internal set; }
 
     /// <summary>The HUD shows (a cutscene hides it).</summary>
     public bool IsUiEnabled { get; internal set; } = true;

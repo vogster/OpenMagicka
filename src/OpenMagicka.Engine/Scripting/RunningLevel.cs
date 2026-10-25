@@ -1,13 +1,12 @@
 using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Magicka;
-using OpenMagicka.Engine.Navigation;
 using OpenMagicka.Gameplay;
 using OpenMagicka.Gameplay.Characters;
 
 namespace OpenMagicka.Engine.Scripting;
 
 /// <summary>
-/// A scene being played: its world given the level's bestiary (what spawns and summons make), its nav
+/// One scene being played, alone (a level's scenes in turn: <see cref="PlayedLevel"/>): its world given the level's bestiary (what spawns and summons make), its nav
 /// mesh (the parts' meshes moving with them) and its places, and its scripts entered. A frame runs as
 /// the original's: the world (minds, physics, entities), then the level's timers, then the scene's
 /// triggers, effects and animated parts.
@@ -23,34 +22,14 @@ public sealed class RunningLevel
         ArgumentNullException.ThrowIfNull(scene);
         World = world;
         Scene = new ScriptScene(scene, level ?? new ScriptLevel(), registry ?? ScriptRegistry.Engine(), world, looped, seed, new ScriptPlaces(model), game);
-        var surfaces = new Dictionary<AnimatedLevelPartContent, Gameplay.Navigation.NavSurface>(ReferenceEqualityComparer.Instance);
-        (Bestiary, NavMesh) = (bestiary, model is null ? null : LevelNavigation.From(model, surfaces));
-        foreach (var part in Scene.Places.Parts)
-        {
-            Steer(part, surfaces);
-        }
+        (Bestiary, NavMesh) = (bestiary, SceneSetup.Navigation(model, Scene.Places));
         (world.Entities.Bestiary, world.Entities.NavMesh) = (Bestiary, NavMesh);
         Scene.Assets = assets;
-        foreach (var placed in model?.PhysicsEntities ?? [])
-        {
-            if (assets?.Prop("data/physicsentities/" + placed.Template) is { } template && world.Entities.Entities.Count < Gameplay.Entities.EntityManager.Capacity)
-            {
-                ScriptProps.Place(world, template, LevelNavigation.ToNumerics(placed.Transform));     // the level's own props stand when it starts
-            }
-        }
+        SceneSetup.PlaceProps(world, model, assets);                         // the level's own props stand when it starts
         Scene.Enter();
     }
 
     public IBestiary? Bestiary { get; }
-
-    private static void Steer(ScenePart part, Dictionary<AnimatedLevelPartContent, Gameplay.Navigation.NavSurface> surfaces)
-    {
-        part.Navigation = surfaces.GetValueOrDefault(part.Content);
-        foreach (var child in part.Children)
-        {
-            Steer(child, surfaces);
-        }
-    }
 
     public Gameplay.Navigation.NavMesh? NavMesh { get; }
 

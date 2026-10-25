@@ -16,19 +16,22 @@ public static class LevelCollision
     /// Water and Lava meshes are left out until their freeze filtering exists, so nothing stands on
     /// them; the game's levels have none (liquids carry their own collision).
     /// </summary>
-    public static int AddTo(PhysicsWorld world, LevelModelContent level)
+    public static int AddTo(PhysicsWorld world, LevelModelContent level) => Load(world, level).Sum(m => m.TriangleCount);
+
+    /// <summary>Adds the level's material meshes (as <see cref="AddTo"/>) and returns them, to take out when its scene is left.</summary>
+    public static IReadOnlyList<StaticMesh> Load(PhysicsWorld world, LevelModelContent level)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(level);
-        var kept = 0;
+        var meshes = new List<StaticMesh>();
         for (var material = 0; material < level.CollisionMeshes.Count; material++)
         {
             if (level.CollisionMeshes[material] is { } mesh && !IsLiquid((CollisionMaterial)material))
             {
-                kept += world.AddStaticMesh(material, Vertices(mesh), Triangles(mesh)).TriangleCount;
+                meshes.Add(world.AddStaticMesh(material, Vertices(mesh), Triangles(mesh)));
             }
         }
-        return kept;
+        return meshes;
     }
 
     /// <summary>The material of a segment hit on the level, or null when a body was hit.</summary>

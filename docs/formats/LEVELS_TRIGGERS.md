@@ -331,6 +331,44 @@ Common attributes: `delay`, `trigger` (trigger on event completion, sender = the
 
 If there are > 300 start actions, a loading screen with progress is shown.
 
+
+**Ours** (`OpenMagicka.Engine.Scripting.PlayedLevel`, OM-47):
+- A level at play holds its scenes in one world, one at a time.
+- The scene files are read when the level is built. A scene's model, places and scripts are made on its first entry and live
+  until the level ends; its triggers, counters and named effects are never reset by leaving.
+
+**Changing scenes:**
+- A change (the level's `<Start>`, which names the first scene when it names none, or a `changeScene`) waits for the
+  transition out: none, or no time, means at the end of the frame. The stage shows it to the renderer as `SceneTransition`
+  (out, then in).
+- A scene the level lacks crashes the original; ours ignores the change.
+
+**Leaving a scene:**
+- its scripts stop reaching the world;
+- the players' avatars wait outside;
+- with `saveNPCs`, its living NPCs (not summoned ones), standing props, pickable items, books and eggs wait too, their bodies
+  suspended; everything else goes;
+- its collision, nav mesh and bestiary leave the world;
+- the sound system is told (`SceneChangedRequest`), to pause or stop the scene's sounds.
+
+**Entering a scene:**
+- its collision, nav mesh and bestiary come in;
+- its model's props stand, on its **first** entry only. A scene left without keeping loses its props for good, as the
+  original;
+- what it kept comes back where it was;
+- its repeat timers are reset;
+- the players are placed, then the camera goes to the centre of the four players' spots (each 1 above its locator), as the
+  original.
+
+**Placing the players:**
+- player *i* goes to locator `<spawnPoint><i>`, else to the nearest lower one found, 2 along x for each player past it (none
+  found: 2 along x per player from the origin, the first at 2);
+- 1 up, then onto the floor up to 9 below, turned the locator's way;
+- dead players are not brought in: the corpse stays with the old scene, and a revival raises a new wizard. Without
+  `spawnPlayers` (no game scene does that) ours brings the living players back where they were; the original leaves them out.
+- A start in a scene the level lacks fails. A model asset that is not a level model fails the change, before the old scene is
+  left.
+- At the level's end (`End`), what waits outside is let go with the rest of the world.
 ### 6.2 Checkpoint and replay
 
 `triggerCheckpoint` takes a snapshot of the **level state**: current scene, timers, counters,

@@ -72,6 +72,11 @@ public sealed partial class Character
         }
     }
 
+    protected internal override IEnumerable<Physics.PhysicsBody> Bodies => [Body.Body];
+
+    /// <summary>Its spell ends as it waits outside (the spell's entities went with the scene).</summary>
+    protected internal override void OnWithdrawn() => StopSpell();
+
     private void RaiseScriptTrigger(int trigger)
     {
         if (trigger != 0)

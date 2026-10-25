@@ -61,6 +61,8 @@ public sealed class WorldItem : Entity
 
     public Item Item { get; }
 
+    protected internal override IEnumerable<PhysicsBody> Bodies => [Body];
+
     /// <summary>The script trigger picking it up sets off, the picker as the sender (0 for none).</summary>
     public int OnPickupTrigger { get; set; }
 

@@ -12,7 +12,7 @@ namespace OpenMagicka.Gameplay.Entities;
 /// <summary>An entity the manager let go, with the id it had, for the removal broadcast.</summary>
 public readonly record struct RemovedEntity(Entity Entity, NetId Id);
 
-public sealed class EntityManager
+public sealed partial class EntityManager
 {
     public const int Capacity = 512;
 
@@ -227,6 +227,18 @@ public sealed class EntityManager
     /// </summary>
     private void Release(Entity entity)
     {
+        Unregister(entity);
+        entity.Manager = null;
+        entity.OnRemoved();
+        if (entity.Manager is null)
+        {
+            entity.Id = NetId.None;
+        }
+    }
+
+    /// <summary>Takes an entity that has left the list out of the indexes: its id, its name, the shields, the minds.</summary>
+    private void Unregister(Entity entity)
+    {
         byId.Remove(entity.Id);
         if (entity.UniqueId != 0 && byName.TryGetValue(entity.UniqueId, out var holder) && ReferenceEquals(holder, entity))
         {
@@ -239,12 +251,6 @@ public sealed class EntityManager
         if (entity is Characters.Character { Mind: { } mind })
         {
             Minds.Remove(mind);
-        }
-        entity.Manager = null;
-        entity.OnRemoved();
-        if (entity.Manager is null)
-        {
-            entity.Id = NetId.None;
         }
     }
 

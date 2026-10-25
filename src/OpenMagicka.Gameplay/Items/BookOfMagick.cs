@@ -17,6 +17,8 @@ public sealed class BookOfMagick : Entity
 
     private readonly PhysicsWorld world;
     private readonly PhysicsBody? body;
+
+    protected internal override IEnumerable<PhysicsBody> Bodies => body is null ? [] : [body];
     private Vector3 lastPosition;
     private float timeout;
     private bool taken;
