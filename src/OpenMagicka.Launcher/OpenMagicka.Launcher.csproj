@@ -5,6 +5,12 @@
     <AssemblyName>OpenMagicka</AssemblyName>
     <FnaLibs>$(RootDir)lib/fnalibs/</FnaLibs>
     <HostArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</HostArch>
+    <!-- The native libraries follow the runtime published for (tools/package_beta.ps1), else the building system. -->
+    <NativeTarget Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</NativeTarget>
+    <NativeTarget Condition="'$(NativeTarget)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">win-x64</NativeTarget>
+    <NativeTarget Condition="'$(NativeTarget)' == '' And $([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'X64'">linux-x64</NativeTarget>
+    <NativeTarget Condition="'$(NativeTarget)' == '' And $([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'Arm64'">linux-arm64</NativeTarget>
+    <NativeTarget Condition="'$(NativeTarget)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">osx</NativeTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,19 +19,19 @@
 
   <!-- FNA native libraries, fetched by tools/fetch_fnalibs.sh. On Windows x64 FNA3D is our own
        build with MojoShader fixes (native/README.md, tools/build_fna3d.ps1). -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+  <ItemGroup Condition="'$(NativeTarget)' == 'win-x64'">
     <None Include="$(FnaLibs)x64/*.dll" Exclude="$(FnaLibs)x64/FNA3D.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(RootDir)native/win-x64/FNA3D.dll" CopyToOutputDirectory="Always" Visible="false" />
     <None Include="$(RootDir)native/win-x64/SOURCE.txt" Link="FNA3D.OpenMagicka.txt" CopyToOutputDirectory="Always" Visible="false" />
     <None Include="$(FnaLibs)D3D12/*.dll" Link="D3D12/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'X64'">
+  <ItemGroup Condition="'$(NativeTarget)' == 'linux-x64'">
     <None Include="$(FnaLibs)lib64/*" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(HostArch)' == 'Arm64'">
+  <ItemGroup Condition="'$(NativeTarget)' == 'linux-arm64'">
     <None Include="$(FnaLibs)libaarch64/*" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+  <ItemGroup Condition="'$(NativeTarget)' == 'osx' Or $(NativeTarget.StartsWith('osx-'))">
     <None Include="$(FnaLibs)osx/*.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 

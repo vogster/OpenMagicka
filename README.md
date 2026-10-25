@@ -55,9 +55,16 @@ Studio's C++ tools and CMake needed).
 
 Tests that need the game files run when `MAGICKA_DIR` points at a Magicka installation.
 
+## Playing
+
+The launcher runs the game: the Tome's menu, the campaign's chapters, pause, the options. It finds Magicka itself
+(Steam's libraries), or takes its folder from `--content "<Magicka folder>"` or `MAGICKA_DIR`. Testers' builds come
+from `pwsh tools/package_beta.ps1`; [docs/TESTING.md](docs/TESTING.md) is their guide. `--level <name>` plays one
+level alone, and `--screenshot <file.png>` saves a frame (of the menu, or of that level) and exits.
+
 ## Level viewer
 
-With the game's content, the launcher opens the level viewer (the game itself comes later):
+`--viewer` (or `--scene`, `--game-camera`) opens the level viewer instead:
 
 ```bash
 dotnet run --project src/OpenMagicka.Launcher -- --content "<Magicka folder>" --scene wc_s1
@@ -69,7 +76,8 @@ PageUp/PageDown switch between all scenes and models, Tab jumps between the scen
 camera (WASD then walk a stand-in player it follows; `--game-camera` starts with it). Scenes are
 drawn with the original shaders; R switches to a simple forward view. `--screenshot <file.png>`
 saves the first frame and exits.
-`--check-effects` loads every original effect on the GPU and reports the result.
+`--check-effects` loads every original effect on the GPU and reports the result; `--placeholder` opens a window
+that needs none of the game's files (a check of the graphics).
 
 ## Content tool
 

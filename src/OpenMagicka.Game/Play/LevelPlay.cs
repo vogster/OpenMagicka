@@ -33,15 +33,15 @@ public sealed partial class LevelPlay : IDisposable
     private float fadeAmount, fadeFrom, fadeTime, transitionAmount;
     private int meshScene = -1;
 
-    /// <summary>Plays a level of the game's content (a .lvl path), its first player a wizard.</summary>
-    public static LevelPlay Open(LevelDefinition definition, ContentFileSystem files, ContentLoader loader)
+    /// <summary>Plays a level of the game's content (a .lvl path), its first player a wizard, its dialogs in a language.</summary>
+    public static LevelPlay Open(LevelDefinition definition, ContentFileSystem files, ContentLoader loader, string language = LanguagePack.Fallback)
     {
         var library = new TemplateLibrary(loader);
         var bestiary = new ContentBestiary(library);
         var services = new LevelServices(bestiary, new ContentScriptAssets(library), ScriptRegistry.Engine());
         var wizard = bestiary.Find(WizardAsset) ?? throw new InvalidDataException($"the game has no {WizardAsset}");
         return new LevelPlay(definition, new ContentLevel(files, loader), services, wizard, library.LookOf, GibShapes(loader),
-            AnimatedModels.Loader(loader, SpellVisuals.ModelAssets), LevelDialogs.Load(files, loader, definition, LanguagePack.Fallback));
+            AnimatedModels.Loader(loader, SpellVisuals.ModelAssets), LevelDialogs.Load(files, loader, definition, language));
     }
 
     /// <summary>A model's bounding sphere (its meshes' together), by asset, each read once; null for one that is no model.</summary>

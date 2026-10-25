@@ -32,7 +32,10 @@ public sealed partial class GuiPass : IDisposable
     public GuiText Text { get; }
 
     /// <summary>The fonts by the original's names (Maiandra14, Maiandra16, Maiandra18).</summary>
-    public IReadOnlyDictionary<string, GuiFont> Fonts { get; }
+    public IReadOnlyDictionary<string, GuiFont> Fonts { get; private set; }
+
+    /// <summary>The language whose fonts the pass has.</summary>
+    public string Language { get; private set; } = Content.Localization.LanguagePack.Fallback;
 
     public IEnumerable<GameEffect> Effects => [Text.Effect, box, prompt];
 
@@ -46,7 +49,20 @@ public sealed partial class GuiPass : IDisposable
         ArgumentNullException.ThrowIfNull(loader);
         Texture2DContent Picture(string asset) => loader.LoadUncached(asset).Root as Texture2DContent ?? throw new InvalidDataException($"{asset} is not a picture");
         var (frame, pad, keyboard, hud, digits) = (Picture(Frame), Picture(PadPrompt), Picture(KeyboardPrompt), Picture(HudAtlas), Picture(DigitsAtlas));
-        var fonts = FontNames.ToDictionary(n => n, n =>
+        var fonts = ReadFonts(loader, language);
+        var effects = new[] { shaders.Load("GUIBasicEffect"), shaders.Load("TextBoxEffect"), shaders.Load("NotifierButtonEffect") };
+        await Task.WhenAll(effects).ConfigureAwait(false);                     // the library's (the menu shares GUIBasicEffect): not ours to dispose
+        var pass = await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits], fonts)).ConfigureAwait(false);
+        pass.Language = language;
+        return pass;
+    }
+
+    /// <summary>A language's fonts as read (English's where it ships none).</summary>
+    public static Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> ReadFonts(ContentLoader loader, string language)
+    {
+        ArgumentNullException.ThrowIfNull(loader);
+        ArgumentNullException.ThrowIfNull(language);
+        return FontNames.ToDictionary(n => n, n =>
         {
             var own = $"Languages/{language}/Font/{n}";
             var asset = loader.Files.Exists(own + ".xnb") ? own : $"Languages/eng/Font/{n}";
@@ -55,16 +71,38 @@ public sealed partial class GuiPass : IDisposable
                 ?? throw new InvalidDataException($"{n} has no atlas");
             return (font, atlas);
         });
-        var effects = new[] { shaders.Load("GUIBasicEffect"), shaders.Load("TextBoxEffect"), shaders.Load("NotifierButtonEffect") };
+    }
+
+    /// <summary>Another language's fonts (read with <see cref="ReadFonts"/>) take the old ones' place; render thread.</summary>
+    public void SetFonts(GraphicsDevice device, string language, Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> fonts)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(fonts);
+        var made = MakeFonts(device, fonts);
+        foreach (var font in Fonts.Values)
+        {
+            font.Dispose();
+        }
+        (Fonts, Language) = (made, language);
+    }
+
+    private static Dictionary<string, GuiFont> MakeFonts(GraphicsDevice device, Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> fonts)
+    {
+        var made = new Dictionary<string, GuiFont>();
         try
         {
-            await Task.WhenAll(effects).ConfigureAwait(false);
-            return await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits], fonts)).ConfigureAwait(false);
+            foreach (var (name, (font, atlas)) in fonts)
+            {
+                made[name] = new GuiFont(new BitmapFont(font, BitmapFont.SpacingOf(name)), GpuLevel.CreateTexture2D(device, atlas));
+            }
+            return made;
         }
         catch
         {
-            var made = effects.Where(t => t.IsCompletedSuccessfully).Select(t => t.Result).ToArray();
-            _ = gpu.Enqueue(_ => Array.ForEach(made, e => e.Dispose()));
+            foreach (var font in made.Values)
+            {
+                font.Dispose();
+            }
             throw;
         }
     }
@@ -86,13 +124,8 @@ public sealed partial class GuiPass : IDisposable
                 made.Add(textures[i] = GpuLevel.CreateTexture2D(device, pictures[i]));
             }
             var frameTexture = textures[0];
-            var gpuFonts = new Dictionary<string, GuiFont>();
-            foreach (var (name, (font, atlas)) in fonts)
-            {
-                var gpuFont = new GuiFont(new BitmapFont(font, BitmapFont.SpacingOf(name)), GpuLevel.CreateTexture2D(device, atlas));
-                made.Add(gpuFont);
-                gpuFonts[name] = gpuFont;
-            }
+            var gpuFonts = MakeFonts(device, fonts);
+            made.AddRange(gpuFonts.Values);
             var (vertices, indices) = Grid();
             var grid = new VertexBuffer(device, VertexPositionNormalTexture.VertexDeclaration, vertices.Length, BufferUsage.WriteOnly);
             made.Add(grid);
@@ -166,9 +199,6 @@ public sealed partial class GuiPass : IDisposable
         {
             font.Dispose();
         }
-        Text.Effect.Dispose();
-        box.Dispose();
-        prompt.Dispose();
         padPrompt.Dispose();
         keyboardPrompt.Dispose();
         hud.Dispose();

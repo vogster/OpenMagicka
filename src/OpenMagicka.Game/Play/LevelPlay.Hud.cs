@@ -30,6 +30,9 @@ public sealed partial class LevelPlay
     /// <summary>Whether damage and heal numbers show over heads (the original's option, on by default).</summary>
     public bool ShowsDamageNumbers { get; set; } = true;
 
+    /// <summary>Whether the pad's spell wheel shows round the wizard (the original's option, on by default).</summary>
+    public bool ShowsSpellWheel { get; set; } = true;
+
     /// <summary>A player's queue on the HUD (made on first use).</summary>
     public QueueIcons QueueOf(Player player) => Queue(player).Icons;
 
@@ -129,7 +132,7 @@ public sealed partial class LevelPlay
         {
             numbers.Write(into.Numbers);
         }
-        if (padUsed && wheel.IsShown && Player.Avatar is { IsDead: false } wizard)
+        if (ShowsSpellWheel && padUsed && wheel.IsShown && Player.Avatar is { IsDead: false } wizard)
         {
             var icons = new List<WheelIcon>();
             wheel.Write(icons);

@@ -43,24 +43,47 @@ public sealed class PlayFrame
 
 /// <summary>
 /// The level at play on the logic thread: the player's keyboard and mouse, or its pad (the one last touched), drive the wizard (both ticks of a
-/// focused window are needed, so nothing is pressed by a focus coming back), Escape quits. The level
-/// starts on the first tick. An exception stops the level (the frame says why) rather than the game.
+/// focused window are needed, so nothing is pressed by a focus coming back). Escape quits; in the game (OM-53) it,
+/// or the pad's Start, pauses instead (<paramref name="escape"/>). The level starts on the first tick. An exception
+/// stops the level (the frame says why) rather than the game.
 /// </summary>
-public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation<PlayFrame>
+public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escape = null) : ISimulation<PlayFrame>
 {
     private readonly IGameHost host = host ?? throw new ArgumentNullException(nameof(host));
     private readonly LevelPlay play = play ?? throw new ArgumentNullException(nameof(play));
+    private readonly Action? pauses = escape;
     private GameCamera previous = GameCamera.Initial;
     private InputState last;
     private bool usingPad, wasUsingPad;
-    private bool started;
+    private bool started, escaping;
     private string? error;
+
+    /// <summary>The level stopped (an exception), or null.</summary>
+    public string? Error => error;
+
+    /// <summary>
+    /// The level is left paused: the next tick starts afresh (the wizard lets go of what it held), and an Escape or
+    /// Start still held from the pause menu does not pause again.
+    /// </summary>
+    public void Pause()
+    {
+        last = default;
+        escaping = true;
+    }
 
     public void Tick(double dt)
     {
         var input = host.Input.Value;
         var keys = input.Keyboard;
-        if (input.IsActive && keys.IsKeyDown(Keys.Escape))
+        var held = input.IsActive && (keys.IsKeyDown(Keys.Escape) || (pauses is not null && input.Pad.IsButtonDown(Buttons.Start)));
+        var pressed = held && !escaping;
+        escaping = held;
+        if (pressed && pauses is { } pause)
+        {
+            pause();
+            return;
+        }
+        if (held && pauses is null)
         {
             host.RequestExit();
         }
@@ -142,5 +165,4 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         }
         frame.Error = error;
     }
-
 }

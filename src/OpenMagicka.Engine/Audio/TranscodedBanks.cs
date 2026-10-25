@@ -25,7 +25,7 @@ public sealed class TranscodedBanks(string directory, Func<IWmaDecoder?> decoder
     public string Directory { get; } = directory ?? throw new ArgumentNullException(nameof(directory));
 
     /// <summary>OpenMagicka's own data folder for them (the user's local application data).</summary>
-    public static string DefaultDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenMagicka", "Audio");
+    public static string DefaultDirectory => DataFolder.Of("Audio");
 
     /// <summary>The decoder found (looked for once); none here.</summary>
     public IWmaDecoder? Decoder

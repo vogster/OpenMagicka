@@ -9,8 +9,10 @@ public sealed partial class LevelPlay
     /// <summary>The level's sounds; none while the level plays silent.</summary>
     public SoundDirector? Sound { get; private set; }
 
-    /// <summary>The level is heard through the game's sound (which it then owns).</summary>
-    public void Hear(SoundSystem sounds)
+    private bool ownsSounds;
+
+    /// <summary>The level is heard through the game's sound (which it then owns, unless the game keeps it: the menu's).</summary>
+    public void Hear(SoundSystem sounds, bool owned = true)
     {
         ArgumentNullException.ThrowIfNull(sounds);
         if (Sound is not null)
@@ -18,6 +20,7 @@ public sealed partial class LevelPlay
             throw new InvalidOperationException("the level is heard already");
         }
         Sound = new SoundDirector(sounds, World, Level);
+        ownsSounds = owned;
         Level.Game.Sounds = Sound;
     }
 
@@ -30,7 +33,10 @@ public sealed partial class LevelPlay
         if (Sound is { } sound)
         {
             sound.Dispose();
-            sound.Sounds.Dispose();
+            if (ownsSounds)
+            {
+                sound.Sounds.Dispose();
+            }
         }
     }
 }

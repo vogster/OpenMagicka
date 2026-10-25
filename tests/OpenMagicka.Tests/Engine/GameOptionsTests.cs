@@ -48,7 +48,7 @@ public sealed class GameOptionsTests : IDisposable
         Assert.False(options.GameCamera);
         Assert.True(GameOptions.Parse(["--content", root, "--game-camera"], NoEnvironment).GameCamera);
         Assert.Throws<ArgumentException>(() => GameOptions.Parse(["--scene"], NoEnvironment));
-        Assert.Throws<DirectoryNotFoundException>(() => GameOptions.Parse(["--screenshot", "x.png"], NoEnvironment));
+        Assert.Throws<DirectoryNotFoundException>(() => GameOptions.Parse(["--scene", "s", "--screenshot", "x.png"], NoEnvironment));
         Assert.Throws<ArgumentException>(() => GameOptions.Parse(["--content", root, "--check-effects", "--screenshot", "x.png"], NoEnvironment));
     }
 

@@ -176,6 +176,9 @@ public sealed partial class DeferredRenderer : IDisposable
     /// <summary>Why nothing is drawn over the world (the GUI could not be set up), or null.</summary>
     public string? GuiUnavailable { get; private set; }
 
+    /// <summary>The GUI pass (the menu draws with it too); none when the content lacks it.</summary>
+    public GuiPass? Gui => gui;
+
     /// <summary>Why the spells show only their particles (their own pictures could not be set up), or null.</summary>
     public string? SpellsUnavailable { get; private set; }
 

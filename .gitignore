@@ -11,3 +11,6 @@ obj/
 *.user
 TestResults/
 __pycache__/
+
+# the beta packages: tools/package_beta.ps1
+artifacts/

@@ -51,6 +51,9 @@ public sealed class GuiText(GameEffect effect)
 
     public GameEffect Effect => effect;
 
+    /// <summary>Whether colours are written as the scene's (1 − 2^−c, which the filter undoes): on in the scene, off straight onto the screen (the menu).</summary>
+    public bool ScaleToHdr { get; init; } = true;
+
     /// <summary>Flat quads of a colour (no texture): each four corners in pixels.</summary>
     public void DrawQuads(GraphicsDevice device, IReadOnlyList<(Vector2 TopLeft, Vector2 BottomRight)> quads, Vector4 colour, int width, int height)
     {
@@ -73,7 +76,7 @@ public sealed class GuiText(GameEffect effect)
         parameters.SetValue("TextureEnabled", false);
         parameters.SetValue("Saturation", 1f);
         parameters.SetValue("VertexColorEnabled", true);
-        parameters.SetValue("ScaleToHDR", true);
+        parameters.SetValue("ScaleToHDR", ScaleToHdr);
         foreach (var pass in effect.Effect.CurrentTechnique.Passes)
         {
             pass.Apply();
@@ -114,7 +117,7 @@ public sealed class GuiText(GameEffect effect)
         parameters.SetValue("Color", Vector4.One);
         parameters.SetValue("TextureEnabled", true);
         parameters.SetValue("VertexColorEnabled", true);
-        parameters.SetValue("ScaleToHDR", true);
+        parameters.SetValue("ScaleToHDR", ScaleToHdr);
         parameters.SetValue("TextureScale", Vector2.One);
         parameters.SetValue("TextureOffset", Vector2.Zero);
         parameters.SetValue("Texture", atlas);
@@ -163,7 +166,7 @@ public sealed class GuiText(GameEffect effect)
         parameters.SetValue("Color", tint ?? Vector4.One);
         parameters.SetValue("TextureEnabled", true);
         parameters.SetValue("VertexColorEnabled", true);
-        parameters.SetValue("ScaleToHDR", true);
+        parameters.SetValue("ScaleToHDR", ScaleToHdr);
         parameters.SetValue("TextureScale", Vector2.One);
         parameters.SetValue("TextureOffset", Vector2.Zero);
         parameters.SetValue("Texture", font.Atlas);

@@ -1801,3 +1801,93 @@ All pieces come from the atlas `UI/HUD/hud` (512 × 512) or `UI/HUD/Digits`, thr
 - the wall shield's and the aura's exact bar anchors;
 - the keys' labels greying with the keys;
 - the wheel's keys' saturation and flash (it shares the keys' in the original).
+
+## 20. Ours: the game around the levels (OM-53)
+
+The original's menu is a 3D book (the Tome) on a desk, lit by a candle, its pages turning between menus. OpenMagicka's
+first version keeps the book's pages and their layout but shows the right page flat, as a square of the screen's
+height in its middle. The book, the desk and the page turning come later; so do the logos, the intro and the map
+cutscenes between chapters.
+
+**One window, three modes** (`GameShell` on the render thread, `ShellSimulation` on the logic thread):
+- **Menu.** The Tome's pages, with the menu music (`music_menu`).
+- **Loading.** A chapter's level reads in the background (`Task.Run`, `LevelPlay.Open` with the settings' language).
+  The loading screen shows `UI/Loading/background` as a square of the screen's height, the chapter's name and title,
+  "Loading" with dots, and a random tip (`#tip01`…`#tip22`, Maiandra14 wrapped to 700 px). The original's spell
+  picture and progress bar are left out.
+- **Play.** The level runs through `PlaySimulation`. It first ticks once (the level starts, entering its first scene),
+  then waits, still behind the loading screen, until the render thread says it shows that scene (`ShellSignals`:
+  the frame carries the level's serial; `PlayView` begins and ends its picture of a level as the serial changes).
+- The frame (`ShellFrame`) carries the mode, the level's frame, the menu's picture (`MenuPicture`), and the screen
+  and the language the settings ask for. The render thread puts a new screen to use (`ApplyChanges`) and makes the
+  menu's fonts again for a new language (the old ones stay up until the new ones are ready).
+
+**The menu's picture** (`MenuPicture`, drawn by `MenuPass`):
+- The page: sprites and texts in page pixels (1024 × 1024), drawn into a render target over the right page of
+  `UI/ToM/tome_pages_0`, then onto the screen. The screen's own pieces (message boxes, the pause menu, the loading
+  screen, an ending's word) go over it in screen pixels, then a black cover.
+- Atlases: `UI/Menu/pages`, `UI/Spritesheets/pagesNew`, `UI/HUD/hud`, `UI/Menu/FadeBox`, `UI/Loading/background`.
+  Fonts: the language's `MenuTitle`, `MenuOption`, `MenuDefault`, Maiandra 14/16/18 and `Stonecross50` (English's
+  where a language lacks one), and `UI/Font/LanguageFont` for the languages' own names.
+- Drawn straight to the screen with `GUIBasicEffect`, without the scene's encoding (`GuiText.ScaleToHdr` off).
+- Ink is (0.1, 0.05, 0, 0.7), a selected item (1.5, 1.5, 1.5, 1), a disabled one (0, 0, 0, 0.4). Ours: a selected
+  text has an ink shadow, since the flat page lacks the candle light that sets it off.
+
+**Input** (`MenuInputReader`): the mouse hovers and clicks (a left press released, hit-tested in page pixels); the
+arrows, the d-pad and the left stick move (repeating every 0.25 s while held); Enter, Space or A choose; Esc,
+Backspace or B go back; Delete deletes a slot. The original's book takes only the mouse and A; Enter and Space are ours.
+
+**The pages** (`TomeMenu` keeps them as a stack; backing out of the main page asks to quit):
+- **Main.** The Adventure tile (the campaign) and the Options button. The DLC, Challenges, Versus and Online tiles are
+  shown dim and without colour, and are skipped. The store banner and the social buttons are left out.
+- **Save slots.** Three slots (centres at y 192, 448, 704). An empty one shows "New Campaign" and starts a campaign
+  at chapter 1 at once. A filled one shows its chapter, title and time played, and goes on with it. Its delete icon
+  (on its plate, so it comes first among the items, as the original's) or the Delete key empties it after asking
+  (No first).
+- **Lobby,** for one local player: the chapter's name and title (a click lists the chapters reached, to change it)
+  and Start. The players' slots, robes and staffs are left out.
+- **Options:** Game, Sound, Graphics. Labels end at the page's middle, values start 40 px right of it; left and right
+  (or a click) step a value, which is applied and saved at once.
+  - Game: damage numbers, health bars (On, Players Only, Off), spell wheel, language (a box of the languages under
+    `Content/Languages`, in their own names).
+  - Sound: music and sounds, 0 to 10 (`misc_thud01` sounds each step of the sounds').
+  - Graphics: windowed, resolution (a box of the display's sizes from 800 × 600), V-Sync.
+- **Message boxes** (`MessageBox`): the parchment `pages (0, 464, 448, 560)` at its own size in the screen's middle,
+  the text in MenuDefault wrapped to 403 px, the options one a line; long lists scroll ten at a time. Back closes
+  one unchosen.
+
+**The campaign** (`Chapters`, `CampaignSlot`, `CampaignSaves`): the twelve chapters of `Campaign.Chapters`, named
+`#chapter_NN` and titled `#chaptertitle_NN`. A slot keeps its chapter, the furthest reached, whether it was finished
+once, and the time played. The slots are JSON in OpenMagicka's data folder (the original's `campaign.sav` is left
+alone). Checkpoints are not kept across runs yet: continuing a slot starts its chapter from the beginning.
+
+**Pause** (`PauseMenu`), on Escape or a pad's Start: the level stops ticking and its sounds pause.
+- A dark `FadeBox` panel, 400 × 400 scaled by the screen's height against 720, its items in Maiandra18 from y 290,
+  28 apart; the selected one dark on a light bar. With the keyboard nothing is selected at first; with a pad the first.
+- Resume. Restart and Quit ask first ("Are you sure? Any progress on this level will be lost."; the original's Quit
+  does not ask). Restart loads the level again from its start; Quit goes back to the lobby. Options opens the Tome's
+  options pages over the level.
+
+**Endings** (`LevelEnding`), from a script's `endGame` (the first one), or a defeat when every player's wizard is dead:
+- After the delay (3 s for a defeat by death, none for a script's) the word fades in over a second (Stonecross50,
+  white: "VICTORY", "LEVEL COMPLETE", "DEFEATED") with `music_fanfare` or `music_defeat`, stays, and fades out from
+  2 s; at 3 s it is over. A player alive again during a defeat's delay calls it off.
+- "To be continued" fades to black over 8 s without a word. A phony ending only shows its word.
+- Then: a defeat goes back to the last checkpoint (or the level's start without one); any other ending saves the
+  slot at the next chapter (after the last: the first, looped, back to the menu) and loads it. The original's end
+  page, its screenshot of the frame and the map cutscene are left out.
+
+**Starting** (the launcher, without `--level`, `--viewer`, `--check-effects` or `--placeholder`):
+- Magicka is found where the player said (`--content`, `MAGICKA_DIR`), else where the settings remember, else in
+  Steam's libraries (`MagickaInstall`). Without it a box says what is needed. A version other than 1.10.4.2 is
+  logged as a warning.
+- The settings (`GameSettings`), the saves and the log live in OpenMagicka's data folder (`DataFolder`: the local
+  application data, or the temporary folder without one). The log (`logs/openmagicka.log`, the run before kept as
+  `openmagicka.old.log`) has everything the game writes, headed with the version and the system.
+- `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
+
+**Not done:**
+- the 3D book, its light and its page turning; the logos; the intro and the map cutscenes;
+- the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
+- checkpoints saved across runs; the original's `campaign.sav` read or written;
+- the loading screen's spell picture and progress bar; the end page with the level's last frame.

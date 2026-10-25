@@ -20,7 +20,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$mount_root:/src:ro" mcr.microsoft.com/do
     dotnet test tests/OpenMagicka.Tests --no-build -v q -nologo
     cd src/OpenMagicka.Launcher/bin/Debug/net10.0
     ls libFNA3D.so.0 libSDL3.so.0 libFAudio.so.0 >/dev/null
-    FNA3D_FORCE_DRIVER=OpenGL SDL_VIDEO_DRIVER=x11 timeout 8 xvfb-run -a ./OpenMagicka > run.log 2>&1 || code=$?
+    FNA3D_FORCE_DRIVER=OpenGL SDL_VIDEO_DRIVER=x11 timeout 8 xvfb-run -a ./OpenMagicka --placeholder > run.log 2>&1 || code=$?
     cat run.log
     # timeout exits 124 when the game was still running after 8 s: that is the success case
     if [ "${code:-0}" = 124 ]; then echo "SMOKE: window ran for 8 s"; else echo "SMOKE: FAILED (exit ${code:-0})"; exit 1; fi

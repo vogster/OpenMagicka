@@ -1,5 +1,7 @@
 using OpenMagicka.Game;
+using OpenMagicka.Game.Install;
 using OpenMagicka.Game.Play;
+using OpenMagicka.Game.Shell;
 using OpenMagicka.Game.Viewer;
 
 namespace OpenMagicka.Launcher;
@@ -9,6 +11,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        using var log = LogFile.Start(args);
         // Before FNA starts: with the stock FNA3D, the drivers it would pick first draw some
         // original effects wrongly (our own FNA3D, where shipped, fixes them).
         // FNA3D reads the choice as an SDL hint (an environment variable set from .NET would not
@@ -27,17 +30,58 @@ internal static class Program
             Console.Error.WriteLine($"OpenMagicka: {e.Message}");
             return 2;
         }
-        // With the game's content the level viewer runs (the game itself comes with M3);
-        // --check-effects and running without content use the placeholder game.
         if (options is { ContentDirectory: { } levelContent, Level: { } level })
         {
             return RunLevel(levelContent, level, options.Screenshot);
         }
-        if (options.ContentDirectory is { } content && !options.CheckEffects)
+        if (options.CheckEffects || options.Placeholder)
+        {
+            using var check = new OpenMagickaGame(options);
+            check.Run();
+            return check.ExitCode;
+        }
+        if (options is { ContentDirectory: { } content, WantsViewer: true })
         {
             return RunViewer(content, options);
         }
-        using var game = new OpenMagickaGame(options);
+        return RunGame(options);
+    }
+
+    /// <summary>The game (OM-53): the install the player gave or Steam has, the settings and saves; a box saying so when there is no Magicka.</summary>
+    private static int RunGame(GameOptions options)
+    {
+        var settings = GameSettings.Load(GameSettings.DefaultPath);
+        var given = new[] { options.ContentDirectory, settings.MagickaFolder };
+        if (MagickaInstall.Find(given, MagickaInstall.SteamRoots()) is not { } install)
+        {
+            const string missing = "OpenMagicka needs Magicka's own files (the Steam version, 1.10.4.2). Install Magicka through Steam, "
+                + "or start OpenMagicka with --content <Magicka folder>, or set MAGICKA_DIR to that folder.";
+            Console.Error.WriteLine($"OpenMagicka: {missing}");
+            SDL3.SDL.SDL_ShowSimpleMessageBox(SDL3.SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "OpenMagicka", missing, IntPtr.Zero);
+            return 2;
+        }
+        if (install.IsKnownVersion)
+        {
+            Console.WriteLine($"OpenMagicka: Magicka {install.Version} at {install.Folder}");
+        }
+        else
+        {
+            Console.Error.WriteLine($"OpenMagicka: Magicka {install.Version ?? "(unknown version)"} at {install.Folder}; OpenMagicka is made for {MagickaInstall.KnownVersion}");
+        }
+        if (!string.Equals(settings.MagickaFolder, install.Folder, StringComparison.OrdinalIgnoreCase) && options.Screenshot is null)
+        {
+            settings = settings with { MagickaFolder = install.Folder };        // remembered for the next start
+            try
+            {
+                settings.Save(GameSettings.DefaultPath);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"OpenMagicka: the settings were not saved ({e.Message})");
+            }
+        }
+        using var content = ShellContent.Open(install.Content, settings, sound: options.Screenshot is null);
+        using var game = new GameShell(content, options.Screenshot);
         game.Run();
         return game.ExitCode;
     }
@@ -53,10 +97,10 @@ internal static class Program
         var loader = new OpenMagicka.Content.ContentLoader(files, OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka);
         var definition = OpenMagicka.Content.Levels.LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path);
         var play = LevelPlay.Open(definition, files, loader);
-        using var audio = screenshot is null ? OpenAudio(files) : null;      // a screenshot is taken in silence
+        using var audio = screenshot is null ? GameFiles.OpenAudio(files) : null; // a screenshot is taken in silence
         if (audio is not null)
         {
-            if (SoundNames(loader) is { } names)
+            if (GameFiles.SoundNames(loader) is { } names)
             {
                 play.Hear(new OpenMagicka.Engine.Audio.SoundSystem(audio, names));
             }
@@ -65,48 +109,13 @@ internal static class Program
                 audio.Dispose();                                              // no names, no sound: the device closes at once
             }
         }
-        var controls = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenMagicka", "controls.json");
-        if (File.Exists(controls))
+        if (GameFiles.Controls() is { } controls)
         {
-            try
-            {
-                play.Bind(OpenMagicka.Engine.Input.ControlBindings.Load(File.ReadAllText(controls)));
-            }
-            catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
-            {
-                Console.Error.WriteLine($"OpenMagicka: {controls}: {e.Message}; the default controls are used");
-            }
+            play.Bind(controls);
         }
         using var game = new PlayGame(loader, play, Path.GetFileNameWithoutExtension(path), screenshot);
         game.Run();
         return game.ExitCode;
-    }
-
-    /// <summary>The game's sound (OM-51); none, with a word why, when there is no device or the content lacks it.</summary>
-    private static OpenMagicka.Engine.Audio.XactAudio? OpenAudio(OpenMagicka.Content.ContentFileSystem files)
-    {
-        var transcoded = new OpenMagicka.Engine.Audio.TranscodedBanks(OpenMagicka.Engine.Audio.TranscodedBanks.DefaultDirectory,
-            OpenMagicka.Engine.Audio.WmaDecoders.Find);                      // the WMA banks, made playable once (OM-61)
-        var audio = OpenMagicka.Engine.Audio.XactAudio.Open(files, OpenMagicka.Content.Localization.LanguagePack.Fallback, out var failure, transcoded);
-        if (audio is null)
-        {
-            Console.Error.WriteLine($"OpenMagicka: no sound ({failure})");
-        }
-        return audio;
-    }
-
-    /// <summary>The cues' names; none, with a word why, when the content's list does not read (the game is then silent).</summary>
-    private static OpenMagicka.Engine.Audio.SoundNames? SoundNames(OpenMagicka.Content.ContentLoader loader)
-    {
-        try
-        {
-            return OpenMagicka.Engine.Audio.SoundNames.Load(loader);
-        }
-        catch (Exception e) when (e is InvalidDataException or IOException or NotSupportedException or FormatException)
-        {
-            Console.Error.WriteLine($"OpenMagicka: no sound ({OpenMagicka.Engine.Audio.SoundNames.Asset}: {e.Message})");
-            return null;
-        }
     }
 
     private static int RunViewer(string content, GameOptions options)
