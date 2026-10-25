@@ -14,6 +14,8 @@ public sealed class SpellPictures
 
     public List<DiscPicture> Discs { get; } = [];
 
+    public List<ShieldPicture> Shields { get; } = [];
+
     /// <summary>The lights along the beams and bolts.</summary>
     public List<CapsuleLighting> Lights { get; } = [];
 
@@ -25,6 +27,7 @@ public sealed class SpellPictures
         Beams.Clear();
         Bolts.Clear();
         Discs.Clear();
+        Shields.Clear();
         Lights.Clear();
         Points.Clear();
     }

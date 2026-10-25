@@ -255,7 +255,10 @@ public sealed class JudgementVolley : Entity, IMagickEffect
         left = !left;
         var side = Vector3.Cross(left ? Vector3.UnitY : -Vector3.UnitY, up);
         var velocity = side * (Speed / 2 + (0.5f + (float)Caster.NextRandom()) * Speed / 2);
-        var missile = new Missile(Caster.World, Caster, Caster.CastSource, velocity, MissileRadius, Events, Target(manager), Homing, MissileDanger, facesVelocity: false);
+        var missile = new Missile(Caster.World, Caster, Caster.CastSource, velocity, MissileRadius, Events, Target(manager), Homing, MissileDanger, facesVelocity: false)
+        {
+            Look = "Models/Missiles/JudgementSprayMissile",
+        };
         try
         {
             manager.Add(missile);

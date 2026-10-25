@@ -84,6 +84,9 @@ public sealed class SpellMine : Entity
     /// <summary>Goes without a blast (Nullify).</summary>
     public void Kill() => dead = true;
 
+    /// <summary>Whether it went off (not merely went).</summary>
+    public bool HasGoneOff { get; private set; }
+
     /// <summary>Goes off: a full blast around it, sparing itself.</summary>
     public void Detonate()
     {
@@ -91,7 +94,7 @@ public sealed class SpellMine : Entity
         {
             return;
         }
-        dead = true;
+        (dead, HasGoneOff) = (true, true);
         if (Manager is { } manager && !world.IsDisposed)
         {
             Blasts.Full(manager, world, Owner, this, BlastRadius, Position, BlastDamage, source: this);

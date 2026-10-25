@@ -84,7 +84,7 @@ public sealed partial class SpellVisuals
     /// <summary>A cue heard (the world raises them; a test may too): the bursts and gunfire are kept for the next tick.</summary>
     public void Hear(Entity? source, AnimationCue cue)
     {
-        if (cue is LightningCue or BlastCue or TracerCue or MuzzleCue or GunfireCue)
+        if (cue is LightningCue or BlastCue or TracerCue or MuzzleCue or GunfireCue or ShieldHitCue)
         {
             cues.Add((source, cue));
         }
@@ -104,6 +104,9 @@ public sealed partial class SpellVisuals
                     break;
                 case BlastCue blast:
                     Throw(blast);
+                    break;
+                case ShieldHitCue hit:
+                    Strike(hit);
                     break;
                 case TracerCue tracer:
                     tracers.Add((tracer, tracer.Delay));

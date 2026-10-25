@@ -68,9 +68,9 @@ public class SpellBurstTests
         Assert.Equal(["lightning_hit", "lightning_source"], Drain(play).Where(c => c.Kind == EffectCommandKind.Start).Select(c => c.Effect).Order());
         var pictures = Pictures(play);
         var bolt = Assert.Single(pictures.Bolts);
-        Assert.Equal(MathF.Sqrt((0.25f - Tick) * 10), bolt.Brightness, 4);
-        Assert.Equal(new Xna.Vector3(0.75f, 0.5f, 1) * 1.5f * MathF.Sqrt(0.25f - Tick), Assert.Single(pictures.Lights).Diffuse);
-        Run(play, 0.25f);
+        Assert.Equal(MathF.Sqrt(0.25f * 10), bolt.Brightness, 4);                                      // whole in its first frame
+        Assert.Equal(new Xna.Vector3(0.75f, 0.5f, 1) * 1.5f * MathF.Sqrt(0.25f), Assert.Single(pictures.Lights).Diffuse);
+        Run(play, 0.25f + Tick);
         Assert.Empty(Pictures(play).Bolts);
     }
 
@@ -123,10 +123,10 @@ public class SpellBurstTests
 
         Assert.Equal(["beam_arcane_explosion", "beam_fire_explosion"], Drain(play).Where(c => c.Kind == EffectCommandKind.Start).Select(c => c.Effect).Order());
         var disc = Assert.Single(Pictures(play).Discs);
-        Assert.Equal(5 * Tick * 3, disc.Radius, 4);                                                   // it grows from nothing
+        Assert.Equal(0, disc.Radius);                                                                 // it grows from nothing
         Assert.Equal(1, disc.Alpha);
         Assert.Single(Pictures(play).Points);
-        Run(play, 0.4f);
+        Run(play, 0.4f + Tick);
         Assert.Empty(Pictures(play).Discs);
     }
 

@@ -6,6 +6,9 @@ using OpenMagicka.Physics;
 
 namespace OpenMagicka.Gameplay.Spells.Effects;
 
+/// <summary>A shield struck (by anything, whether it wears it or not): where, and how hard, for its ripple.</summary>
+public sealed record ShieldHitCue(SpellShield Shield, Vector3 At, float Amount) : Animation.AnimationCue;
+
 /// <summary>
 /// A shield standing in the world: a disc, a sphere or a wall that blocks characters, missiles and
 /// spells and wears away (docs/gameplay/SPELLS.md §5.6). A simulation object.
@@ -45,6 +48,9 @@ public sealed class SpellShield : Entity, IShield
 
     public Character? Owner { get; }
 
+    /// <summary>Its colour (SPELLS.md §14): a shield's, a sphere's brightened by its Arcane and Life.</summary>
+    public Vector3 Colour { get; init; } = SpellColours.Shield;
+
     public ShieldShape Shape { get; }
 
     public Vector3 Facing { get; }
@@ -75,6 +81,7 @@ public sealed class SpellShield : Entity, IShield
     /// <summary>Takes attacks that carry Damage or Status (amount × magnitude, when not negative); deflects the rest.</summary>
     public override DamageResult Damage(DamageEntry damage, Entity? attacker, Vector3 attackPosition)
     {
+        Manager?.RaiseCue(this, new ShieldHitCue(this, attackPosition, damage.Amount));
         if ((damage.Attack & (AttackProperties.Damage | AttackProperties.Status)) == 0)
         {
             return DamageResult.Deflected;

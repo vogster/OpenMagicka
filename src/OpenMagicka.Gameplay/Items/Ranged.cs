@@ -68,7 +68,10 @@ public static class Ranged
         }
         var gungnir = item.Template.PassiveAbility == PassiveAbility.Gungner;
         var missile = new Missile(owner.World, owner, item.Tip, throwing, gungnir ? Passives.GungnirRadius : ranged.ProjectileRadius, ranged.Events,
-            target: gungnir ? null : aimed?.Item2, homing: gungnir || aimed is null ? 0 : ranged.Homing, danger: ranged.Danger, facesVelocity: gungnir || ranged.FacesVelocity);
+            target: gungnir ? null : aimed?.Item2, homing: gungnir || aimed is null ? 0 : ranged.Homing, danger: ranged.Danger, facesVelocity: gungnir || ranged.FacesVelocity)
+        {
+            Look = ranged,                                                    // its item's projectile model
+        };
         try
         {
             manager.Add(missile);

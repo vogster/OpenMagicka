@@ -18,6 +18,9 @@ public sealed partial class SpellVisuals : IDisposable
     /// <summary>A beam's light: its reach and how bright, as the original's.</summary>
     public const float BeamLightRadius = 5, BeamLightIntensity = 0.6f;
 
+    /// <summary>A spell's missile's light's reach.</summary>
+    public const float MissileLightRadius = 6;
+
     private readonly GameWorld world;
     private readonly EffectDirector effects;
     private readonly HashSet<Beam> seen = new(ReferenceEqualityComparer.Instance);
@@ -32,11 +35,13 @@ public sealed partial class SpellVisuals : IDisposable
     /// <summary>A beam's effect at its source or its end.</summary>
     private sealed record BeamEnd(Beam Beam, bool Hit);
 
-    /// <summary>A tick, after the effects': the cues taken, the bursts aged, the new beams' effects started, the gone ones forgotten.</summary>
+    /// <summary>A tick, after the effects': the bursts aged, the cues taken (new ones show whole), the new beams' effects started, the gone ones forgotten.</summary>
     public void Update(float dt)
     {
-        TakeCues();
         Age(dt);
+        AgeShields(dt);
+        TakeCues();
+        WatchStanding();
         var beams = world.Entities.Entities.OfType<Beam>().Where(b => !b.IsDead).ToList();
         seen.IntersectWith(beams);
         foreach (var beam in beams.Where(seen.Add))
@@ -54,6 +59,9 @@ public sealed partial class SpellVisuals : IDisposable
     public void Clear()
     {
         seen.Clear();
+        shields.Clear();
+        barriers.Clear();
+        mines.Clear();
         ClearBursts();
     }
 
@@ -69,6 +77,22 @@ public sealed partial class SpellVisuals : IDisposable
             into.Lights.Add(light);
         }
         WriteBursts(into);
+        WriteShields(into);
+        foreach (var missile in world.Entities.Entities.OfType<Gameplay.Entities.Missile>())
+        {
+            if (!missile.IsDead && MissileLight(missile.Glow) is { } colour)
+            {
+                into.Points.Add(new PointLighting(ToXna(missile.Position), MissileLightRadius, ToXna(colour * 1.333f), ToXna(colour * 0.666f), colour.Length()));
+            }
+        }
+    }
+
+    /// <summary>A spell's missile's light: the plain average of its Fire, Arcane, Life, Lightning and Cold; none without them.</summary>
+    public static Vector3? MissileLight(Elements elements)
+    {
+        var lit = new[] { (Elements.Fire, SpellColours.Fire), (Elements.Arcane, SpellColours.Arcane), (Elements.Life, SpellColours.Life),
+            (Elements.Lightning, SpellColours.Lightning), (Elements.Cold, SpellColours.Cold) }.Where(p => (elements & p.Item1) != 0).ToList();
+        return lit.Count == 0 ? null : lit.Aggregate(Vector3.Zero, (sum, p) => sum + p.Item2) / lit.Count;
     }
 
     /// <summary>A beam's picture and its light along it (a branch's lit round about too).</summary>

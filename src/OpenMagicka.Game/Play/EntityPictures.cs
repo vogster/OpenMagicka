@@ -14,10 +14,16 @@ public readonly record struct DrawnModel(string Asset, Matrix4x4 World, Matrix4x
 /// <summary>
 /// What of the world is drawn as models (logic thread): the characters posed by their bones (none yet:
 /// at their root) with the items in their hands, the physics props, the items lying about, the books of
-/// magick and the debris. What has no model (or none the looks know) is left out.
+/// magick, the debris and the missiles. What has no model (or none the looks know) is left out.
 /// </summary>
 public static class EntityPictures
 {
+    /// <summary>
+    /// The original hands each missile's model in three times (meaning one for each part, it takes the first each
+    /// time): an additive one shows three times as bright, so ours does too.
+    /// </summary>
+    public const int MissileCopies = 3;
+
     /// <summary>A frozen prop's pieces are drawn icy.</summary>
     public static readonly Vector3 FrozenTint = new(0.6f, 0.8f, 1);
 
@@ -45,6 +51,12 @@ public static class EntityPictures
                     break;
                 case BookOfMagick book:
                     into.Add(new DrawnModel(ModelLook.Book.Asset, Matrix4x4.CreateTranslation(book.Position), null, ModelLook.Book.Tint));
+                    break;
+                case Missile { IsDead: false, Look: { } key } missile when (key is string asset ? new ModelLook(asset, Vector3.One) : looks(key)) is { } look:
+                    for (var i = 0; i < MissileCopies; i++)
+                    {
+                        into.Add(new DrawnModel(look.Asset, missile.Transform, null, look.Tint));
+                    }
                     break;
             }
         }

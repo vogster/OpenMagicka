@@ -99,6 +99,40 @@ public sealed class Missile : Entity
 
     public bool FacesVelocity { get; }
 
+    /// <summary>
+    /// What it looks like (ARCHITECTURE.md §17): a model's asset, or the template whose look it has (an item's
+    /// projectile); none for a missile of trails only.
+    /// </summary>
+    public object? Look { get; init; }
+
+    /// <summary>A spell's missile's elements: its light's colour.</summary>
+    public Spells.Elements Glow { get; init; }
+
+    /// <summary>
+    /// Where it is drawn: along its velocity, kept upright, when it faces it (as the original, unscaled); else as its
+    /// body has turned.
+    /// </summary>
+    public Matrix4x4 Transform
+    {
+        get
+        {
+            if (Body.IsRemoved || world.IsDisposed)
+            {
+                return Matrix4x4.CreateTranslation(lastPosition);
+            }
+            if (!FacesVelocity || !(Body.Velocity.LengthSquared() > 1e-12f))
+            {
+                return Matrix4x4.CreateFromQuaternion(Body.Orientation) with { Translation = Body.Position };
+            }
+            var forward = Vector3.Normalize(Body.Velocity);
+            var right = Vector3.Cross(forward, Vector3.UnitY);
+            right = right.LengthSquared() > 1e-12f ? Vector3.Normalize(right) : Vector3.UnitX;
+            var up = Vector3.Normalize(Vector3.Cross(right, forward));
+            return new Matrix4x4(right.X, right.Y, right.Z, 0, up.X, up.Y, up.Z, 0, -forward.X, -forward.Y, -forward.Z, 0,
+                Body.Position.X, Body.Position.Y, Body.Position.Z, 1);
+        }
+    }
+
     public EventGroups Events { get; }
 
     public bool Piercing { get; }

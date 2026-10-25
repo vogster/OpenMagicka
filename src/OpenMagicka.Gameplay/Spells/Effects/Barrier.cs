@@ -61,6 +61,9 @@ public sealed partial class Barrier : Entity
 
     public Vector3 Facing { get; }
 
+    /// <summary>The ground point it stands on.</summary>
+    public Vector3 Ground => ground;
+
     public float Scale { get; }
 
     /// <summary>Earth or Ice: it stands in the way; otherwise an elemental wall.</summary>

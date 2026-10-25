@@ -120,6 +120,23 @@ public static class SpellMissiles
         ];
     }
 
+    /// <summary>
+    /// A spell's missile's model, as the original picks it: a rock by its Earth (an icy one with Ice too, by both), a
+    /// shard for Ice alone; none for the others, which are their trails.
+    /// </summary>
+    public static string? Model(Spell spell)
+    {
+        string[] earth = ["Earth0", "Earth1", "Earth2", "Earth2", "Earth3"];
+        string[] icy = ["IceEarth0", "IceEarth1", "IceEarth2", "IceEarth2", "IceEarth3"];
+        return (spell.Earth > 0, spell.Ice > 0) switch
+        {
+            (true, true) => "Models/Missiles/" + icy[Math.Clamp((int)spell.Ice + (int)spell.Earth - 1, 0, 4)],
+            (true, false) => "Models/Missiles/" + earth[Math.Clamp((int)spell.Earth - 1, 0, 4)],
+            (false, true) => "Models/Missiles/Ice3",
+            _ => null,
+        };
+    }
+
     /// <summary>Launches one of a spell's missiles from a caster; null when the level is full.</summary>
     public static Missile? Launch(Character caster, Spell spell, Vector3 from, Vector3 velocity, float splash, int count)
     {
@@ -127,7 +144,11 @@ public static class SpellMissiles
         {
             return null;
         }
-        var missile = new Missile(caster.World, caster, from, velocity, 0.075f + 0.075f * spell.Earth, Events(spell, splash, count), canHitOwner: true);
+        var missile = new Missile(caster.World, caster, from, velocity, 0.075f + 0.075f * spell.Earth, Events(spell, splash, count), canHitOwner: true)
+        {
+            Look = Model(spell),
+            Glow = spell.Element,
+        };
         try
         {
             manager.Add(missile);

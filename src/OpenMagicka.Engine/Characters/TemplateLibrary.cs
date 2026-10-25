@@ -47,10 +47,14 @@ public sealed class TemplateLibrary(ContentLoader loader)
     {
         if (!items.TryGetValue(asset, out var item))
         {
-            item = Loader.Load(asset).Root is ItemContent content
-                ? ItemTemplates.From(content, ItemTemplates.Model(Loader, asset, content), ItemTemplates.Projectile(Loader, asset, content))
-                : throw new InvalidDataException($"'{asset}' is not an item");
-            Remember(item, asset, ((ItemContent)Loader.Load(asset).Root!).Model, System.Numerics.Vector3.One);
+            var content = Loader.Load(asset).Root as ItemContent ?? throw new InvalidDataException($"'{asset}' is not an item");
+            var projectile = ItemTemplates.Projectile(Loader, asset, content);
+            item = ItemTemplates.From(content, ItemTemplates.Model(Loader, asset, content), projectile);
+            Remember(item, asset, content.Model, System.Numerics.Vector3.One);
+            if (item.Ranged is { } ranged && projectile is not null)
+            {
+                Remember(ranged, asset, content.Ranged.ProjectileModel, System.Numerics.Vector3.One);   // what it throws
+            }
             items[asset] = item;
         }
         return item;

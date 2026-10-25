@@ -148,13 +148,20 @@ public sealed class ShieldEffect : SpellEffect
         }
     }
 
+    /// <summary>A sphere's colour, as the original's: twice the shield's, arcane's and life's colours, each by the root of its magnitude.</summary>
+    public static Vector3 SphereColour(Spell spell) =>
+        2 * (SpellColours.Shield * MathF.Sqrt(spell.Shield) + SpellColours.Arcane * MathF.Sqrt(spell.Arcane) + SpellColours.Life * MathF.Sqrt(spell.Life));
+
     private void Raise(Character caster, ShieldShape shape, Vector3 at, float hitPoints)
     {
         if (caster.Manager is not { } manager || caster.World.IsDisposed || manager.Entities.Count >= Entities.EntityManager.Capacity)
         {
             return;
         }
-        Shield = new SpellShield(caster.World, caster, shape, at, caster.Body.Facing, ShieldRules.ShieldRadius, hitPoints);
+        Shield = new SpellShield(caster.World, caster, shape, at, caster.Body.Facing, ShieldRules.ShieldRadius, hitPoints)
+        {
+            Colour = shape == ShieldShape.Sphere ? SphereColour(Spell) : SpellColours.Shield,
+        };
         manager.Add(Shield);
     }
 }

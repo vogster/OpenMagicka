@@ -1467,3 +1467,38 @@ and has no shine.
 - A gun flashes its muzzle effect at its `attach0` with each shot, and throws its shells effect at its `attach1` while it
   fires.
 
+**Spell shields** (`ShieldDrawing`, the original's `Shield`):
+- They are drawn with the original's `ShieldEffect` over meshes built in code. A sphere has 65 columns by 31 rows, its
+  bottom pole left open; a disc is the same sphere, cut by the shader to a cap 45° round its way. A wall is a
+  lens-shaped plate 12 long, 6 high and 0.2 thick at its middle.
+- The noise comes from `EffectTextures/shield`, tiled ⌈radius × 0.666⌉ (4) times.
+- They are added onto the frame after the particles (the original's post effects). The scene's depth cuts them where
+  it stands in front, and they glow where they meet it and along a disc's edge.
+- A sphere or disc is scaled to its radius and tipped 40° about X (the original turns its open pole and seam so);
+  a wall stands as it is, along its way.
+- Its colour is the shield's; a sphere's is twice that, brightened by its Arcane and Life (SPELLS.md §14).
+- It comes up quickly while it stands (25 × the frame of what is left to full) and goes slower once it falls (10 ×);
+  it is still drawn after it is gone, until faded.
+- Its three noise layers drift the faster the more it is worn: from 0.05 when whole to 0.55 when spent.
+- Each blow on it, whether it wears it or not, ripples where it struck: amount × 0.025, at most 10. A blow goes into
+  the first spent ripple of 16, or strengthens the first one closer than √0.2. A ripple fades at 50 a second.
+
+**Missiles:**
+- A spell's missile is a rock by its Earth (`Models/Missiles/Earth0`–`3`), an icy rock with Ice too
+  (`IceEarth0`–`3`), a shard for Ice alone (`Ice3`); the others are only their trails.
+- An item's missile is its projectile model; Judgement Spray's is `JudgementSprayMissile`.
+- One that faces its flight is drawn along it, level and upright, unscaled; another as its body has turned.
+- As the original's, its model is handed in three times, so an additive one shows three times as bright.
+- A spell's missile with Fire, Arcane, Life, Lightning or Cold is lit by the plain average of their colours: radius
+  6, diffuse × 1.333, ambient × 0.666, shine its colour's length.
+
+**Barriers and mines:**
+- An elemental barrier is its element's wall of particles (`barrier_<element>1_b`), as big as the barrier and standing
+  where it stands. The element is Steam with Lightning and Steam, else Lightning, else the strongest of Water, Cold,
+  Fire and Steam.
+- A solid barrier bursts out of the ground as it rises (`barrier_ice_spawn`, `barrier_earth_spawn`) and as it breaks
+  (`barrier_ice_death`, `barrier_earth_death`). One of Arcane or Life bursts as a mine does (`mine_explosion`).
+- A mine flares as it is set off (`mine_activation`) and bursts as it goes off (`mine_explosion`); one merely
+  removed (Nullify) does not.
+- The solid barriers' and the mines' models, and the self shields, are the next phase.
+
