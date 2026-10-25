@@ -8,7 +8,7 @@ Date: 2026-10-23. Machine: Windows 11, AMD RX 9070 XT, FNA master `00498b0`, fna
 | Risk | Result |
 |---|---|
 | Original fx_2_0 shaders on FNA (OM-20, OM-60, OM-62, OM-65) | **all 51** effects load and draw with our FNA3D (Windows x64); with the stock FNA3D 50 of 51, as `ArcaneEffect` corrupts the heap inside MojoShader |
-| XACT on FAudio (OM-18) | content version 45 is supported; **1000 cues** from 9 banks play; **xWMA does not work** (Windows: crash, Linux/macOS: no decoder) |
+| XACT on FAudio (OM-18) | content version 45 is supported; **1000 cues** from 9 banks play; **xWMA does not work** (Windows: crash, Linux/macOS: no decoder): transcoded to MS-ADPCM once (OM-61) |
 | Linux (OM-2) | build, 21 tests and the window work in Docker (`tools/linux_check.sh`, Xvfb + Mesa llvmpipe) |
 
 The FNA stack holds, but needs two pieces of work on our side: an effect patcher and xWMA
@@ -193,10 +193,17 @@ with an offset, every `.xsb`; each cue plays for 50 ms). `AUDIOSPIKE_BANKS` limi
   Foundation) but crashes with `0xC0000094` (division by zero) on the first WMA cue. The Linux
   and macOS builds have no WMA decoder at all.
 
-**Solution:** on first launch the launcher transcodes the WMA entries of the user's
-`Wave Bank.xwb` and `Loc.xwb` to PCM or MS-ADPCM and writes new banks into the OpenMagicka data
-folder (not into the game folder and not into the repository). Decoder: FFmpeg (it has an xWMA
-demuxer) or our own WMAv2 decoder. Audio stays behind `IAudioBackend`, as planned in ADR-0001.
+**Solution (OM-61, ARCHITECTURE.md §8.2):** the game transcodes the WMA entries of the user's
+`Wave Bank.xwb` and `Loc.xwb` once to MS-ADPCM. It writes the new banks into the OpenMagicka data
+folder, not into the game's folder and not into the repository.
+
+- On Windows it decodes with Windows' own WMA decoder (Media Foundation).
+- Elsewhere it uses an ffmpeg found on the system.
+- Audio stays behind `IAudioBackend`, as planned in ADR-0001.
+
+Found on the way: XACT wrote byte rates that xWMA does not allow (6000 for 22 kHz mono, which
+must be 2500). Windows' decoder gives garbage at the stated rate. This is a likely cause of
+FAudio's crash on Windows.
 
 ## 3. Linux (OM-2)
 

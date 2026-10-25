@@ -75,4 +75,69 @@ public class AudioBackendTests
         audio.SetVolume("Music", 0);
         audio.Update();
     }
+
+    [GameContentFact]
+    public void TheWmaBanks_LoadTranscoded_WhenThereIsADecoder()
+    {
+        if (WmaDecoders.Find() is not { } decoder)
+        {
+            return;                                                           // no WMA decoder here
+        }
+        var files = new ContentFileSystem(GameContent.ContentDirectory!);
+        var dir = Directory.CreateTempSubdirectory("om61");
+        try
+        {
+            using (var audio = XactAudio.Open(files, "eng", out _, new TranscodedBanks(dir.FullName, () => decoder)))
+            {
+                if (audio is null)
+                {
+                    return;                                                   // no sound device here
+                }
+                Assert.True(audio.WaitLoaded(TimeSpan.FromMinutes(2)));
+                Assert.DoesNotContain(audio.Skipped, s => s.Contains("WMA", StringComparison.Ordinal));
+                using var cue = audio.GetCue(SoundBanks.WaveBank, "goblin_die");
+                Assert.NotNull(cue);
+            }
+            Assert.Equal(2, Directory.GetFiles(dir.FullName, "*.xwb").Length);                         // the effects' bank and the speech's
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    private sealed class SlowDecoder : IWmaDecoder
+    {
+        public string Name => "slow";
+
+        public short[] Decode(OpenMagicka.Content.Audio.WaveBankEntry entry, ReadOnlySpan<byte> wave)
+        {
+            Thread.Sleep(20);
+            return new short[entry.Duration * entry.Format.Channels];
+        }
+    }
+
+    [GameContentFact]
+    public void QuittingWhileABankIsTranscoded_StopsQuietly_AndLeavesNoCopy()
+    {
+        var files = new ContentFileSystem(GameContent.ContentDirectory!);
+        var dir = Directory.CreateTempSubdirectory("om61");
+        try
+        {
+            var audio = XactAudio.Open(files, "eng", out _, new TranscodedBanks(dir.FullName, () => new SlowDecoder()));
+            if (audio is null)
+            {
+                return;                                                       // no sound device here
+            }
+            Thread.Sleep(1500);                                               // the other banks load, the transcoding begins
+            audio.Dispose();
+
+            Assert.Empty(Directory.GetFiles(dir.FullName, "*.xwb"));
+        }
+        finally
+        {
+            Thread.Sleep(1500);                                               // a transcoding left running ends before its folder goes
+            dir.Delete(recursive: true);
+        }
+    }
 }

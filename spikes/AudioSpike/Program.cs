@@ -14,6 +14,10 @@ var listen = args.Length == 2 ? double.Parse(args[1], System.Globalization.Cultu
 var trace = Environment.GetEnvironmentVariable("AUDIOSPIKE_TRACE") == "1";
 // AUDIOSPIKE_BANKS=a.xsb,b.xsb limits the run to those sound banks.
 var onlyBanks = Environment.GetEnvironmentVariable("AUDIOSPIKE_BANKS")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+// AUDIOSPIKE_TRANSCODE=1 loads the WMA wave banks as OpenMagicka transcodes them (OM-61), in its data folder.
+var transcoded = Environment.GetEnvironmentVariable("AUDIOSPIKE_TRANSCODE") == "1"
+    ? new OpenMagicka.Engine.Audio.TranscodedBanks(OpenMagicka.Engine.Audio.TranscodedBanks.DefaultDirectory, OpenMagicka.Engine.Audio.WmaDecoders.Find)
+    : null;
 
 using var engine = new AudioEngine(Path.Combine(dir, "magicka.xgs"));
 Console.WriteLine("engine: magicka.xgs loaded");
@@ -24,7 +28,13 @@ foreach (var path in Directory.GetFiles(dir, "*.xwb").Order())
     var streaming = XactFiles.IsStreamingWaveBank(path);
     try
     {
-        waveBanks.Add(streaming ? new WaveBank(engine, path, 0, 16) : new WaveBank(engine, path));
+        var source = path;
+        if (transcoded is not null && OpenMagicka.Content.Audio.WaveBankInfo.Read(path).UsesWma)
+        {
+            source = transcoded.FindOrMake(path) ?? throw new InvalidOperationException("no WMA decoder here");
+            Console.WriteLine($"wavebank: {Path.GetFileName(path)} transcoded by {transcoded.Decoder?.Name}");
+        }
+        waveBanks.Add(streaming ? new WaveBank(engine, source, 0, 16) : new WaveBank(engine, source));
         Console.WriteLine($"wavebank: {Path.GetFileName(path)} ({(streaming ? "streaming" : "in-memory")}) ok");
     }
     catch (Exception e)

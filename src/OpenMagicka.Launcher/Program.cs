@@ -85,7 +85,9 @@ internal static class Program
     /// <summary>The game's sound (OM-51); none, with a word why, when there is no device or the content lacks it.</summary>
     private static OpenMagicka.Engine.Audio.XactAudio? OpenAudio(OpenMagicka.Content.ContentFileSystem files)
     {
-        var audio = OpenMagicka.Engine.Audio.XactAudio.Open(files, OpenMagicka.Content.Localization.LanguagePack.Fallback, out var failure);
+        var transcoded = new OpenMagicka.Engine.Audio.TranscodedBanks(OpenMagicka.Engine.Audio.TranscodedBanks.DefaultDirectory,
+            OpenMagicka.Engine.Audio.WmaDecoders.Find);                      // the WMA banks, made playable once (OM-61)
+        var audio = OpenMagicka.Engine.Audio.XactAudio.Open(files, OpenMagicka.Content.Localization.LanguagePack.Fallback, out var failure, transcoded);
         if (audio is null)
         {
             Console.Error.WriteLine($"OpenMagicka: no sound ({failure})");

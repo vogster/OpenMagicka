@@ -996,10 +996,10 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
 - `IAudioBackend` (ADR-0001) is the device: `XactAudio` over FNA's XACT (FACT), or
   `SilentAudio` (no device, no content, screenshots, tests). `XactAudio` loads the banks in
   the original's order on a task of its own; a bank not loaded yet plays nothing.
-- A wave bank with WMA entries (`Wave Bank.xwb` and `Loc.xwb`) is left out
-  (`WaveBankInfo` reads each bank's entry formats), as FAudio cannot play WMA (RISK_CHECKS.md
-  §2). Cues that use it play without those waves until OM-61 transcodes them. So
-  `Sound Bank.xsb`'s narration and the dialogs' speech are silent for now.
+- A wave bank with WMA entries (`Wave Bank.xwb` and `Loc.xwb`) is loaded from its transcoded
+  copy (§8.2), as FAudio cannot play WMA (RISK_CHECKS.md §2). One not transcoded yet is made
+  after the other banks have loaded. Without a WMA decoder it is left out, and the cues that
+  use it play without those waves.
 - `SoundNames` maps hashes to names from `Audio/SoundList`, lowering every name (the original
   hashes some as written, so an upper-case letter there finds nothing).
 - `SoundSystem` is the audio manager: cues by bank and hash, flat or for the listener; the
@@ -1039,6 +1039,54 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
   - the menus' sounds and music (OM-53);
   - the volume settings (OM-53).
 
+
+### 8.2 Ours: the WMA banks transcoded (OM-61)
+
+FAudio plays no WMA (RISK_CHECKS.md §2), so `TranscodedBanks` makes a playable copy of each WMA
+wave bank once, in OpenMagicka's data folder (`<local application data>/OpenMagicka/Audio`), and
+never writes to the game's folder.
+
+- **Wave banks** (`WaveBankFile`, `WaveBankWriter`, content version 45, header version 43):
+  - "WBND", the two versions, then five segments (offset, length): the bank's data, the
+    entries, the seek tables, the names and the waves.
+  - The bank's data is its flags (bit 0 streaming, bit 16 names, bit 17 compact entries, bit 19
+    seek tables), its entry count, its 64-byte name, the entry size (24), the name size (64),
+    the alignment, the compact format and the build time.
+  - An entry is its flags and length in samples (4 + 28 bits), its packed format, its data's
+    offset and length in the wave segment, and its loop (start and length, in samples).
+  - The packed format (`MiniWaveFormat`) is 2 bits of encoding (PCM, XMA, MS-ADPCM, WMA), 3 of
+    channels, 18 of sample rate, 8 of block and 1 of width. The block field depends on the
+    encoding:
+    - MS-ADPCM: a channel's block less 22;
+    - WMA: its low 5 bits index the packet sizes and its high 3 the byte rates (XACT's tables).
+  - The seek tables are an offset per entry (−1: none), then each table: its count and, for
+    each WMA packet, the decoded bytes at its end.
+- **The game's WMA banks:**
+  - `Wave Bank.xwb`: 384 WMA 2 waves, 22.6 minutes.
+  - `Loc.xwb`: 153 waves, 25 minutes.
+  - XACT wrote byte rates xWMA does not allow, for example 6000 for 22 kHz mono, which is 2500.
+    Windows' decoder needs the allowed rate (`AllowedWmaByteRate`), and FAudio's player
+    corrects it the same way.
+- **Decoding** (`IWmaDecoder`):
+  - On Windows, Windows' own WMA decoder (Media Foundation's transform in `wmadmod.dll`, so
+    nothing needs installing). It is set up as FAudio's WMA decoder sets it up (WMA 2 with the
+    codec data XAudio implies) and fed the wave's packets.
+  - Elsewhere, an `ffmpeg` found at `OPENMAGICKA_FFMPEG` or on the PATH, fed the wave as an
+    xWMA file (`XwmaFile`: RIFF "XWMA" with "fmt ", "dpds" and "data").
+  - The two agree (79 dB apart on speech).
+- **Coding:** each WMA wave becomes MS-ADPCM (`MsAdpcm`, our own encoder) in 70-byte blocks a
+  channel (128 samples), as the game's own ADPCM banks. For each block it keeps the predictor
+  and first step that code it closest, decoding as FACT does. The other waves are kept, every
+  wave at its index with its name, so the sound banks find them as before.
+- **Size and time:** about 34 MB for `Wave Bank` and 37 MB for `Loc` (PCM would be 122 and
+  132 MB in memory). The waves are transcoded in parallel: `Wave Bank` takes 3.4 s on Windows.
+- **Cache:** a copy is named by its source file's SHA-256 and the coding's version, so another
+  language's speech or a patched game is transcoded anew. It is written whole or not at all
+  (`.part`, then moved).
+- **Checks:**
+  - `AudioSpike` with `AUDIOSPIKE_TRANSCODE=1` plays every cue of `Characters.xsb` (267) and
+    `Sound Bank.xsb` (520).
+  - `tools/linux_audio_check.sh` runs the same in a Linux container with ffmpeg.
 ---
 
 ## 9. Input

@@ -8,8 +8,10 @@ namespace OpenMagicka.Engine.Audio;
 /// <summary>
 /// The game's sound through FNA's XACT (FACT), as the original's audio manager (docs/engine/ARCHITECTURE.md §8):
 /// <c>Audio/magicka.xgs</c>, then the banks in the original's order on a thread of their own (Music, Ambience and
-/// AdditionalMusic stream), then the language's speech bank. A wave bank with WMA entries is left out, as FAudio
-/// cannot play them (RISK_CHECKS.md §2) until OM-61 transcodes them: the cues that use it play without those waves.
+/// AdditionalMusic stream), then the language's speech bank. FAudio cannot play WMA (RISK_CHECKS.md §2): a wave bank
+/// with WMA entries is loaded from its transcoded copy (<see cref="TranscodedBanks"/>); one not transcoded yet is made
+/// after the other banks have loaded. Without a WMA decoder it is left out, and the cues that use it play without
+/// those waves.
 /// </summary>
 public sealed class XactAudio : IAudioBackend
 {
@@ -36,17 +38,20 @@ public sealed class XactAudio : IAudioBackend
     private readonly Task loading;
     private readonly CancellationTokenSource stop = new();
     private readonly List<string> skipped = [];
+    private readonly List<(string Asset, string Path)> wma = [];
+    private readonly TranscodedBanks? transcoded;
     private int loaded;
     private bool disposed;
 
-    private XactAudio(AudioEngine engine, ContentFileSystem files, string language)
+    private XactAudio(AudioEngine engine, ContentFileSystem files, string language, TranscodedBanks? transcoded)
     {
-        (this.engine, this.files) = (engine, files);
+        (this.engine, this.files, this.transcoded) = (engine, files, transcoded);
         loading = Task.Run(() => LoadBanks(language));
     }
 
     /// <summary>The device and the game's settings; none when there is no device or the content lacks them (the game is then silent).</summary>
-    public static XactAudio? Open(ContentFileSystem files, string language, out string? failure)
+    /// <param name="transcoded">Where the WMA banks' copies are (and are made); none leaves those banks out.</param>
+    public static XactAudio? Open(ContentFileSystem files, string language, out string? failure, TranscodedBanks? transcoded = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         failure = null;
@@ -57,7 +62,7 @@ public sealed class XactAudio : IAudioBackend
         }
         try
         {
-            return new XactAudio(new AudioEngine(settings), files, language);
+            return new XactAudio(new AudioEngine(settings), files, language, transcoded);
         }
         catch (Exception e) when (e is NoAudioHardwareException or InvalidOperationException or ArgumentException or DllNotFoundException
             or EntryPointNotFoundException or TypeInitializationException)
@@ -158,6 +163,61 @@ public sealed class XactAudio : IAudioBackend
         }
         var own = $"Languages/{language}/Loc.xwb";
         LoadWaveBank(files.Exists(own) ? own : "Languages/eng/Loc.xwb", streams: false);
+        foreach (var (asset, path) in wma)
+        {
+            if (stop.IsCancellationRequested)
+            {
+                return;
+            }
+            LoadTranscoded(asset, path);
+        }
+    }
+
+    /// <summary>A WMA bank's transcoded copy, made now when there is none (the other banks play meanwhile).</summary>
+    private void LoadTranscoded(string asset, string path)
+    {
+        try
+        {
+            if (transcoded!.FindOrMake(path, stop.Token) is { } copy)
+            {
+                Add(new WaveBank(engine, copy));
+            }
+            else
+            {
+                Skip($"{asset}: WMA, and no WMA decoder here");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // quitting: the copy is made next time
+        }
+        catch (Exception e)
+        {
+            Skip($"{asset}: WMA, not transcoded: {e.Message}");
+        }
+    }
+
+    /// <summary>A transcoded copy loaded; false (and it deleted, to be made again) for one that does not load.</summary>
+    private bool LoadCopy(string copy)
+    {
+        try
+        {
+            Add(new WaveBank(engine, copy));
+            return true;
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException)
+        {
+            File.Delete(copy);
+            return false;
+        }
+    }
+
+    private void Add(WaveBank bank)
+    {
+        lock (waveBanks)
+        {
+            waveBanks.Add(bank);
+        }
     }
 
     private void LoadWaveBank(string asset, bool streams)
@@ -171,14 +231,21 @@ public sealed class XactAudio : IAudioBackend
         {
             if (WaveBankInfo.Read(path).UsesWma)
             {
-                Skip($"{asset}: WMA (OM-61)");
+                if (transcoded?.Find(path) is { } copy && LoadCopy(copy))
+                {
+                    return;
+                }
+                if (transcoded is not null)
+                {
+                    wma.Add((asset, path));                                   // made once the others have loaded
+                }
+                else
+                {
+                    Skip($"{asset}: WMA, not transcoded");
+                }
                 return;
             }
-            var bank = streams ? new WaveBank(engine, path, 0, PacketSize) : new WaveBank(engine, path);
-            lock (waveBanks)
-            {
-                waveBanks.Add(bank);
-            }
+            Add(streams ? new WaveBank(engine, path, 0, PacketSize) : new WaveBank(engine, path));
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -202,7 +269,16 @@ public sealed class XactAudio : IAudioBackend
         }
         disposed = true;
         stop.Cancel();
-        if (!loading.Wait(DisposeWait))
+        bool finished;
+        try
+        {
+            finished = loading.Wait(DisposeWait);
+        }
+        catch (AggregateException)
+        {
+            finished = true;                                                  // it ended (stopped mid-transcoding): its banks are freed below
+        }
+        if (!finished)
         {
             return;                                                           // quitting does not wait for a big bank: the process ends with it
         }

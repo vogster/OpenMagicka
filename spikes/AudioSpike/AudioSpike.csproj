@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Risk check OM-18: do the original XACT banks play on FNA / FAudio? Not part of the game. -->
   <PropertyGroup>
@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="$(FnaProject)" />
+    <ProjectReference Include="..\..\src\OpenMagicka.Engine\OpenMagicka.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">

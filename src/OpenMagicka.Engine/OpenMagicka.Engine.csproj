@@ -1,5 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- Windows' WMA decoder is reached through COM's tables (OM-61). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="$(FnaProject)" />
     <ProjectReference Include="..\OpenMagicka.Content\OpenMagicka.Content.csproj" />
