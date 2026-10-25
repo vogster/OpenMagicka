@@ -29,6 +29,8 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
             return false;                                                     // a shield going down lets characters through
         }
         var push = normal.ToNumerics();
+        Touch(ownerA as StaticMesh, ownerB as PhysicsBody, push, pointB.ToNumerics(), penetration);
+        Touch(ownerB as StaticMesh, ownerA as PhysicsBody, -push, pointA.ToNumerics(), penetration);
         var a = Ask(ownerA as PhysicsBody, ownerB, -push, pointA.ToNumerics(), penetration);
         var b = Ask(ownerB as PhysicsBody, ownerA, push, pointB.ToNumerics(), penetration);
         if (a == ContactResponse.Collide && b == ContactResponse.Collide)
@@ -41,6 +43,16 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
               | (b == ContactResponse.PassThrough ? ContactData.SolveMode.FullBody2 : ContactData.SolveMode.None);
         world.RegisterContact(shapeA.ShapeId, shapeB.ShapeId, shapeA.RigidBody, shapeB.RigidBody, in pointA, in pointB, in normal, off);
         return false;
+    }
+
+    /// <summary>A mesh that listens hears the body touching it.</summary>
+    private static void Touch(StaticMesh? mesh, PhysicsBody? body, Vector3 push, Vector3 point, float penetration)
+    {
+        if (mesh?.Touched is { } touched && body is not null)
+        {
+            var length = push.Length();
+            touched(body, new Contact(length > 0 ? push / length : Vector3.UnitY, point, penetration, null, mesh));
+        }
     }
 
     /// <param name="push">The way the contact pushes <paramref name="body"/>.</param>

@@ -242,6 +242,10 @@ public sealed partial class PlayedLevel
     private void Leave(LevelScene scene, bool keep)
     {
         scene.Scripts?.Leave();
+        if (scene.Scripts is { } scripts)
+        {
+            LevelCollision.UnloadParts(scripts.Places);
+        }
         var (avatars, kept) = World.Entities.Store(keep);
         waitingAvatars.AddRange(avatars);
         scene.Kept.AddRange(kept);
@@ -257,6 +261,8 @@ public sealed partial class PlayedLevel
     {
         Current = scene;
         collision = scene.Model is { } model ? LevelCollision.Load(World.Physics, model) : [];
+        scene.Scripts!.Places.UpdateParts(0);                                 // the parts where they stand, their collision placed there
+        collision = [.. collision, .. LevelCollision.LoadParts(World.Physics, scene.Scripts.Places)];
         (World.Entities.Bestiary, World.Entities.NavMesh) = (Services.Bestiary, scene.NavMesh);
         if (scene.IsFirstEntry)
         {

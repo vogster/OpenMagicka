@@ -200,4 +200,35 @@ public class ScriptThingActionsTests
         scene.Update(Tick);
         Assert.Equal(1, scene.Level.Counter(ScriptScene.Hash("got")));
     }
+
+    [Fact]
+    public void SpawnItem_AttachedToAPart_RidesOnIt_UntilPickedUp()
+    {
+        using var world = World();
+        var leaf = new ItemTemplate("leaf", Pickable: true, Bounds: new ItemBounds(new Numerics.Vector3(-0.3f, 0.05f, -0.3f), new Numerics.Vector3(0.3f, 0.15f, 0.3f)));
+        var scene = Scene(world, """
+            <Trigger id="drop" autorun="false"><Then><spawnItem item="leaf" area="spot" attachTo="door"/></Then></Trigger>
+            """);
+        scene.Assets = new Armoury(leaf);
+        OpenMagicka.Engine.Physics.LevelCollision.LoadParts(world.Physics, scene.Places);   // the door has no mesh, yet carries
+
+        Fire(scene, "drop");
+        var item = Assert.Single(world.Entities.Entities.OfType<WorldItem>());
+        var door = scene.Places.Part("door")!;
+        Assert.True(door.Collision!.Touches(item.Body));
+        door.Play(withChildren: false, from: -1, to: -1, speed: 1, loop: false, resume: false);
+        for (var t = 0f; t < 2.5f; t += Tick)
+        {
+            world.Tick(Tick);
+            scene.Update(Tick);
+        }
+
+        Assert.Equal(13, item.Position.X, 2);                                                     // rode the door's 10 m, pinned where it now is
+        Assert.Equal(0.6f, item.Position.Y, 2);
+        var picker = OpenMagicka.Tests.Gameplay.DropTests.Holder(world, leaf, new Numerics.Vector3(13, 0.9f, 0.5f));
+        Assert.True(picker.PickUp(item));
+        world.Tick(Tick);
+        scene.Update(Tick);
+        Assert.Empty(door.Collision.Carried);
+    }
 }

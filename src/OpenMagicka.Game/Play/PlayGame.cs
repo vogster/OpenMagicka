@@ -32,6 +32,7 @@ public sealed class PlayGame : ThreadedGame<PlayFrame>
     private Texture2D? white;
     private GpuLevel? level;
     private string? shownModel;
+    private readonly List<Matrix> parts = [];
     private string? loadingModel;
     private Task<GpuLevel>? loading;
     private EffectStage? effects;
@@ -138,7 +139,19 @@ public sealed class PlayGame : ThreadedGame<PlayFrame>
         var ground = Vector3.Lerp(frame.Previous.Ground, frame.Current.Ground, alpha);
         return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(frame.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, ground,
             (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models?.Instances(frame.Models),
-            CharacterRimLight.For(frame.Settings));
+            CharacterRimLight.For(frame.Settings), Parts(frame));
+    }
+
+    /// <summary>The level's parts where the frame has them, when the frame is of the level shown (none: at rest).</summary>
+    private IReadOnlyList<Matrix>? Parts(PlayFrame frame)
+    {
+        if (level is null || !string.Equals(frame.Model, shownModel, StringComparison.OrdinalIgnoreCase) || frame.Parts.Count != level.PartUnrests.Count)
+        {
+            return null;
+        }
+        parts.Clear();
+        parts.AddRange(frame.Parts.Select(ModelCache.Xna));
+        return parts;
     }
 
     /// <summary>The screen's cover (a fade, a scene change) over everything.</summary>

@@ -13,11 +13,13 @@ namespace OpenMagicka.Engine.Rendering;
 /// <summary>
 /// A batch on the GPU: buffers with the full vertex layout, its material, the material the G-buffer
 /// pass draws it with RenderDeferredEffect (its own, or <see cref="RenderDeferredMaterial.StandIn"/>;
-/// null for additive batches and characters, whose material has its own effect) and its diffuse texture.
+/// null for additive batches and characters, whose material has its own effect) and its diffuse texture;
+/// a level's animated part's batch names its part (<see cref="LevelBatch.Part"/>).
 /// </summary>
 public sealed record GpuBatch(
     VertexBuffer Vertices, IndexBuffer Indices, int VertexCount, int StartIndex, int PrimitiveCount, BoundingBox Bounds,
-    Matrix World, object? Material, RenderDeferredEffectContent? Deferred, Texture2D? Diffuse, Vector3 DiffuseColor, bool Additive, bool Lit)
+    Matrix World, object? Material, RenderDeferredEffectContent? Deferred, Texture2D? Diffuse, Vector3 DiffuseColor, bool Additive, bool Lit,
+    int Part = -1)
     : IDisposable
 {
     public void Dispose()
@@ -48,6 +50,7 @@ public sealed class GpuLevel : IDisposable
         Sun = sun;
         PointLights = pointLights;
         SpotLights = spotLights;
+        Lights = new FrameLights(pointLights, spotLights);
         SkyMap = skyMap;
         SkyColor = skyColor;
         this.batches = batches;
@@ -70,6 +73,9 @@ public sealed class GpuLevel : IDisposable
     /// <summary>The level's spot lights; none for models.</summary>
     public IReadOnlyList<SpotLighting> SpotLights { get; }
 
+    /// <summary>The level's point and spot lights where they are in the file.</summary>
+    public FrameLights Lights { get; }
+
     /// <summary>The scene's sky picture, drawn behind everything (null when the scene has none or it failed to load).</summary>
     public Texture2D? SkyMap { get; }
 
@@ -78,6 +84,12 @@ public sealed class GpuLevel : IDisposable
 
     /// <summary>The triangles the game camera keeps its target on; null for models and levels without one.</summary>
     public Cameras.CameraMesh? CameraMesh { get; private init; }
+
+    /// <summary>The way back from each animated part's rest pose (its inverse), in <see cref="LevelParts.Order"/>; none for models.</summary>
+    public IReadOnlyList<Matrix> PartUnrests { get; private init; } = [];
+
+    /// <summary>The level's lights that ride on its animated parts; none for models.</summary>
+    public IReadOnlyList<PartLight> PartLights { get; private init; } = [];
 
     /// <summary>The level's and its parts' visual effects, which the original starts with the level; none for models.</summary>
     public IReadOnlyList<Particles.PlacedEffect> Effects { get; private init; } = [];
@@ -190,8 +202,14 @@ public sealed class GpuLevel : IDisposable
         {
             Effects = placements,
             CameraMesh = cameraMesh,
+            PartUnrests = file.Root is LevelModelContent moving ? [.. LevelParts.Rests(moving.AnimatedParts).Select(Unrest)] : [],
+            PartLights = file.Root is LevelModelContent riding ? PartLight.Of(riding) : [],
         };
     }
+
+    /// <summary>A rest pose's inverse; none (the part stays drawn where it is) when the pose has none or is not finite.</summary>
+    public static Matrix Unrest(Matrix rest) =>
+        LevelParts.IsFinite(rest) && Math.Abs(rest.Determinant()) > 1e-12f ? Matrix.Invert(rest) : Matrix.Identity;
 
     /// <summary>Every texture a batch's material references.</summary>
     private static IEnumerable<ExternalReference> References(LevelBatch batch)
@@ -304,7 +322,7 @@ public sealed class GpuLevel : IDisposable
             // Only what drawing needs is kept: the CPU vertex and index data can be collected.
             var deferred = DeferredMaterial(batch);
             return new GpuBatch(vertices, indices, batch.VertexCount, batch.StartIndex, batch.PrimitiveCount, batch.Bounds, batch.World,
-                batch.Material, deferred, batch.HasUv ? diffuse : null, batch.DiffuseColor, batch.Additive, batch.HasNormal);
+                batch.Material, deferred, batch.HasUv ? diffuse : null, batch.DiffuseColor, batch.Additive, batch.HasNormal, batch.Part);
         }
         catch
         {

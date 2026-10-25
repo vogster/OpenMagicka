@@ -136,7 +136,7 @@ public sealed class ReleaseGripAction : ScriptAction
 
 /// <summary>
 /// <c>physAnimation id= name= speed= start= end= children=</c> (never used by the game): it would bind an animated
-/// part's clip to a breakable prop; ours binds none until the parts' world comes (OM-74).
+/// part's clip to a breakable prop; ours binds none (left out, LEVELS_TRIGGERS.md §9.5).
 /// </summary>
 public sealed class PhysAnimationAction : ScriptAction
 {

@@ -31,13 +31,13 @@ internal sealed class LightShadows : IDisposable
     /// so these are the ones facing away from the light), the spot lights counter-clockwise ones: a
     /// light set in a wall is not shut in by the wall's far side.
     /// </summary>
-    public void Draw(GraphicsDevice device, GpuLevel level, BoundingFrustum view, Action<Matrix, RasterizerState> drawCasters)
+    public void Draw(GraphicsDevice device, FrameLights lit, BoundingFrustum view, Action<Matrix, RasterizerState> drawCasters)
     {
         pointMaps.Clear();
         spotMaps.Clear();
         var usedCubes = 0;
         var usedFlats = 0;
-        foreach (var light in level.PointLights.Where(l => l.ShadowMapSize > 0 && view.Intersects(new BoundingSphere(l.Position, l.Radius))))
+        foreach (var light in lit.Points.Where(l => l.ShadowMapSize > 0 && view.Intersects(new BoundingSphere(l.Position, l.Radius))))
         {
             var map = Take(cubes, ref usedCubes, light.ShadowMapSize, size => new RenderTargetCube(device, size, false, SurfaceFormat.Single, DepthFormat.Depth24));
             var faces = LightShadowViews.PointFaces(light.Position, light.Radius);
@@ -49,7 +49,7 @@ internal sealed class LightShadows : IDisposable
             }
             pointMaps[light] = map;
         }
-        foreach (var light in level.SpotLights.Where(l => l.ShadowMapSize > 0 && view.Intersects(new BoundingSphere(l.Position, l.Range))))
+        foreach (var light in lit.Spots.Where(l => l.ShadowMapSize > 0 && view.Intersects(new BoundingSphere(l.Position, l.Range))))
         {
             var map = Take(flats, ref usedFlats, light.ShadowMapSize, size => new RenderTarget2D(device, size, size, false, SurfaceFormat.Single, DepthFormat.Depth24));
             var lightView = LightShadowViews.Spot(light);

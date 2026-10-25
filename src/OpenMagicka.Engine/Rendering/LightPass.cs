@@ -78,12 +78,12 @@ internal sealed class LightPass : IDisposable
     public IEnumerable<GameEffect> Effects => [sun, point, spot];
 
     /// <summary>Adds every light into the bound light target; the G-buffer's normals and depth are read.</summary>
-    public void Accumulate(GraphicsDevice device, FullscreenQuad quad, GpuLevel level, DeferredFrame frame, BoundingFrustum view,
+    public void Accumulate(GraphicsDevice device, FullscreenQuad quad, FrameLights lit, DeferredFrame frame, BoundingFrustum view,
         Texture2D normal, Texture2D depth, SunShadow? shadow, LightShadows shadows)
     {
         DrawSun(device, quad, frame.Sun, normal, depth, shadow);
-        DrawPointLights(device, level.PointLights, view, frame.Globals.CameraPosition, normal, depth, shadows);
-        DrawSpotLights(device, level.SpotLights, view, frame.Globals.CameraPosition, normal, depth, shadows);
+        DrawPointLights(device, lit.Points, view, frame.Globals.CameraPosition, normal, depth, shadows);
+        DrawSpotLights(device, lit.Spots, view, frame.Globals.CameraPosition, normal, depth, shadows);
     }
 
     private void DrawSun(GraphicsDevice device, FullscreenQuad quad, DirectionalLighting light, Texture2D normal, Texture2D depth, SunShadow? shadow)

@@ -12,7 +12,8 @@ namespace OpenMagicka.Engine.Scripting;
 /// An animated level part at play (LEVELS_TRIGGERS.md §9.2): a door, a lift, machinery. Its clip
 /// plays between a start and an end at a speed (backwards when negative), once or looping; each frame
 /// its transform is the clip's pose at its time (keyframes blended linearly) times its parent's, and
-/// its nav mesh follows. Its children, locators and effects come with it. The part's name is lowered,
+/// its nav mesh and its collision follow (carrying what stands on it). Its children, locators and effects
+/// come with it. The part's name is lowered,
 /// its locators' names are kept as written (as the original keys them).
 /// </summary>
 public sealed class ScenePart
@@ -48,6 +49,15 @@ public sealed class ScenePart
     public IEnumerable<ScenePart> Children => children.Values;
 
     public ScenePart? Child(int key) => children.GetValueOrDefault(key);
+
+    /// <summary>The part's collision in the physics world (the level gives it on entering the scene), moved with the part.</summary>
+    public Physics.PartCollision? Collision { get; set; }
+
+    /// <summary>The bodies attached to it (a script's items) while it has no collision: the scene was left.</summary>
+    public IReadOnlyList<OpenMagicka.Physics.PhysicsBody> Attached { get; set; } = [];
+
+    /// <summary>Whether it has taken a place (a part whose pose is not finite has none, and stays out of the world).</summary>
+    public bool IsPlaced { get; private set; }
 
     /// <summary>The part's nav mesh in the level's (the running level gives it), moved with the part.</summary>
     public NavSurface? Navigation { get; set; }
@@ -151,6 +161,7 @@ public sealed class ScenePart
             }
         }
         Place(parent);
+        Collision?.Update(dt, World, IsPlaying);
         foreach (var child in children.Values)
         {
             child.Update(dt, World);
@@ -231,7 +242,12 @@ public sealed class ScenePart
     private void Place(Numerics.Matrix4x4 parent)
     {
         var world = LevelNavigation.ToNumerics(Pose(Content.Animation, time)) * parent;
-        if (world != World && Finite(world))
+        if (!Finite(world))
+        {
+            return;
+        }
+        IsPlaced = true;
+        if (world != World)
         {
             World = world;
             Navigation?.Place(world);

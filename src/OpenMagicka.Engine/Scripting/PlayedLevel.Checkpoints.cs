@@ -88,6 +88,10 @@ public sealed partial class PlayedLevel
             World.Physics.RemoveLevelMesh(mesh);
         }
         collision = [];
+        if (Current?.Scripts is { } scripts)
+        {
+            Physics.LevelCollision.UnloadParts(scripts.Places);
+        }
         Current = null;
     }
 

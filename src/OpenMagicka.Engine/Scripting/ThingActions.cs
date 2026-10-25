@@ -66,7 +66,8 @@ public sealed class StopEffectAction : ScriptAction
 /// <c>Data/Items/Wizard/&lt;item&gt;</c> lies at the place, turned with it: one, whatever <c>nr</c> says, as
 /// the original. Its pick-up sets off <c>onPickup</c>; without physics it stays put. The original keeps
 /// one item per action and moves it on each run (even out of a holder's hands); ours moves it while it
-/// still lies in the level, else puts down a new one. Attaching to a part waits for the parts' world (OM-74).
+/// still lies in the level, else puts down a new one. Attached to a part (by its name), it rides on it until
+/// it is picked up (§9.7).
 /// </summary>
 public sealed class SpawnItemAction : ScriptAction
 {
@@ -118,6 +119,10 @@ public sealed class SpawnItemAction : ScriptAction
             item.UniqueId = Hash(Id);
         }
         item.IsPinned = !PhysicsEnabled;
+        if (AttachTo.Length > 0)
+        {
+            Scene.Places.Part(AttachTo)?.Collision?.Attach(item.Body);
+        }
     }
 }
 

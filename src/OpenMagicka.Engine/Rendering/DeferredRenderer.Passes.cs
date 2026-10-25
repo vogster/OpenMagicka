@@ -73,7 +73,8 @@ public sealed partial class DeferredRenderer
         skinned.Effect.Parameters["Bones"].SetValue(bindPose);
         foreach (var batch in level.Batches)
         {
-            if (view.Intersects(batch.Bounds) && DrawOpaque(device, level, batch, batch.World, frame, pass, effects))
+            var move = Move(batch);
+            if (view.Intersects(Transformed(batch.Bounds, move)) && DrawOpaque(device, level, batch, batch.World * move, frame, pass, effects))
             {
                 drawn++;
             }
@@ -152,6 +153,19 @@ public sealed partial class DeferredRenderer
         return instancePalette;
     }
 
+    /// <summary>The frame's moves of the level's parts from their rest poses (<see cref="LevelParts.Moves"/>).</summary>
+    private void PlaceParts(GpuLevel level, DeferredFrame frame)
+    {
+        if (partMoves.Length != level.PartUnrests.Count)
+        {
+            partMoves = new Matrix[level.PartUnrests.Count];
+        }
+        LevelParts.Moves(level.PartUnrests, frame.Parts, partMoves);
+    }
+
+    /// <summary>How far a level batch's part has moved this frame; identity for the level's own geometry.</summary>
+    private Matrix Move(GpuBatch batch) => batch.Part >= 0 && batch.Part < partMoves.Length ? partMoves[batch.Part] : Matrix.Identity;
+
     /// <summary>The box around a box placed by a transform.</summary>
     internal static BoundingBox Transformed(BoundingBox box, Matrix world)
     {
@@ -188,7 +202,7 @@ public sealed partial class DeferredRenderer
         device.BlendState = AdditiveBlend;
         device.DepthStencilState = DepthStencilState.DepthRead;
         var parameters = new FnaEffectParameters(additive.Effect);
-        foreach (var (source, batch, place) in level.Batches.Select(b => (level, b, Matrix.Identity))
+        foreach (var (source, batch, place) in level.Batches.Select(b => (level, b, Move(b)))
             .Concat((frameModels ?? []).SelectMany(m => m.Model.Batches.Select(b => (m.Model, b, m.World)))))
         {
             var world = batch.World * place;

@@ -91,6 +91,28 @@ public sealed class PhysicsWorld : IDisposable
         return mesh;
     }
 
+    /// <summary>
+    /// Places a mesh by a transform (its triangles as they were given, turned and moved; a scale is left out):
+    /// a level's moving part follows its animation. What it hits on the way is not pushed; the part's owner
+    /// carries what stands on it.
+    /// </summary>
+    public void PlaceStaticMesh(StaticMesh mesh, Matrix4x4 transform)
+    {
+        ArgumentNullException.ThrowIfNull(mesh);
+        ThrowIfStepping();
+        if (mesh.Body is not { } body)
+        {
+            return;
+        }
+        if (!Matrix4x4.Decompose(transform, out _, out var turn, out var at) || !float.IsFinite(at.X + at.Y + at.Z + turn.X + turn.Y + turn.Z + turn.W))
+        {
+            throw new ArgumentOutOfRangeException(nameof(transform), transform, "must be a finite rigid transform");
+        }
+        turn = Quaternion.Normalize(turn);
+        body.Orientation = new JQuaternion(turn.X, turn.Y, turn.Z, turn.W);
+        body.Position = at.ToJitter();
+    }
+
     /// <summary>Takes a mesh that is not the level out of the world (a shield gone).</summary>
     public void RemoveStaticMesh(StaticMesh mesh)
     {

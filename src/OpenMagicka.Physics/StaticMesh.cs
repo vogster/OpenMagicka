@@ -1,8 +1,9 @@
 namespace OpenMagicka.Physics;
 
 /// <summary>
-/// An immovable triangle mesh of a <see cref="PhysicsWorld"/>: one material of a level, or a solid
-/// thing that stands in the world without being the level (a spell's shield).
+/// A triangle mesh of a <see cref="PhysicsWorld"/> that nothing pushes: one material of a level, a level's
+/// moving part (placed anew each frame, <see cref="PhysicsWorld.PlaceStaticMesh"/>), or a solid thing that
+/// stands in the world without being the level (a spell's shield).
 /// </summary>
 public sealed class StaticMesh
 {
@@ -34,4 +35,11 @@ public sealed class StaticMesh
     public int TriangleCount { get; }
 
     public float Friction { get; }
+
+    /// <summary>
+    /// Told of each body touching it during a step, with the contact seen from the body (its normal pushing
+    /// the body away from the mesh): a level's moving part learns what stands on it. Heard during the step,
+    /// so it must not change the world.
+    /// </summary>
+    public Action<PhysicsBody, Contact>? Touched { get; set; }
 }

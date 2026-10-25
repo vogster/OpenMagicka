@@ -56,6 +56,15 @@ public class LevelPartTests
     }
 
     [Fact]
+    public void EachBatch_NamesItsPart_EachPartThenItsChildren()
+    {
+        var parts = new[] { Part("door", Vector3.Zero, Model(), children: [Part("handle", Vector3.One, Model())]), Part("lift", Vector3.UnitZ, Model()) };
+
+        Assert.Equal([0, 1, 2], LevelParts.Batches(parts, [Material]).Select(b => b.Part));
+        Assert.Equal([1, 2], LevelParts.Batches([parts[0] with { Model = null }, parts[1]], [Material]).Select(b => b.Part));   // a part drawing nothing keeps its number
+    }
+
+    [Fact]
     public void AChild_IsPlacedInItsRotatedParentsSpace()
     {
         var parent = Part("door", new Vector3(10, 0, 0), null) with

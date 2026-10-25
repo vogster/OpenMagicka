@@ -8,11 +8,12 @@ namespace OpenMagicka.Engine.Rendering;
 /// <summary>
 /// What one frame is drawn with besides the geometry; <see cref="ShadowFocus"/> is where the sun's
 /// shadows are wanted (see <see cref="SunShadowView.Focus"/>), <see cref="Seconds"/> the time the
-/// liquids' waves and flow have run.
+/// liquids' waves and flow have run, <see cref="Parts"/> where the level's animated parts are now (by
+/// <see cref="LevelParts.Order"/>; none, or one missing: at rest).
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
-    CharacterRimLight? RimLight = null);
+    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -91,6 +92,7 @@ public sealed partial class DeferredRenderer : IDisposable
     private readonly ParticlePass? particles;
     private readonly PostPass? post;
     private readonly LightShadows lightShadows = new();
+    private Matrix[] partMoves = [];
     private readonly Matrix[] bindPose;
     private readonly FullscreenQuad quad;
     private readonly SpriteBatch sprites;
@@ -176,8 +178,11 @@ public sealed partial class DeferredRenderer : IDisposable
         UnbindTextures(device);
         var globals = frame.Globals;
         frustum.Matrix = globals.ViewProjection;
+        PlaceParts(level, frame);
+        var lit = PartLight.Place(level, frame.Parts);
+        frame = frame with { Sun = lit.Sun(frame.Sun) };
         var shadow = DrawSunShadow(device, level, frame);
-        lightShadows.Draw(device, level, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
+        lightShadows.Draw(device, lit, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
         foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects).Concat(post?.Effects ?? []))
         {
@@ -206,7 +211,7 @@ public sealed partial class DeferredRenderer : IDisposable
         UnbindTextures(device);
         device.SetRenderTarget(light);
         device.Clear(Color.Transparent);
-        lights.Accumulate(device, quad, level, frame, frustum, normal!, depth!, shadow, lightShadows);
+        lights.Accumulate(device, quad, lit, frame, frustum, normal!, depth!, shadow, lightShadows);
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);

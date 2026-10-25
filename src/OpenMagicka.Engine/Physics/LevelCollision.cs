@@ -34,6 +34,44 @@ public static class LevelCollision
         return meshes;
     }
 
+    /// <summary>
+    /// Adds the scene's moving parts' collision meshes (each in its part's own space, placed where the part is)
+    /// and gives each part its <see cref="PartCollision"/>; returns the meshes, to take out with the level's.
+    /// </summary>
+    public static IReadOnlyList<StaticMesh> LoadParts(PhysicsWorld world, Scripting.ScriptPlaces places)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(places);
+        var meshes = new List<StaticMesh>();
+        foreach (var part in places.AllParts)
+        {
+            StaticMesh? mesh = null;
+            if (part.Content.Collision is { } collision && !IsLiquid(collision.Material) && part.IsPlaced)
+            {
+                mesh = world.AddStaticMesh((int)collision.Material, Vertices(collision.Mesh), Triangles(collision.Mesh));
+                meshes.Add(mesh);
+            }
+            part.Collision = new PartCollision(world, mesh, part.World);    // one without a mesh still carries what is attached
+            foreach (var body in part.Attached.Where(b => !b.IsRemoved))
+            {
+                part.Collision.Attach(body);                                  // what rode on it before the scene was left
+            }
+            part.Attached = [];
+        }
+        return meshes;
+    }
+
+    /// <summary>The scene's parts lose their collision (the scene is left; the meshes go with the level's).</summary>
+    public static void UnloadParts(Scripting.ScriptPlaces places)
+    {
+        ArgumentNullException.ThrowIfNull(places);
+        foreach (var part in places.AllParts)
+        {
+            part.Attached = part.Collision?.Attached ?? [];
+            part.Collision = null;
+        }
+    }
+
     /// <summary>The material of a segment hit on the level, or null when a body was hit.</summary>
     public static CollisionMaterial? MaterialOf(SegmentHit hit) =>
         hit.Material is >= 0 and <= byte.MaxValue and var m && Enum.IsDefined((CollisionMaterial)m) ? (CollisionMaterial)m : null;

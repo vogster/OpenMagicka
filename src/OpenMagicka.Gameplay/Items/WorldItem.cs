@@ -97,6 +97,29 @@ public sealed class WorldItem : Entity
         }
     }
 
+    /// <summary>Moved and turned with what carries it (a level part), and kept there.</summary>
+    public void Carry(Matrix4x4 delta)
+    {
+        if (Body.IsRemoved || world.IsDisposed)
+        {
+            return;
+        }
+        var centre = Vector3.Transform(Body.Position, delta);
+        if (!float.IsFinite(centre.X) || !float.IsFinite(centre.Y) || !float.IsFinite(centre.Z))
+        {
+            return;
+        }
+        (Body.Position, lastPosition) = (centre, centre);
+        if (pinned is not null)
+        {
+            pinned = centre;
+        }
+        if (Matrix4x4.Decompose(delta, out _, out var turn, out _))
+        {
+            Body.Orientation = Quaternion.Normalize(Quaternion.Concatenate(Body.Orientation, turn));
+        }
+    }
+
     public PhysicsBody Body { get; }
 
     /// <summary>Whether an avatar can pick it up.</summary>

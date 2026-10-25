@@ -28,6 +28,9 @@ public sealed class PlayFrame
     /// <summary>The models to draw (the characters, their items, the props, the lying items and books).</summary>
     public List<DrawnModel> Models { get; } = [];
 
+    /// <summary>Where the level's animated parts are, as its batches number them (LevelParts.Order).</summary>
+    public List<System.Numerics.Matrix4x4> Parts { get; } = [];
+
     /// <summary>Why the level stopped (it no longer runs), or null.</summary>
     public string? Error { get; set; }
 }
@@ -116,6 +119,14 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         frame.Cover = play.Cover;
         play.Requests.Clear();                                                // nothing takes them yet (OM-49, OM-51)
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
+        if (scene?.Scripts is { } scripts)
+        {
+            scripts.Places.Placements(frame.Parts);
+        }
+        else
+        {
+            frame.Parts.Clear();
+        }
         frame.Error = error;
     }
 

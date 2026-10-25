@@ -59,7 +59,7 @@ public static class SceneLighting
     public static DirectionalLighting Sun(IEnumerable<LevelLightContent> lights)
     {
         ArgumentNullException.ThrowIfNull(lights);
-        var sun = lights.FirstOrDefault(l => l.Type == LevelLightType.Directional && l.Direction.LengthSquared() > 0);
+        var sun = SunOf(lights);
         return sun is null ? Default : new DirectionalLighting(Vector3.Normalize(sun.Direction), sun.DiffuseColor, sun.AmbientColor, sun.SpecularAmount,
             ShadowSize(sun));
     }
@@ -68,7 +68,7 @@ public static class SceneLighting
     public static IReadOnlyList<PointLighting> PointLights(IEnumerable<LevelLightContent> lights)
     {
         ArgumentNullException.ThrowIfNull(lights);
-        return lights.Where(l => l.Type == LevelLightType.Point && float.IsFinite(l.Range) && l.Range > 0)
+        return lights.Where(IsPoint)
             .Select(l => new PointLighting(l.Position, l.Range, l.DiffuseColor, l.AmbientColor, l.SpecularAmount,
                 Math.Min(ShadowSize(l), MaxLightShadowMapSize)))
             .ToArray();
@@ -78,13 +78,23 @@ public static class SceneLighting
     public static IReadOnlyList<SpotLighting> SpotLights(IEnumerable<LevelLightContent> lights)
     {
         ArgumentNullException.ThrowIfNull(lights);
-        return lights.Where(l => l.Type == LevelLightType.Spot && float.IsFinite(l.Range) && l.Range > 0
-                && l.Direction.LengthSquared() > 0 && float.IsFinite(l.Direction.LengthSquared()) && l.CutoffAngle > 0 && l.CutoffAngle <= MathHelper.PiOver2)
+        return lights.Where(IsSpot)
             .Select(l => new SpotLighting(l.Position, Vector3.Normalize(l.Direction), l.Range, l.CutoffAngle, l.Sharpness, l.UseAttenuation,
                 l.DiffuseColor, l.AmbientColor, l.SpecularAmount,
                 l.Range > MinShadowRange ? Math.Min(ShadowSize(l), MaxLightShadowMapSize) : 0))
             .ToArray();
     }
+
+    /// <summary>The level's sun: its first directional light with a direction.</summary>
+    public static LevelLightContent? SunOf(IEnumerable<LevelLightContent> lights) =>
+        lights.FirstOrDefault(l => l.Type == LevelLightType.Directional && l.Direction.LengthSquared() > 0);
+
+    /// <summary>A point light the level is lit with: one with a finite reach.</summary>
+    public static bool IsPoint(LevelLightContent l) => l.Type == LevelLightType.Point && float.IsFinite(l.Range) && l.Range > 0;
+
+    /// <summary>A spot light the level is lit with: one with a finite reach, a direction and an angle.</summary>
+    public static bool IsSpot(LevelLightContent l) => l.Type == LevelLightType.Spot && float.IsFinite(l.Range) && l.Range > 0
+        && l.Direction.LengthSquared() > 0 && float.IsFinite(l.Direction.LengthSquared()) && l.CutoffAngle > 0 && l.CutoffAngle <= MathHelper.PiOver2;
 
     /// <summary>A spot light's shadow view starts 0.01 from the light, so a shorter light casts none.</summary>
     private const float MinShadowRange = 0.02f;

@@ -719,7 +719,7 @@ Ours is `ThingActions.cs`, `ScenePart.cs` and `SceneEffects.cs`.
 - A scene locator is looked for before an area, and a part's locator after both (`spawn`, `setPosition` and the rest find a
   part's locator where the part is now).
 - `playAnimation name="parent/child"` walks the path; a part the level lacks crashes the original, ours plays nothing.
-- Collision, carried entities, lights, decals and drawing at the animated transform come with OM-74.
+- Its collision, what rides on it, its lights and its drawing follow it (§9.7).
 
 **Effects** (`SceneEffects`):
 - The scene's named effects are the level model's and its parts' (names lowered), all started when the scene is built, plus
@@ -740,7 +740,7 @@ Ours is `ThingActions.cs`, `ScenePart.cs` and `SceneEffects.cs`.
 - Without `physicsEnabled` it stays where it was put; `ignoreTractorPull` spares it from Tractor Pull.
 - The original keeps one item per action and moves it on every run, even out of a holder's hands. Ours moves it while it still
   lies in the level, and otherwise puts a new one down.
-- `attachTo` waits for OM-74.
+- `attachTo` names a part the item rides on until it is picked up (§9.7); a part the level lacks leaves it lying.
 - The items come from the running level's `IScriptAssets` (the game's content); with none, no item is made.
 
 **`spawnPhys`**:
@@ -926,7 +926,8 @@ checkpoint's restart takes the bar away before the replay sets it up again (ours
 **The wizards:** `wizardControl` lights the staffs or puts them out; `beginDefaultAvatarSection`/`end…` and
 `beginUnequipWeaponsSection`/`end…` mark those stretches; the latter's end plays its clip on every avatar.
 
-**Never used by the game:** `releaseGrip` waits for the grips (OM-33), and `physAnimation` for the parts' world (OM-74).
+**Never used by the game:** `releaseGrip` waits for the grips (OM-33); `physAnimation` (a part's clip bound to a prop) is
+left out.
 
 ### 9.6 Ours: the boss fights (OM-46)
 
@@ -947,6 +948,46 @@ the bosses the scripts spawned; once a boss joins, `ScriptGame.Boss` is the figh
   bosses a message (a named boss's own code acts on it).
 - A checkpoint's restart ends the fight before the replay (ours: the replay's spawns bring the bosses in anew). As the
   original's replay of `spawnBoss`, a boss beaten before the checkpoint comes back whole.
+
+### 9.7 Ours: the moving parts in the world (OM-74)
+
+Ours is `PartCollision.cs`, `LevelCollision.LoadParts`, `PartLights.cs` and `LevelParts`. A part takes its place each frame
+(§9.2); what goes with it follows, as the original's:
+
+**Collision and riders** (`PartCollision`):
+- Entering a scene, every part gets a carrier; a part with a solid collision mesh (not water or lava) gets its mesh in the
+  physics world too, in the part's own space, placed where the part is now (its scale left out, as the original's). A part
+  whose pose has never been finite (ch_end_of_world's rings) puts no mesh in the world, as it is not drawn either.
+- Each frame the mesh is moved to the part's new place (one it cannot take, sheared, leaves it where it was). The physics sees
+  a moved static mesh, so a body on it rests on it, asleep or not, and a ray hits it where it now is.
+- A body touching the mesh from above (the contact pushes it up more than 0.7) while the part plays is carried for the next
+  0.25 s; every touch renews that. A part at rest carries nothing new. As the original, that is the part's own playing: a
+  child moved only by its playing parent carries nothing.
+- Each frame every body it carries is moved and turned as the part moved since the last frame (the inverse of the old
+  transform times the new). A character's wanted way turns with it (flattened); another body turns as a whole. The frame its
+  time runs out still moves it.
+- `spawnItem attachTo` attaches the item for good (until it is picked up and leaves the world), whether it touches the part
+  or not; a part without a mesh carries it too. A lying item carried stays where it is put (a pinned one is pinned there).
+  Leaving the scene, the part keeps what is attached to it, and it rides again when the scene is entered.
+- The original also carries a spell shield touching a part (every part of the levels has the flag that allows it). Ours do
+  not: our shields are fixed meshes where they were cast, and stay there.
+- The original's decals on a part move with it; decals are OM-66.
+
+**Drawing** (`LevelParts`, `GpuLevel`, `DeferredRenderer`):
+- The parts are numbered each, then its children, in the file's order; each batch of a part (its meshes and its liquids)
+  names its part. A part a later namesake replaced (the original keeps the last) is drawn at rest.
+- Each frame the game hands the renderer where each part is; a batch is drawn moved by the way back from its part's rest pose
+  then to where the part is now, and culled by its box moved the same. The shadow maps, the G-buffer and the additive pass
+  all draw it there.
+- A part's liquids are drawn with it. Liquids have no physics of their own yet, on a part or not.
+- A part's named effects follow it (§9.2).
+
+**Lights** (`PartLight`):
+- A part's light attachments name the level's lights (in any case). Each frame the light is put at its place on the part
+  times the part's transform: a point light's position, a spot light's position and facing (its forward), the sun's
+  direction. In the levels, 14 lights ride on parts; hl_s2's turning land carries the sun.
+- A name the level's lights lack, a light left out for having no reach, a directional light that is not the level's sun, or
+  a light on a part whose rest pose is not finite is passed over.
 
 ## 10. Condition catalogue (24)
 

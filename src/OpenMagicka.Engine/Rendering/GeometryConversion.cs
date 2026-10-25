@@ -134,6 +134,9 @@ public sealed record LevelBatch(
 
     /// <summary>The material as read (RenderDeferredEffectContent, AdditiveEffectContent, ...), for the original effects.</summary>
     public object? Material { get; init; }
+
+    /// <summary>The animated part it belongs to, by its place in <see cref="LevelParts.Order"/>; −1 for the level's own.</summary>
+    public int Part { get; init; } = -1;
 }
 
 /// <summary>Turns a level model's BiTree into batches (no GPU work).</summary>

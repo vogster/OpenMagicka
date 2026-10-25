@@ -170,6 +170,8 @@ public sealed class ScriptPlaces : IAiPlaces
     private readonly Dictionary<int, LocatorContent> locators = [];
 
     private readonly Dictionary<int, ScenePart> parts = [];
+    private readonly ScenePart?[] drawn;
+    private readonly Matrix4x4[] rests;
 
     public ScriptPlaces(LevelModelContent? level)
         : this(level?.TriggerAreas ?? [], level?.Locators ?? [], level?.AnimatedParts)
@@ -181,12 +183,16 @@ public sealed class ScriptPlaces : IAiPlaces
     public ScriptPlaces(IEnumerable<TriggerAreaContent> triggerAreas, IEnumerable<LocatorContent> sceneLocators,
         IEnumerable<AnimatedLevelPartContent>? animatedParts = null)
     {
-        foreach (var content in animatedParts ?? [])
+        var roots = animatedParts?.ToList() ?? [];
+        foreach (var content in roots)
         {
             var part = new ScenePart(content);
             parts[part.Key] = part;
             part.Update(0, Matrix4x4.Identity);                                // at rest
         }
+        var kept = AllParts.ToDictionary(p => (object)p.Content, ReferenceEqualityComparer.Instance);
+        drawn = [.. Rendering.LevelParts.Order(roots).Select(c => kept.GetValueOrDefault(c))];
+        rests = [.. Rendering.LevelParts.Rests(roots).Select(Navigation.LevelNavigation.ToNumerics)];
         foreach (var area in triggerAreas)
         {
             var key = LegacyStringHash.Lower(area.Name);
@@ -207,6 +213,20 @@ public sealed class ScriptPlaces : IAiPlaces
 
     /// <summary>The level's animated parts, the top ones (their children under them).</summary>
     public IEnumerable<ScenePart> Parts => parts.Values;
+
+    /// <summary>
+    /// Where each part is now, as the level's batches number them (<see cref="Rendering.LevelParts.Order"/>), into
+    /// <paramref name="into"/> (cleared first); a part a namesake took the place of stays at its rest pose.
+    /// </summary>
+    public void Placements(List<Matrix4x4> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        into.Clear();
+        for (var i = 0; i < drawn.Length; i++)
+        {
+            into.Add(drawn[i]?.World ?? rests[i]);
+        }
+    }
 
     /// <summary>A part by its path of names ("parent/child", any case); null when one of them is missing.</summary>
     public ScenePart? Part(string path)
