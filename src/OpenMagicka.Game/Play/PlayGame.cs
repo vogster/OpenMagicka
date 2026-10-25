@@ -50,6 +50,7 @@ public sealed class PlayGame : ThreadedGame<PlayFrame>
         this.levelName = levelName ?? throw new ArgumentNullException(nameof(levelName));
         this.screenshot = screenshot;
         Window.Title = "OpenMagicka";
+        IsMouseVisible = true;                                                // the cursor aims (the original's own cursors: OM-56)
     }
 
     /// <summary>0, or 1 when the level could not be shown for a requested screenshot.</summary>

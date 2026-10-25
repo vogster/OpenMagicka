@@ -241,6 +241,9 @@ public sealed class ScriptPlaces : IAiPlaces
 
     public Vector3? LocatorPosition(int key) => LocatorTransform(key)?.Translation;
 
+    /// <summary>A scene locator's radius (how near a point of interest is in reach); null for one the scene lacks.</summary>
+    public float? LocatorRadius(int key) => locators.TryGetValue(key, out var locator) ? locator.Radius : null;
+
     /// <summary>A scene locator's transform, else a part's (where the part is now), as the original looks them up.</summary>
     public Matrix4x4? LocatorTransform(int key)
     {

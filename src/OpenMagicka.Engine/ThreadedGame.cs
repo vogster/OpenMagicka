@@ -6,11 +6,12 @@ using OpenMagicka.Engine.Threading;
 namespace OpenMagicka.Engine;
 
 /// <summary>
-/// The input of one frame, polled on the render thread (where SDL delivers it), and whether the
-/// window has focus. The logic thread sees the latest snapshot only: a press and release between
-/// two ticks is missed (an event queue comes with the input system, OM-31).
+/// The input of one frame, polled on the render thread (where SDL delivers it): the keyboard, the mouse,
+/// whether the window has focus, its back buffer's size (for the cursor), and the first pad (an SDL game
+/// controller; not connected when none is). The logic thread sees the latest snapshot only: a press and
+/// release between two ticks is missed.
 /// </summary>
-public readonly record struct InputState(KeyboardState Keyboard, MouseState Mouse, bool IsActive);
+public readonly record struct InputState(KeyboardState Keyboard, MouseState Mouse, bool IsActive, Point Screen = default, GamePadState Pad = default);
 
 /// <summary>What the simulation may use of the game from the logic thread.</summary>
 public interface IGameHost
@@ -87,7 +88,8 @@ public abstract class ThreadedGame<TFrame> : Microsoft.Xna.Framework.Game, IGame
     protected sealed override void Update(GameTime gameTime)
     {
         logic?.ThrowIfFaulted();
-        Input.Value = new InputState(Keyboard.GetState(), Mouse.GetState(), IsActive);
+        var screen = new Point(GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight);
+        Input.Value = new InputState(Keyboard.GetState(), Mouse.GetState(), IsActive, screen, GamePad.GetState(PlayerIndex.One));
         GpuWork.RunPending(GraphicsDevice, GpuWorkPerFrame, GpuWorkTimePerFrame);
         if (exitRequested)
         {

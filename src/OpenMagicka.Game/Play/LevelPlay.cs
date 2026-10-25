@@ -3,6 +3,7 @@ using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine.Cameras;
 using OpenMagicka.Engine.Characters;
+using OpenMagicka.Engine.Input;
 using OpenMagicka.Engine.Scripting;
 using OpenMagicka.Gameplay;
 using OpenMagicka.Gameplay.Characters;
@@ -16,7 +17,7 @@ public readonly record struct ScreenCover(Numerics.Vector4 Color, float Amount);
 
 /// <summary>
 /// A level at play in the game (OM-75), on the logic thread: the level, its world and its one player,
-/// whose wizard a stand-in walk moves until the controls come (OM-31); each tick the level runs, then the
+/// whose wizard the player's controls drive (OM-31); each tick the level runs, then the
 /// stage's camera follows the players (or the followed entity) on the scene's camera mesh, the effects
 /// are passed on (<see cref="EffectDirector"/>), and the screen's fades and scene transitions are stepped
 /// into a cover.
@@ -117,16 +118,33 @@ public sealed class LevelPlay : IDisposable
         StepCamera(0, snap: true);
     }
 
+    /// <summary>The first player's keyboard-and-mouse controls (OM-31).</summary>
+    public KeyboardMouseControl Controls { get; private set; } = new(new ControlBindings());
+
+    /// <summary>The first player's pad controls (OM-31).</summary>
+    public GamePadControl Pad { get; } = new();
+
+    /// <summary>The pad's bindings (the original's defaults).</summary>
+    public PadBindings PadBindings { get; } = new();
+
+    /// <summary>The controls bound as given (the player's own file).</summary>
+    public void Bind(ControlBindings bindings) => Controls = new KeyboardMouseControl(bindings);
+
     /// <summary>
-    /// A tick: the wizard walks (right is +X, forward is −Z, as on the screen; each −1..1) unless its
-    /// events or the stage hold it, the level runs, the camera follows, the cover is stepped.
+    /// A tick: the player's controls act on its wizard (its pad when given, else its keyboard and mouse;
+    /// neither: it is left as it is), the level runs,
+    /// the camera follows, the cover is stepped. The cursor is read against the camera as it was over the
+    /// window of that size.
     /// </summary>
-    public void Tick(float dt, float right, float forward)
+    public void Tick(float dt, ControlFrame? input = null, Xna.Point screen = default, PadFrame? pad = null)
     {
-        if (Player.Avatar is { IsDead: false, IsInEvent: false } avatar)
+        if (pad is { } padFrame && Scene?.Scripts is { } padScripts)
         {
-            var way = Level.Level.Stage.IsInputLimited ? Numerics.Vector3.Zero : new Numerics.Vector3(right, 0, -forward);   // held: it stands
-            avatar.Body.Movement = way.LengthSquared() > 1 ? Numerics.Vector3.Normalize(way) : way;
+            Pad.Update(padFrame, Player, padScripts);
+        }
+        else if (input is { } frame && Scene?.Scripts is { } scripts && Player.Avatar is { } avatar && screen.X > 0 && screen.Y > 0)
+        {
+            Controls.Update(frame, Player, scripts, Cursor(Camera, frame.Mouse.X, frame.Mouse.Y, screen, avatar.Position.Y), dt);
         }
         Level.Tick(dt);
         var changed = false;
@@ -137,6 +155,8 @@ public sealed class LevelPlay : IDisposable
         }
         if (changed)
         {
+            Controls.Reset();
+            Pad.Reset();
             Effects.Clear();
             meshScene = -1;                                                   // the camera stands over the players at once
         }
@@ -158,7 +178,7 @@ public sealed class LevelPlay : IDisposable
         }
         var players = (Session.Players).Where(p => p.Playing && p.Avatar is { IsDead: false, Manager: not null })
             .Select(p => Subject(p.Avatar!)).ToArray();
-        var followed = stage.Followed is { Manager: not null } entity ? Xna(entity.Position) : (Xna.Vector3?)null;
+        var followed = stage.Followed is { Manager: not null } entity ? ToXna(entity.Position) : (Xna.Vector3?)null;
         var inputs = CameraInputs.None with
         {
             Players = CameraFocus.Players(players, [], stage.Camera.Ground, []),
@@ -190,7 +210,7 @@ public sealed class LevelPlay : IDisposable
     }
 
     private static CameraSubject Subject(Character avatar) =>
-        new(Xna(avatar.Position), avatar.Body.IsTouchingGround ? avatar.Position.Y + avatar.Body.HeightOffset : null);
+        new(ToXna(avatar.Position), avatar.Body.IsTouchingGround ? avatar.Position.Y + avatar.Body.HeightOffset : null);
 
     /// <summary>
     /// A new fade runs from where the cover is to all (in) or none (out) over its time; a scene change's
@@ -223,7 +243,26 @@ public sealed class LevelPlay : IDisposable
         Cover = new ScreenCover(color with { W = 1 }, Math.Max(fadeAmount, transitionAmount));
     }
 
-    private static Xna.Vector3 Xna(Numerics.Vector3 v) => new(v.X, v.Y, v.Z);
+    private static Xna.Vector3 ToXna(Numerics.Vector3 v) => new(v.X, v.Y, v.Z);
+
+    /// <summary>
+    /// The cursor's ray, from the camera's eye through the point on the screen to the far plane, and where
+    /// it crosses the level at a height (the avatar's), as the original picks; a ray that never crosses it
+    /// points nowhere (the avatar is not turned).
+    /// </summary>
+    public static CursorPick Cursor(GameCamera camera, int x, int y, Xna.Point screen, float height)
+    {
+        ArgumentNullException.ThrowIfNull(camera);
+        var aspect = screen.Y > 0 ? (float)screen.X / screen.Y : 1;
+        var inverse = Xna.Matrix.Invert(camera.View * camera.Projection(aspect));
+        var far = Xna.Vector4.Transform(new Xna.Vector4(-1 + 2f * x / Math.Max(screen.X, 1), 1 - 2f * y / Math.Max(screen.Y, 1), 1, 1), inverse);
+        var end = new Xna.Vector3(far.X, far.Y, far.Z) / far.W;
+        var ray = new Xna.Ray(camera.Eye, end - camera.Eye);
+        var ground = ray.Intersects(new Xna.Plane(Xna.Vector3.Up, -height)) is { } distance ? ray.Position + ray.Direction * distance : new Xna.Vector3(float.NaN);
+        var origin = new Numerics.Vector3(camera.Eye.X, camera.Eye.Y, camera.Eye.Z);
+        return new CursorPick(new Gameplay.Entities.Segment(origin, new Numerics.Vector3(end.X, end.Y, end.Z) - origin),
+            new Numerics.Vector3(ground.X, ground.Y, ground.Z));
+    }
 
     public void Dispose()
     {

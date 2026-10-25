@@ -52,7 +52,20 @@ internal static class Program
         }
         var loader = new OpenMagicka.Content.ContentLoader(files, OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka);
         var definition = OpenMagicka.Content.Levels.LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path);
-        using var game = new PlayGame(loader, LevelPlay.Open(definition, files, loader), Path.GetFileNameWithoutExtension(path), screenshot);
+        var play = LevelPlay.Open(definition, files, loader);
+        var controls = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenMagicka", "controls.json");
+        if (File.Exists(controls))
+        {
+            try
+            {
+                play.Bind(OpenMagicka.Engine.Input.ControlBindings.Load(File.ReadAllText(controls)));
+            }
+            catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"OpenMagicka: {controls}: {e.Message}; the default controls are used");
+            }
+        }
+        using var game = new PlayGame(loader, play, Path.GetFileNameWithoutExtension(path), screenshot);
         game.Run();
         return game.ExitCode;
     }

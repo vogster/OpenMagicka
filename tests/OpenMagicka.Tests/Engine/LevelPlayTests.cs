@@ -1,6 +1,7 @@
 using System.Text;
 using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Magicka;
+using OpenMagicka.Engine.Input;
 using OpenMagicka.Engine.Scripting;
 using OpenMagicka.Game.Play;
 using OpenMagicka.Gameplay.Characters;
@@ -9,7 +10,7 @@ using Xna = Microsoft.Xna.Framework;
 
 namespace OpenMagicka.Tests.Engine;
 
-/// <summary>A level at play in the game (OM-75): the stand-in walk, the camera following, the screen's cover.</summary>
+/// <summary>A level at play in the game (OM-75): the controls' walk, the camera following, the screen's cover.</summary>
 public class LevelPlayTests
 {
     private sealed class Content(Dictionary<string, string> scenes) : ILevelContent
@@ -33,16 +34,32 @@ public class LevelPlayTests
         return new LevelPlay(definition, content, new LevelServices(), (Goblin, null));
     }
 
-    private static void Run(LevelPlay play, float seconds, float right = 0, float forward = 0)
+    internal static readonly Xna.Point Screen = new(1280, 720);
+
+    /// <summary>The mouse over a point of the level, its left button held or not.</summary>
+    internal static ControlFrame Mouse(LevelPlay play, System.Numerics.Vector3 at, bool held)
+    {
+        var camera = play.Camera;
+        var projected = Xna.Vector4.Transform(new Xna.Vector4(at.X, at.Y, at.Z, 1), camera.View * camera.Projection((float)Screen.X / Screen.Y));
+        var (x, y) = ((int)((projected.X / projected.W + 1) / 2 * Screen.X), (int)((1 - projected.Y / projected.W) / 2 * Screen.Y));
+        var button = held ? Xna.Input.ButtonState.Pressed : Xna.Input.ButtonState.Released;
+        var mouse = new Xna.Input.MouseState(x, y, 0, button, Xna.Input.ButtonState.Released, Xna.Input.ButtonState.Released,
+            Xna.Input.ButtonState.Released, Xna.Input.ButtonState.Released);
+        return new ControlFrame(new Xna.Input.KeyboardState(), mouse, new Xna.Input.KeyboardState(), mouse);
+    }
+
+    /// <summary>Ticks with the left button held over a point beside the avatar (or none held).</summary>
+    private static void Run(LevelPlay play, float seconds, float right = 0)
     {
         for (var t = 0f; t < seconds - 1e-4f; t += Tick)
         {
-            play.Tick(Tick, right, forward);
+            var avatar = play.Player.Avatar!;
+            play.Tick(Tick, Mouse(play, avatar.Position + new System.Numerics.Vector3(right == 0 ? 0.01f : 3 * right, 0, 0), held: right != 0), Screen);
         }
     }
 
     [Fact]
-    public void TheWizard_Walks_AndTheCameraFollowsIt()
+    public void TheWizard_WalksToTheCursorWhileMoveIsHeld_AndTheCameraFollowsIt()
     {
         using var play = Play();
         play.Start();
@@ -62,7 +79,7 @@ public class LevelPlayTests
     {
         using var play = Play("""<Trigger id="hold"><Then><disableInput/></Then></Trigger>""");
         play.Start();
-        play.Tick(Tick, 0, 0);                                                                     // the scripts run: the hold is on
+        play.Tick(Tick);                                                                           // the scripts run: the hold is on
         var at = play.Player.Avatar!.Position.X;
 
         Run(play, 1, right: 1);

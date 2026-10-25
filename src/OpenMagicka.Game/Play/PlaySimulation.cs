@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework.Input;
 using OpenMagicka.Content.Levels;
 using OpenMagicka.Engine;
 using OpenMagicka.Engine.Cameras;
+using OpenMagicka.Engine.Input;
 using OpenMagicka.Engine.Threading;
 
 namespace OpenMagicka.Game.Play;
@@ -32,7 +33,8 @@ public sealed class PlayFrame
 }
 
 /// <summary>
-/// The level at play on the logic thread: WASD (or the arrows) walk the wizard, Escape quits. The level
+/// The level at play on the logic thread: the player's keyboard and mouse, or its pad (the one last touched), drive the wizard (both ticks of a
+/// focused window are needed, so nothing is pressed by a focus coming back), Escape quits. The level
 /// starts on the first tick. An exception stops the level (the frame says why) rather than the game.
 /// </summary>
 public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation<PlayFrame>
@@ -40,6 +42,8 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
     private readonly IGameHost host = host ?? throw new ArgumentNullException(nameof(host));
     private readonly LevelPlay play = play ?? throw new ArgumentNullException(nameof(play));
     private GameCamera previous = GameCamera.Initial;
+    private InputState last;
+    private bool usingPad, wasUsingPad;
     private bool started;
     private string? error;
 
@@ -65,16 +69,39 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
                 previous = play.Camera;
                 return;
             }
-            var (right, forward) = input.IsActive
-                ? (Axis(keys, Keys.D, Keys.A) + Axis(keys, Keys.Right, Keys.Left), Axis(keys, Keys.W, Keys.S) + Axis(keys, Keys.Up, Keys.Down))
-                : (0f, 0f);
-            play.Tick((float)dt, Math.Clamp(right, -1, 1), Math.Clamp(forward, -1, 1));
+            var frame = input.IsActive && last.IsActive ? new ControlFrame(input.Keyboard, input.Mouse, last.Keyboard, last.Mouse) : (ControlFrame?)null;
+            usingPad = Device(input, last, usingPad);
+            var pad = frame is not null && usingPad ? new PadFrame(input.Pad, last.Pad, play.PadBindings) : (PadFrame?)null;
+            last = input;
+            if (play.Player.Avatar is { IsDead: false } avatar && (frame is null || usingPad != wasUsingPad))
+            {
+                ControlTargets.LetGo(avatar);                                 // the window lost focus, or the other device took over
+                play.Controls.Reset();
+                play.Pad.Reset();
+            }
+            wasUsingPad = usingPad;
+            play.Tick((float)dt, frame, input.Screen, pad);
         }
         catch (Exception e) when (e is not (OutOfMemoryException or StackOverflowException or AccessViolationException))
         {
             error = e.Message;
             Console.Error.WriteLine($"OpenMagicka: the level stopped: {e}");
         }
+    }
+
+    /// <summary>
+    /// Which device drives the player: the one last touched (a pad's button or a stick past its dead zone; a
+    /// key, a mouse button, the wheel or the mouse moving), so the two never fight; a pad unplugged gives way.
+    /// </summary>
+    public static bool Device(InputState input, InputState last, bool usingPad)
+    {
+        var pad = input.Pad;
+        var padTouched = pad.IsConnected && (pad.Buttons != last.Pad.Buttons || pad.ThumbSticks.Left.Length() > GamePadControl.DeadZone
+            || pad.ThumbSticks.Right.Length() > GamePadControl.GestureRest || pad.Triggers.Left >= PadBindings.Held || pad.Triggers.Right >= PadBindings.Held);
+        var keysTouched = input.Keyboard.GetPressedKeys().Length > 0 || input.Mouse.LeftButton == ButtonState.Pressed
+            || input.Mouse.RightButton == ButtonState.Pressed || input.Mouse.MiddleButton == ButtonState.Pressed
+            || input.Mouse.X != last.Mouse.X || input.Mouse.Y != last.Mouse.Y || input.Mouse.ScrollWheelValue != last.Mouse.ScrollWheelValue;
+        return pad.IsConnected && (padTouched || (usingPad && !keysTouched));
     }
 
     public void WriteFrame(PlayFrame frame, FrameTiming timing)
@@ -92,6 +119,4 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         frame.Error = error;
     }
 
-    private static float Axis(KeyboardState keys, Keys positive, Keys negative) =>
-        (keys.IsKeyDown(positive) ? 1 : 0) - (keys.IsKeyDown(negative) ? 1 : 0);
 }

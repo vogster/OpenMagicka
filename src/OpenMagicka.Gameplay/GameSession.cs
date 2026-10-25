@@ -29,6 +29,9 @@ public sealed class Player
     /// <summary>The player's wizard in the level, alive or dead; null when it has none.</summary>
     public Character? Avatar { get; set; }
 
+    /// <summary>The magick the player has picked in its book (the HUD shows it; the wheel or the pad change it).</summary>
+    public MagickType SelectedMagick { get; set; }
+
     /// <summary>A revival is on its way to this player.</summary>
     public bool Ressing { get; internal set; }
 

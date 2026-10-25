@@ -1014,6 +1014,72 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
   variants, Invisible). Loaded via Win32 `LoadCursorFromFile`, switched via
   `Form.Cursor`. In PlayState the cursor is confined to the window (`Cursor.Clip`).
 
+### 9.1 Ours: the controls (OM-31)
+
+Ours is `OpenMagicka.Engine.Input`; the game passes each tick's input to the first player's controls (§16). The
+render thread polls the keyboard, the mouse, the window's size and the first pad (`InputState`); the logic thread
+reads them through the bindings, a press being down this tick and up the last.
+
+**Bindings** (`ControlBindings`): the 17 functions with the original's defaults (the table above).
+- A key or button bound anew leaves the function that had it unbound.
+- Escape, the Windows keys and the menu key cannot be bound.
+- They are kept in our own file (JSON), each read binding taken as bound anew; a file naming no control fails.
+  Importing the original's `Settings.sav` comes with the settings menu (OM-53).
+- The pad's 24 functions (`PadBindings`) have the original's defaults:
+  - the left stick moves and the right one gestures;
+  - A attacks, B boosts, X uses, Y is the special, the right shoulder blocks;
+  - the right trigger casts Force, the left one Area;
+  - the pad's down and up pick the next and previous magick;
+  - Start pauses, Back is the inventory, the right stick's click shows the spell wheel.
+- A trigger or a stick counts as held from half way.
+
+**Elements** (`SpellCombos`, `ElementCooldowns`, SPELLS.md §1.2):
+- An element is a pair of directions through the player's spell tree: a direction with no branch drops the oldest
+  kept, and an element the tutorial forbids clears the kept ones.
+- An element key gives its pair once its 0.125 s cooldown is over, and not while the tutorial forbids it. The
+  cooldowns stand still in a cutscene.
+- An avatar in its scripted events or charging takes no direction.
+
+**Keyboard and mouse** (`KeyboardMouseControl`), as the original's controller:
+- The cursor's ray, from the camera's eye through the screen point to the far plane, crosses the level at the
+  avatar's height. The avatar faces that point, and walks to it while Move is held.
+- A press of Move on something it can use (`ControlTargets`) uses it when in reach, or walks to it and uses it once
+  there. Under the cursor it can use:
+  - a character with a dialog on its side, within 3 (its dialog starts over it, OM-49);
+  - an item or a book, within its pick-up reach;
+  - a point of interest, within its locator's radius.
+- The original warps the cursor to stay on the target; ours keeps aiming at it, where it is now.
+- As the original, the walk follows Move's state of the tick before, and a walk to a target used goes on while Move
+  is held. Shift stops the walk.
+- Cast casts Force, or Area with Shift. Each needs the tutorial's leave, and elements queued or push allowed.
+- Move with Shift attacks: a Weapon cast with elements queued, else a melee swing. A heavy weapon swings its two clips
+  in turn, another's are picked at random; a held gun or a charged weapon keeps attacking.
+- CastSelf casts on oneself, or with no elements uses the staff's ability.
+- Boost boosts or casts the magick; Block blocks while held.
+- The wheel picks the previous or next magick the players may cast, round past none (`Player.SelectedMagick`, for the
+  HUD).
+- Inventory waits for the HUD (OM-54).
+
+**Pad** (`GamePadControl`), as the original's:
+- The left stick walks the avatar as fast as it is pushed; under a quarter, it stands.
+- The right stick's gesture gives the elements:
+  - between 0.3 and 0.6 it only shows a way on the wheel;
+  - past 0.6, within 0.5 of a way, it starts a gesture;
+  - turned across to another way, it gives the pair, and holds until the stick comes back under 0.3.
+- X uses what is ahead (squarely within about 45°): a character to talk to within 3, an item or a book in reach, a
+  point of interest in reach (or one it stands on).
+- The others are as the keyboard's.
+- One pad drives the first player; more players and their pads are OM-57.
+
+**Both:**
+- While the stage holds input or a cutscene runs, the avatar only stands. The window losing focus or the other
+  device taking over does the same. Every cast button and the block let go, and a press marked or a gesture under way
+  is forgotten (ours: the original leaves a cast held through them, a beam burning on). A scene change or a
+  checkpoint's restart forgets them too.
+- A focus coming back presses nothing.
+- Of the keyboard with the mouse and the pad, the one touched last drives the player, so the two never fight.
+- Text input (chat, names) and the cursors' own pictures wait for the menus (OM-53, OM-56).
+
 ---
 
 ## 10. Localization
@@ -1280,10 +1346,10 @@ window instead of the viewer; with `--screenshot` it saves a frame once the scen
 The code is `OpenMagicka.Game.Play`.
 
 **Logic thread** (`PlaySimulation` over `LevelPlay`):
-- The level is a `PlayedLevel` (LEVELS_TRIGGERS.md §6) with one player, a wizard (`data/characters/wizard`). Until the
-  controls come (OM-31), WASD or the arrows walk it: right is +X, forward is −Z, as on the screen. A held input (a
-  cutscene's, a script's) or its own scripted events stop the walk. The level starts on the first tick; an exception
-  stops the level (the title says why) rather than the game.
+- The level is a `PlayedLevel` (LEVELS_TRIGGERS.md §6) with one player, a wizard (`data/characters/wizard`), driven
+  by the player's controls (§9, OM-31): its keyboard and mouse, or its first pad, whichever was touched last. The
+  bindings come from `%AppData%/OpenMagicka/controls.json` when it is there. The level starts on the first tick; an
+  exception stops the level (the title says why) rather than the game.
 - Each tick runs the level, then its effects (`EffectDirector`), then the stage's camera (§6). The camera takes the
   scene's camera mesh and zoom (`Magnify`) when the scene changes, and stands at once over the players there. It follows
   the living players' centre (their feet when on the ground) or the entity a script follows. The enemies' pull and the

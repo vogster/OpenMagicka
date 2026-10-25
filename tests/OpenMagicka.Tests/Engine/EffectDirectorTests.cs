@@ -60,17 +60,17 @@ public class EffectDirectorTests
         Assert.Equal("fx_torch", torch.Effect);
         Assert.Equal(new Numerics.Vector3(3, 1, 0), torch.World.Translation);
 
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         Assert.Contains(Drain(play), c => c is { Kind: EffectCommandKind.Move } && c.Id == torch.Id);
         play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("off"), null);
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         Assert.Contains(Drain(play), c => c is { Kind: EffectCommandKind.Stop } && c.Id == torch.Id);
 
         play.Scene.Scripts.ExecuteTrigger(ScriptScene.Hash("spark"), null);
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         var spark = Assert.Single(Drain(play), c => c.Kind == EffectCommandKind.Start);
         play.Channel.Ended.Enqueue(spark.Id);                                                       // it played out
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         Assert.False(play.Scene.Scripts.Effects.Find(ScriptScene.Hash("spark"))!.IsActive);
     }
 
@@ -87,7 +87,7 @@ public class EffectDirectorTests
         Drain(play);
 
         prop.Damage(new DamageEntry(AttackProperties.Damage, OpenMagicka.Gameplay.Spells.Elements.Earth, 500, 1), null, prop.Position);
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
 
         var gibs = play.World.Entities.Entities.OfType<Gib>().ToArray();
         Assert.Equal(2, gibs.Length);                                                            // the one with no model is left out
@@ -108,7 +108,7 @@ public class EffectDirectorTests
         play.Start();
 
         Raise(play, play.Player.Avatar!, new CameraShakeCue(Numerics.Vector3.Zero, 3, 0.5f));
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
 
         Assert.Equal(3, play.Camera.ShakeMagnitude);
     }
@@ -124,15 +124,16 @@ public class EffectDirectorTests
 
         Raise(play, avatar, new EffectCue("fx_aura", "root", Attached: true, aura));
         Raise(play, avatar, new EffectCue("fx_flash", "root", Attached: true, flash));
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         var started = Drain(play).Where(c => c.Kind == EffectCommandKind.Start).ToDictionary(c => c.Effect!, c => c.Id);
         Assert.Equal(before + 2, play.Effects.Running);
-        play.Tick(Tick, 1, 0);
+        avatar.Steer(new Numerics.Vector3(1, 0, 0), walk: true);
+        play.Tick(Tick);
         Assert.Contains(Drain(play), c => c.Kind == EffectCommandKind.Move && c.Id == started["fx_aura"]);
 
         Raise(play, avatar, new EffectEndCue(aura));
         play.Channel.Ended.Enqueue(started["fx_flash"]);                                           // the flash played out
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
 
         var last = Drain(play);
         Assert.Contains(last, c => c.Kind == EffectCommandKind.Stop && c.Id == started["fx_aura"]);
@@ -148,16 +149,16 @@ public class EffectDirectorTests
             <Trigger id="dark" autorun="false"><Then><fade fadeIn="true" time="0.1"/></Then></Trigger>
             """);
         play.Start();
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
         play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("dark"), null);
         for (var i = 0; i < 20; i++)
         {
-            play.Tick(Tick, 0, 0);
+            play.Tick(Tick);
         }
         Assert.Equal(1, play.Cover.Amount, 3);
 
         Assert.True(play.Level.RestartAtCheckpoint());
-        play.Tick(Tick, 0, 0);
+        play.Tick(Tick);
 
         Assert.Equal(0, play.Cover.Amount, 3);
     }
@@ -206,7 +207,7 @@ public class EffectDirectorTests
         play.Start();
         for (var i = 0; i < 60; i++)
         {
-            play.Tick(Tick, 0, 0);
+            play.Tick(Tick);
             stage.Step(Tick);
         }
 
