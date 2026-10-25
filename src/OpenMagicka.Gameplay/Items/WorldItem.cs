@@ -108,6 +108,18 @@ public sealed class WorldItem : Entity
 
     public override float Radius { get; }
 
+    /// <summary>Where its model's origin is now (its box's centre and turn, the model's centre undone): what the renderer draws at.</summary>
+    public Matrix4x4 Transform
+    {
+        get
+        {
+            var turn = Body.IsRemoved || world.IsDisposed ? Quaternion.Identity : Body.Orientation;
+            var at = Matrix4x4.CreateFromQuaternion(turn);
+            at.Translation = Position - Vector3.Transform(Item.Template.Bounds?.Centre ?? Vector3.Zero, turn);
+            return at;
+        }
+    }
+
     public override bool IsDead => taken;
 
     public override bool IsRemovable => taken;

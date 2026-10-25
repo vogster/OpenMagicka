@@ -28,7 +28,8 @@ public static class PropTemplates
             content.MaxHitPoints,
             ItemTemplates.Resistances(content.Resistances),
             box,
-            [.. content.Gibs.Where(g => g.Model is not null).Select(g => new PropGib(g.Model!.Path, g.Mass, g.Scale))],
+            [.. content.Gibs.Select(g => (g, Path: g.Model is { } model ? Content.ContentFileSystem.Combine(asset, model.Path) : null)).Where(p => p.Path is not null)
+                .Select(p => new PropGib(p.Path!, p.g.Mass, p.g.Scale))],
             content.GibTrailEffect,
             [.. content.Effects.Select(e => new PropEffect(e.Effect, LevelNavigation.ToNumerics(e.Transform)))],
             ItemTemplates.Events(content.Events),

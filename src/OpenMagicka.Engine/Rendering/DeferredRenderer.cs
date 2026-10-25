@@ -11,7 +11,14 @@ namespace OpenMagicka.Engine.Rendering;
 /// liquids' waves and flow have run.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
-    float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null);
+    float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null);
+
+/// <summary>
+/// A model drawn at a place this frame (a character, a prop, an item): its batches placed by the world
+/// matrix; a skinned one posed by its bones, which are in the world already (none: its bind pose at the
+/// place). The tint colours a character's skin.
+/// </summary>
+public sealed record ModelInstance(GpuLevel Model, Matrix World, Matrix[]? Bones = null, Vector3? Tint = null);
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
@@ -63,6 +70,7 @@ public sealed partial class DeferredRenderer : IDisposable
     private readonly GameEffect shading;
     private readonly GameEffect additive;
     private readonly GameEffect skinned;
+    private readonly Matrix[] instancePalette;
     private readonly GameEffect water;
     private readonly GameEffect lava;
     private readonly GameEffect sky;
@@ -91,6 +99,7 @@ public sealed partial class DeferredRenderer : IDisposable
         (water, lava, sky) = (effects[9], effects[10], effects[11]);
         // Characters are shown in their bind pose: every skin transform is the identity.
         bindPose = Enumerable.Repeat(Matrix.Identity, skinned.Effect.Parameters["Bones"]?.Elements.Count ?? 0).ToArray();
+        instancePalette = new Matrix[bindPose.Length];
         // The techniques are used by index; a different effect fails here, so the viewer falls back.
         if (deferred.Effect.Techniques.Count <= RenderDeferredMaterial.Shadow || skinned.Effect.Techniques.Count <= SkinnedDeferredMaterial.Shadow
             || water.Effect.Techniques.Count <= LiquidMaterial.Shadow || lava.Effect.Techniques.Count <= LiquidMaterial.LavaShadow
@@ -203,7 +212,7 @@ public sealed partial class DeferredRenderer : IDisposable
         shade.SetValue("FogColor", frame.Fog.Color);
         quad.Draw(device, shading, BlendState.Opaque);
         DrawSky(device, level);
-        DrawAdditive(device, level, level.TextureFor);
+        DrawAdditive(device, level, level.TextureFor, frame.Models);
         if (particles is not null && frame.Particles is { } pool)
         {
             particles.Draw(device, pool, globals.View, globals.Projection, depth!);

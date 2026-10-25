@@ -1272,3 +1272,73 @@ Recommendation:
 13. **Physics.** First check the JigLibX license (§13). If unclear, a minimal
     custom solver or BepuPhysics with an adapter for `CharacterBody` (capsule,
     ground materials by primitive index, water and ice by per-vertex freeze).
+
+## 16. Ours: the game playing a level (OM-75)
+
+`OpenMagicka --level <name>` (a level's file name, any case, or its path) plays a level of the game's content in the
+window instead of the viewer; with `--screenshot` it saves a frame once the scene and the effects are in, and exits.
+The code is `OpenMagicka.Game.Play`.
+
+**Logic thread** (`PlaySimulation` over `LevelPlay`):
+- The level is a `PlayedLevel` (LEVELS_TRIGGERS.md §6) with one player, a wizard (`data/characters/wizard`). Until the
+  controls come (OM-31), WASD or the arrows walk it: right is +X, forward is −Z, as on the screen. A held input (a
+  cutscene's, a script's) or its own scripted events stop the walk. The level starts on the first tick; an exception
+  stops the level (the title says why) rather than the game.
+- Each tick runs the level, then its effects (`EffectDirector`), then the stage's camera (§6). The camera takes the
+  scene's camera mesh and zoom (`Magnify`) when the scene changes, and stands at once over the players there. It follows
+  the living players' centre (their feet when on the ground) or the entity a script follows. The enemies' pull and the
+  rest of §6's inputs come with OM-68.
+- The level's requests are taken each tick (for the sound, the dialogs and the HUD, OM-49 and OM-51). A scene change or
+  a checkpoint's restart stops every effect that followed something of the old world, and the camera stands over the
+  players at once.
+- The screen's cover is stepped. A script's fade runs from where the cover is to all (in) or none (out) over its time,
+  in its colour. A fade cleared (a checkpoint's restart) uncovers the screen. A scene change's transition covers the
+  screen over its time out and uncovers it over its time in. The stronger of the two is drawn.
+- Each frame is written with the camera at the last two ticks, the scene (its model, name and settings), the cover,
+  and the models to draw (`EntityPictures`):
+  - the characters at their root, posed by their bones (already in the world);
+  - the items in their hands;
+  - the physics props and the lying items at their transforms;
+  - the books of magick and the debris.
+
+  A template's model comes from `TemplateLibrary.LookOf`:
+  - a character's first model variant (its tint shows on the skin);
+  - an item's model;
+  - a prop's own file (its model is embedded there).
+
+**Effects** (`EffectDirector` → `EffectChannel` → `EffectStage`): frames may be skipped, so the logic thread's effect
+commands (start an effect by name at a place, move it, stop it, by number) go through a queue the renderer drains every
+frame. Each effect that plays out goes back on a queue, so the scene hears of it (`SceneEffects.Ended`).
+- **The scene's named effects** start with the scene (the level model's and its parts', LEVELS_TRIGGERS.md §9.2), and
+  follow their place each tick, a beam scaled to its reach. A stopped one stops; a restarted or replaced one starts
+  anew. Leaving a scene stops all of its effects.
+- **One-shot effects at a point:** a `WorldEffectCue`, a non-following `ItemEffectCue`, a non-attached `EffectCue`.
+- **Following effects** last until their end cue, until their source is gone, or until they play out, and a new one
+  of the same source replaces the old:
+  - an `ItemEffectCue` that follows its missile, its item's tip or its entity (another source, an item's passive or a
+    spray, cannot be followed: its effect stays where it began, OM-76);
+  - an attached `EffectCue` on its bone;
+  - a `PropEffectCue` on its prop, ended with the rest of the prop's by `PropEffectsEndCue`.
+- **Debris:** a `GibsCue` breaks a prop into `Gib`s. Each piece:
+  - is its model at its scale, a box as big as the model's bounding sphere;
+  - flies off a random way, three times as far up as across and always up, at its mass × 1.25 (the original takes the
+    mass of the cached piece it reuses), spinning against that way at 5;
+  - lives 10 to 20 s; characters pass through it;
+  - trails the prop's gib effect, unless frozen: frozen pieces are drawn icy and trail nothing.
+- **Camera shake:** a `CameraShakeCue` shakes the camera.
+- **Left to other tasks:** sounds (OM-51), decals (OM-66), and the beams', lightning's, blasts', tracers', shields',
+  barriers' and missiles' own drawing (OM-76).
+- An effect the library lacks is said once and counted as played out.
+
+**Render thread** (`PlayGame`):
+- The scene's model loads in the background when the level goes to it (`GpuLevel`), and the entities' models load the
+  same way on first sight (`ModelCache`).
+- The frame is drawn with the original pipeline (§3) through the game camera, interpolated between the two ticks. The
+  sun's shadows centre on the camera's ground point. The scene's fog and post settings apply, then the cover is drawn
+  over everything.
+- Models are `ModelInstance`s in the `DeferredFrame`, drawn through the shadow, depth and G-buffer passes like the
+  level's batches (their additive parts in the additive pass):
+  - a static batch at its model transform × the instance's place;
+  - a skinned one with the instance's bones as its palette (none: the bind pose at the place; bones past the effect's
+    count are left out); a posed one is not culled by its bind pose's bounds.
+- Entities are drawn as of the last tick, not interpolated (OM-76).

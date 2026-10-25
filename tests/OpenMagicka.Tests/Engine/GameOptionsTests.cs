@@ -72,6 +72,15 @@ public sealed class GameOptionsTests : IDisposable
     }
 
     [Fact]
+    public void Level_NeedsTheContent_AndIsNotForTheEffectCheck()
+    {
+        Assert.Equal("wizard_castle", GameOptions.Parse(["--content", root, "--level", "wizard_castle"], NoEnvironment).Level);
+        Assert.Throws<ArgumentException>(() => GameOptions.Parse(["--level", "wizard_castle"], NoEnvironment));
+        Assert.Throws<ArgumentException>(() => GameOptions.Parse(["--content", root, "--check-effects", "--level", "x"], NoEnvironment));
+        Assert.Throws<ArgumentException>(() => GameOptions.Parse(["--content", root, "--level"], NoEnvironment));
+    }
+
+    [Fact]
     public void AContentFolderThatDoesNotExist_IsRejected()
     {
         Assert.Throws<DirectoryNotFoundException>(() => GameOptions.Parse(["--content", Path.Combine(root, "nope")], NoEnvironment));

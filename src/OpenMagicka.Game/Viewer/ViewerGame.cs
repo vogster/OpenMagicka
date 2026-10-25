@@ -142,7 +142,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         // A few frames in, the camera has framed the scene: the shot shows it.
         if (screenshot is not null && level is not null && deferredLoading is null && particlesStarted && ++framesShown == ScreenshotAfterFrames)
         {
-            SaveScreenshot(screenshot);
+            ExitCode = Screenshots.Save(GraphicsDevice, screenshot) ? ExitCode : 1;
             Console.WriteLine($"{title}; saved {screenshot}");
             RequestExit();
         }
@@ -289,31 +289,6 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         {
             title = text;
             Window.Title = text;
-        }
-    }
-
-    /// <summary>Saves the back buffer as an opaque PNG (textures with alpha leave alpha below 1 in it).</summary>
-    private void SaveScreenshot(string path)
-    {
-        var width = GraphicsDevice.PresentationParameters.BackBufferWidth;
-        var height = GraphicsDevice.PresentationParameters.BackBufferHeight;
-        var pixels = new Color[width * height];
-        GraphicsDevice.GetBackBufferData(pixels);
-        for (var i = 0; i < pixels.Length; i++)
-        {
-            pixels[i].A = 255;
-        }
-        using var texture = new Texture2D(GraphicsDevice, width, height);
-        texture.SetData(pixels);
-        try
-        {
-            using var file = File.Create(path);
-            texture.SaveAsPng(file, width, height);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine($"OpenMagicka: cannot save {path}: {e.Message}");
-            ExitCode = 1;
         }
     }
 }

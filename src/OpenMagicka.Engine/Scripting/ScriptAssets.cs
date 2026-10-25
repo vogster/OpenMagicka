@@ -38,7 +38,16 @@ public sealed class ContentScriptAssets(TemplateLibrary library) : IScriptAssets
     {
         try
         {
-            return library.Loader.Load(asset).Root is Content.Magicka.PhysicsEntityTemplateContent content ? PropTemplates.From(content, asset) : null;
+            if (library.Loader.Load(asset).Root is not Content.Magicka.PhysicsEntityTemplateContent content)
+            {
+                return null;
+            }
+            var prop = PropTemplates.From(content, asset);
+            if (content.Model is not null)
+            {
+                library.Remember(prop, new Rendering.ModelLook(asset, System.Numerics.Vector3.One));   // the model is in the prop's own file
+            }
+            return prop;
         }
         catch (Exception e) when (e is InvalidDataException or IOException or ArgumentException or NotSupportedException or FormatException)
         {

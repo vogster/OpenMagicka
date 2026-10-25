@@ -107,6 +107,7 @@ public sealed class GpuLevel : IDisposable
                 .. LevelLiquids.Batches(level.Liquids),
             ]
             : file.Root is ModelContent or SkinnedModelContent ? ModelMeshes.ForModel(file)
+            : file.Root is PhysicsEntityTemplateContent { Model: { } prop } ? ModelMeshes.ForModel(prop, file.SharedResources)
             : throw new InvalidDataException($"{modelAsset} is neither a level model nor a model");
         // Every vertex gets the elements its effect reads (OM-63).
         var content = read.Select(b => VertexPadding.Complete(b, EffectInputs.For(b))).ToArray();

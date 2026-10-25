@@ -147,6 +147,18 @@ public sealed class PhysicsBody
         }
     }
 
+    /// <summary>How fast it turns, in radians per second about each axis.</summary>
+    public Vector3 AngularVelocity
+    {
+        get => Body.AngularVelocity.ToNumerics();
+        set
+        {
+            var live = Body;
+            live.AngularVelocity = Vectors.ThrowIfNotFinite(value, nameof(AngularVelocity)).ToJitter();
+            live.SetActivationState(true);
+        }
+    }
+
     public float Mass => Body.Mass;
 
     /// <summary>A new mass, its inertia following (armour makes a character heavy).</summary>

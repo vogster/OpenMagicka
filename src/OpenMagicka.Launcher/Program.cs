@@ -1,4 +1,5 @@
 using OpenMagicka.Game;
+using OpenMagicka.Game.Play;
 using OpenMagicka.Game.Viewer;
 
 namespace OpenMagicka.Launcher;
@@ -28,11 +29,30 @@ internal static class Program
         }
         // With the game's content the level viewer runs (the game itself comes with M3);
         // --check-effects and running without content use the placeholder game.
+        if (options is { ContentDirectory: { } levelContent, Level: { } level })
+        {
+            return RunLevel(levelContent, level, options.Screenshot);
+        }
         if (options.ContentDirectory is { } content && !options.CheckEffects)
         {
             return RunViewer(content, options);
         }
         using var game = new OpenMagickaGame(options);
+        game.Run();
+        return game.ExitCode;
+    }
+
+    private static int RunLevel(string content, string name, string? screenshot)
+    {
+        var files = new OpenMagicka.Content.ContentFileSystem(content);
+        if (PlayGame.FindLevel(files, name) is not { } path)
+        {
+            Console.Error.WriteLine($"OpenMagicka: no level named \"{name}\"");
+            return 2;
+        }
+        var loader = new OpenMagicka.Content.ContentLoader(files, OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka);
+        var definition = OpenMagicka.Content.Levels.LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path);
+        using var game = new PlayGame(loader, LevelPlay.Open(definition, files, loader), Path.GetFileNameWithoutExtension(path), screenshot);
         game.Run();
         return game.ExitCode;
     }
