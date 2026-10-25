@@ -43,6 +43,9 @@ public sealed class SelfShield : ISelfShield
 
     public float MaxHitPoints { get; }
 
+    /// <summary>How long since a blow last took from it (its HUD bar flashes; none yet: infinite).</summary>
+    public float TimeSinceDamage { get; private set; } = float.PositiveInfinity;
+
     public bool IsActive => HitPoints > 0;
 
     public bool IsSolid => IsArmour;
@@ -63,7 +66,7 @@ public sealed class SelfShield : ISelfShield
             {
                 if (damage.Amount * damage.Magnitude >= 0)
                 {
-                    HitPoints -= damage.Amount * damage.Magnitude;
+                    Take(damage.Amount * damage.Magnitude);
                 }
                 damage = physical ? damage with { Attack = AttackProperties.Knockback, Magnitude = BubbleKnockbackMagnitude } : damage with { Attack = 0 };
             }
@@ -79,7 +82,7 @@ public sealed class SelfShield : ISelfShield
             var through = damage.Amount * damage.Magnitude - HitPoints;
             if (damage.Amount * damage.Magnitude >= 0)
             {
-                HitPoints -= damage.Amount * damage.Magnitude;
+                Take(damage.Amount * damage.Magnitude);
             }
             if (through > 0)
             {
@@ -103,7 +106,7 @@ public sealed class SelfShield : ISelfShield
         {
             if (amount >= 0 || (element & Elements.Shield) != 0)
             {
-                HitPoints -= amount;
+                Take(amount);
             }
             return amount;
         }
@@ -115,12 +118,22 @@ public sealed class SelfShield : ISelfShield
         {
             amount *= 1 + spell.Ice;
         }
-        HitPoints -= amount;
+        Take(amount);
         return amount;
+    }
+
+    private void Take(float amount)
+    {
+        HitPoints -= amount;
+        if (amount > 0)
+        {
+            TimeSinceDamage = 0;
+        }
     }
 
     public void Update(Character owner, float dt)
     {
+        TimeSinceDamage += dt;
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);
         if (IsArmour)
         {

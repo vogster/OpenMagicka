@@ -21,6 +21,9 @@ public readonly struct GuiTextVertex(Vector2 position, Vector2 uv, Vector4 colou
     VertexDeclaration IVertexType.VertexDeclaration => Declaration;
 }
 
+/// <summary>A quad of an atlas: its corners in pixels, its atlas corners (0…1), its colour.</summary>
+public readonly record struct GuiSprite(Vector2 TopLeft, Vector2 BottomRight, Vector2 UvTopLeft, Vector2 UvBottomRight, Vector4 Colour);
+
 /// <summary>A font with its atlas on the GPU.</summary>
 public sealed record GuiFont(BitmapFont Metrics, Texture2D Atlas) : IDisposable
 {
@@ -42,7 +45,7 @@ public sealed class GuiText(GameEffect effect)
     {
         ArgumentNullException.ThrowIfNull(effect);
         EffectChecks.Require(effect, ["TransformToScreen", "Transform", "Color", "TextureEnabled", "VertexColorEnabled", "Texture", "TextureScale",
-            "TextureOffset", "ScaleToHDR"]);
+            "TextureOffset", "ScaleToHDR", "Saturation"]);
         return effect;
     }
 
@@ -68,12 +71,58 @@ public sealed class GuiText(GameEffect effect)
         parameters.SetValue("Transform", Matrix.Identity);
         parameters.SetValue("Color", Vector4.One);
         parameters.SetValue("TextureEnabled", false);
+        parameters.SetValue("Saturation", 1f);
         parameters.SetValue("VertexColorEnabled", true);
         parameters.SetValue("ScaleToHDR", true);
         foreach (var pass in effect.Effect.CurrentTechnique.Passes)
         {
             pass.Apply();
             device.DrawUserPrimitives(PrimitiveType.TriangleList, corners, 0, corners.Length / 3);
+        }
+    }
+
+    /// <summary>Textured quads of the atlas, each its corners in pixels, its atlas corners (0…1) and its colour.</summary>
+    /// <param name="saturation">Their colour's saturation (1 as it is, 0 grey).</param>
+    public void DrawSprites(GraphicsDevice device, Texture2D atlas, IReadOnlyList<GuiSprite> sprites, int width, int height, float saturation = 1)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(atlas);
+        ArgumentNullException.ThrowIfNull(sprites);
+        if (sprites.Count == 0)
+        {
+            return;
+        }
+        if (vertices.Length < sprites.Count * 4)
+        {
+            vertices = new GuiTextVertex[sprites.Count * 4];
+            indices = new short[sprites.Count * 6];
+        }
+        for (var i = 0; i < sprites.Count; i++)
+        {
+            var (a, b, uvA, uvB, colour) = sprites[i];
+            vertices[i * 4] = new GuiTextVertex(a, uvA, colour);
+            vertices[i * 4 + 1] = new GuiTextVertex(new Vector2(b.X, a.Y), new Vector2(uvB.X, uvA.Y), colour);
+            vertices[i * 4 + 2] = new GuiTextVertex(b, uvB, colour);
+            vertices[i * 4 + 3] = new GuiTextVertex(new Vector2(a.X, b.Y), new Vector2(uvA.X, uvB.Y), colour);
+            var (first, at) = ((short)(i * 4), i * 6);
+            (indices[at], indices[at + 1], indices[at + 2], indices[at + 3], indices[at + 4], indices[at + 5]) =
+                (first, (short)(first + 1), (short)(first + 2), (short)(first + 2), (short)(first + 3), first);
+        }
+        var parameters = new FnaEffectParameters(effect.Effect);
+        parameters.SetValue("TransformToScreen", ToScreen(width, height));
+        parameters.SetValue("Transform", Matrix.Identity);
+        parameters.SetValue("Color", Vector4.One);
+        parameters.SetValue("TextureEnabled", true);
+        parameters.SetValue("VertexColorEnabled", true);
+        parameters.SetValue("ScaleToHDR", true);
+        parameters.SetValue("TextureScale", Vector2.One);
+        parameters.SetValue("TextureOffset", Vector2.Zero);
+        parameters.SetValue("Texture", atlas);
+        parameters.SetValue("Saturation", saturation);
+        foreach (var pass in effect.Effect.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            device.DrawUserIndexedPrimitives(PrimitiveType.TriangleList, vertices, 0, sprites.Count * 4, indices, 0, sprites.Count * 2);
         }
     }
 
@@ -118,6 +167,7 @@ public sealed class GuiText(GameEffect effect)
         parameters.SetValue("TextureScale", Vector2.One);
         parameters.SetValue("TextureOffset", Vector2.Zero);
         parameters.SetValue("Texture", font.Atlas);
+        parameters.SetValue("Saturation", 1f);
         foreach (var pass in effect.Effect.CurrentTechnique.Passes)
         {
             pass.Apply();

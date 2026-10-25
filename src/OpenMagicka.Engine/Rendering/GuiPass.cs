@@ -45,7 +45,7 @@ public sealed partial class GuiPass : IDisposable
         ArgumentNullException.ThrowIfNull(gpu);
         ArgumentNullException.ThrowIfNull(loader);
         Texture2DContent Picture(string asset) => loader.LoadUncached(asset).Root as Texture2DContent ?? throw new InvalidDataException($"{asset} is not a picture");
-        var (frame, pad, keyboard) = (Picture(Frame), Picture(PadPrompt), Picture(KeyboardPrompt));
+        var (frame, pad, keyboard, hud, digits) = (Picture(Frame), Picture(PadPrompt), Picture(KeyboardPrompt), Picture(HudAtlas), Picture(DigitsAtlas));
         var fonts = FontNames.ToDictionary(n => n, n =>
         {
             var own = $"Languages/{language}/Font/{n}";
@@ -59,7 +59,7 @@ public sealed partial class GuiPass : IDisposable
         try
         {
             await Task.WhenAll(effects).ConfigureAwait(false);
-            return await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard], fonts)).ConfigureAwait(false);
+            return await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits], fonts)).ConfigureAwait(false);
         }
         catch
         {
@@ -100,7 +100,7 @@ public sealed partial class GuiPass : IDisposable
             var slices = new IndexBuffer(device, IndexElementSize.SixteenBits, indices.Length, BufferUsage.WriteOnly);
             made.Add(slices);
             slices.SetData(indices);
-            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2]));
+            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2])) { hud = textures[3], digits = textures[4] };
         }
         catch
         {
@@ -171,5 +171,7 @@ public sealed partial class GuiPass : IDisposable
         prompt.Dispose();
         padPrompt.Dispose();
         keyboardPrompt.Dispose();
+        hud.Dispose();
+        digits.Dispose();
     }
 }

@@ -103,12 +103,9 @@ public sealed partial class Character
             }
             return false;
         }
-        var before = SpellQueue;
-        (SpellQueue, var added) = SpellQueue.Conjure(element);
-        if (!ReferenceEquals(before, SpellQueue))
-        {
-            RaiseCue(new Animation.ConjureCue(element));
-        }
+        var (before, changes) = (SpellQueue, new List<QueueChange>());
+        (SpellQueue, var added) = SpellQueue.Conjure(element, changes: changes);
+        RaiseCue(new Animation.ConjureCue(element, changes, !ReferenceEquals(before, SpellQueue)));   // a full queue's refused element still pops on the HUD
         return added;
     }
 

@@ -88,6 +88,7 @@ public sealed partial class LevelPlay : IDisposable
         Effects = new EffectDirector(World, Level, Channel, gibShapes ?? (_ => null));
         Spells = new SpellVisuals(World, Effects, spellModels, Looks);
         SetUpDialogs(dialogs);
+        SetUpHud();
     }
 
     /// <summary>The effects passed to the renderer, and back.</summary>
@@ -188,6 +189,7 @@ public sealed partial class LevelPlay : IDisposable
         StepCutscene(dt, input, pad);
         StepDialogs(dt);
         StepPrompt(dt, input, pad is not null);
+        StepHud(dt, pad is not null);
         StepCamera(dt, snap: false);
         StepSound(dt);
         StepCover(dt);
@@ -297,6 +299,7 @@ public sealed partial class LevelPlay : IDisposable
         Spells.Dispose();
         Effects.Dispose();
         DisposeSound();
+        DisposeHud();
         Level.End();
         World.Dispose();
     }

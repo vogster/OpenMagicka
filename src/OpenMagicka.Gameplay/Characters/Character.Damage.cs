@@ -61,6 +61,11 @@ public sealed partial class Character
             return result;                                                    // deflected: statuses only
         }
         HitPoints = outcome.HitPoints;
+        if (outcome.Result.HasFlag(DamageResult.Damaged))
+        {
+            TimeSinceDamage = 0;
+            BlowsTaken++;
+        }
         Consequences(damage, outcome, attacker);
         if (outcome.Result.HasFlag(DamageResult.Killed))
         {
@@ -177,7 +182,12 @@ public sealed partial class Character
         {
             amount = shield.AbsorbOverTime(amount, element);
         }
-        HitPoints -= Statuses.Amplify(new StatusDamage(amount, element)).Amount;
+        var taken = Statuses.Amplify(new StatusDamage(amount, element)).Amount;
+        HitPoints -= taken;
+        if (taken > 0)
+        {
+            TimeSinceStatusDamage = 0;
+        }
     }
 
     /// <summary>

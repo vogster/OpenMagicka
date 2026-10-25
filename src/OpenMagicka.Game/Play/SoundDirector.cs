@@ -99,7 +99,7 @@ public sealed partial class SoundDirector : IDisposable
             case FootstepCue step when step.Material >= 0 && step.Material < FootstepCues.Length && FootstepCues[step.Material] is { } footstep:
                 Sounds.Play(SoundBanks.Footsteps, footstep, SoundPlace.At(step.Feet, step.Facing), ("Weight", step.Mass), ("WaterDepth", 0));
                 break;
-            case ConjureCue conjure when source is Character { IsPlayer: true } && ElementCue(conjure.Element) is { } element:
+            case ConjureCue { Taken: true } conjure when source is Character { IsPlayer: true } && ElementCue(conjure.Element) is { } element:
                 Sounds.Play(SoundBanks.UI, element);
                 break;
             case GunfireCue { Firing: true } fire when !guns.ContainsKey(fire.Source) && GunSound(fire.Source) is var (bank, name)

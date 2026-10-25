@@ -33,6 +33,9 @@ public readonly record struct CursorPick(Segment Ray, Vector3 Ground);
 public sealed class KeyboardMouseControl(ControlBindings bindings)
 {
     private readonly ControlBindings bindings = bindings ?? throw new ArgumentNullException(nameof(bindings));
+
+    /// <summary>The keys bound (the HUD names the element keys by them).</summary>
+    public ControlBindings Bindings => bindings;
     private readonly ElementCooldowns cooldowns = new();
     private object? pressedTarget, lockedTarget;
     private bool interactLock, walking;

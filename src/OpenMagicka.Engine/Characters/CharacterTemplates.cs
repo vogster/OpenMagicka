@@ -64,6 +64,7 @@ public static class CharacterTemplates
             MaxPanic: stats.MaxPanic)
         {
             Sounds = ItemTemplates.Sounds(content.Sounds),
+            HealthBars = Math.Max(1, stats.NumberOfHealthBars),
         };
     }
 }

@@ -78,6 +78,9 @@ public sealed record CharacterTemplate(
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
 
+    /// <summary>How many health bars the HUD stacks under it (a boss-like foe's 2 or more: the full ones grey, the last its share).</summary>
+    public int HealthBars { get; init; } = 1;
+
     /// <summary>What it sounds of while it lives (a hum, an engine): up to 4 cues, lowered (docs/engine/ARCHITECTURE.md §8).</summary>
     public IReadOnlyList<TemplateSound> Sounds { get; init; } = [];
 

@@ -128,6 +128,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         play.Spells.WriteModels(frame.Models);
         play.Spells.Write(frame.Spells);
         frame.Gui.Clear();
+        play.WriteHud(frame.Gui);
         play.Dialogs?.Write(frame.Gui);
         play.WriteCutscene(frame.Gui);
         frame.Gui.Prompt = play.Prompt;

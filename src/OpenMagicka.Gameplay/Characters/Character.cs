@@ -92,6 +92,14 @@ public sealed partial class Character : Entity
 
     public ISelfShield? SelfShield { get; set; }
 
+    /// <summary>How long since a blow last hurt it, and since a status last did (its HUD bar flashes; none yet: infinite).</summary>
+    public float TimeSinceDamage { get; private set; } = float.PositiveInfinity;
+
+    public float TimeSinceStatusDamage { get; private set; } = float.PositiveInfinity;
+
+    /// <summary>How many blows have hurt it (the HUD's numbers tell a blow from a status by it).</summary>
+    public int BlowsTaken { get; private set; }
+
     /// <summary>The game's gore setting: overkill by damage needs it.</summary>
     public bool BloodAndGore { get; set; } = true;
 
@@ -295,6 +303,7 @@ public sealed partial class Character : Entity
         {
             throw new ArgumentOutOfRangeException(nameof(dt), dt, "the time step must be positive");
         }
+        (TimeSinceDamage, TimeSinceStatusDamage) = (TimeSinceDamage + dt, TimeSinceStatusDamage + dt);
         RunAuras(dt);
         RunBuffs(dt);
         HitPoints = MathF.Min(HitPoints, MaxHitPoints);

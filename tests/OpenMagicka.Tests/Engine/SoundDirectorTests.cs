@@ -289,4 +289,16 @@ public class SoundDirectorTests
         Assert.True(Made(audio, "music_b").IsStopping);
         Assert.Null(sound.Music);
     }
+
+    [Fact]
+    public void AnElementAFullQueueRefused_MakesNoSound()
+    {
+        var (play, audio) = Heard();
+        using var _ = play;
+
+        Raise(play, play.Player.Avatar!, new ConjureCue(Elements.Fire, [new QueueAdded(Elements.Fire)], Taken: false));
+        play.Tick(Tick);
+
+        Assert.DoesNotContain(audio.Made, c => c.Name == "ui_element_fire");
+    }
 }

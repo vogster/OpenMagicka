@@ -73,6 +73,12 @@ public sealed partial class GuiPass
         device.BlendState = Blend;
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = RasterizerState.CullNone;
+        DrawNumbers(device, gui.Numbers, viewProjection, width, height);
+        DrawQueues(device, gui.Queues, viewProjection, width, height);
+        DrawBars(device, gui.Bars, viewProjection, width, height);
+        DrawWheel(device, gui.Wheel, viewProjection, width, height);
+        DrawTopBar(device, gui.TopBar, width, height);
+        DrawKeys(device, gui.Keys, width, height);
         foreach (var box in gui.Boxes.Where(b => b.Scale > 1e-4f))
         {
             var textFont = Fonts[box.Cutscene ? "Maiandra16" : "Maiandra14"];

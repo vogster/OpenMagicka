@@ -1712,3 +1712,92 @@ the render thread draws it (`GuiPass`). Without the game's fonts, frame or effec
 - The campaign map's cutscenes (`Levels/Cutscenes.xml`) go with the menu (OM-53).
 - Choosing the language (OM-52): English is used.
 - Online replication of dialogs.
+
+## 19. Ours: the original HUD (OM-54)
+
+The original game has a plain HUD and three paid store styles (Gold, Iron, Moba). The style setting is empty by
+default, which means the plain HUD, so every player without the store items sees it. OpenMagicka draws that one.
+It is several small pieces in raw screen pixels (nothing scales with the resolution). They are drawn from back to
+front in the original's order: the numbers, the queues, the health bars, the pad's wheel, the top bar, then the keys.
+All pieces come from the atlas `UI/HUD/hud` (512 × 512) or `UI/HUD/Digits`, through `GUIBasicEffect` with
+`ScaleToHDR` (the scene's encoding, as the dialogs use).
+
+- The logic thread fills `GuiPictures` each frame (`LevelPlay.WriteHud`).
+- The render thread draws them (`GuiPass.Hud`, `.Corner`, `.Numbers`).
+- Points behind the camera are not drawn.
+
+**Health bars** (`HealthBars`), under the feet (the capsule's bottom), only while the stage's UI is on:
+- **Shape.** A bar is 64 × 8 units with 4-unit caps and a fill tinted by its colour. Its width scale is the
+  template's radius (at most 1.5) and its height scale is 1 (1.25 for a player). It is centred on the projected
+  point, with its top 16.5 px below it. A wizard's bar is 48 × 10 px.
+- **Players** always have one: red, or green while poisoned.
+- **NPCs** have one only after a blow. It shows for 2 s, then fades over 1 s.
+- **Stacked bars.** A template with several bars (`HealthBars`) stacks them 6 px apart: the first red and full,
+  the middle grey and full, and the last showing its share in gold.
+- **Wards, auras and shields:**
+  - a ward has a bar for its health, in its spell's colour;
+  - each self-cast aura has a bar for its time left, in gold;
+  - a shield has a bar for its health, in its tint.
+- **Flash.** A blow flashes the bar white: +1.2 at first, gone after 0.3 s
+  (`Character.TimeSinceDamage`, `TimeSinceStatusDamage`, `SelfShield.TimeSinceDamage`).
+- **Limits.** At most 512 bars a frame. The health-bar option (On, PlayersOnly, Off; On by default) chooses which
+  bars show.
+
+**The element queue** under each wizard (`QueueIcons`, `MagickHint`):
+- **Layout.** Five 25 px slots, 25 px apart, 44 px below the feet, between two brackets.
+- **Changes.** `ElementQueue.Add` reports its steps (`QueueAdded`, `QueueMerged`, `QueueCancelled`, with
+  positions as the queue stands at each step). The character's `ConjureCue` carries them, and is raised even when
+  a full queue refuses the element; its `Taken` says whether the queue changed.
+- **Animation** (each value eases by 1 − 0.0025^dt per step):
+  - a new element pops in and grows glowing to 1.5, then settles at 1;
+  - icons slide left when one leaves;
+  - a merging element flies onto its partner, which turns into the result, and the flier glows and fades;
+  - cancelling elements fly together and shrink away;
+  - a refused element pops and goes;
+  - a clear shrinks and fades everything.
+- **Every entry has an icon.** An entry of no single element (a magick) gets one that is not drawn, so the
+  positions keep matching.
+- **Resync.** Each tick the icons are checked against the real queue. A cast, a gift to a weapon or a death
+  empties it: the icons go, and the queue's own come back.
+- **The selected magick** shows under the queue:
+  - its name in Maiandra14, 54 px below the feet (`#magick_<name>`; the enchantment's is `#magick_performance`);
+  - its recipe as translucent icons in the slots the queue has not reached yet;
+  - a change fades the old one out at 4 a second, then the new one in.
+- **Pausing.** In a cutscene the queue stops animating.
+
+**The element keys** (`ElementKeys`), bottom left, while the UI is on:
+- **Layout.** Water, Life, Shield and Cold at 140 px above the bottom; Lightning, Arcane, Earth and Fire at 80.
+  Each key is a drop shadow, its 50 × 50 icon, and a key plate with the bound key's name.
+- **Press.** A conjured element's key dims to half saturation for 0.125 s, then flashes bright for 0.125 s.
+- **Disabled.** A key the tutorial disables fades to grey.
+
+**The top bar** (`BossBar`), not hidden with the UI:
+- **Boss fight.** While it runs, the bar fades in over 2 s while empty, then fills to the bosses' share (closing
+  in at 10 a second). When the bosses are down it fades out. Its width is the fight's (0.8 of the screen by
+  default).
+- **Shape.** A dark frame in three parts, a red fill inset 16 px, and an ornament over it, from 8 to 32 px.
+- **The scripts' bar** (`ScriptHealthBar`) shows the same way while it is up, in its plain look (the dynamite's
+  is not drawn yet).
+
+**Floating numbers** (`FloatingNumbers`), read from the characters' health each tick (the option is on by default):
+- **Blows.** A blow (`Character.BlowsTaken` counts them) makes a number that follows its target's head for a
+  third of a second, adding the blows that come meanwhile, then shows for 0.4 s in yellow. A loss of no blow and
+  no status (a script's) shows nothing.
+- **Over time.** Burning, poison, bleeding and healing add up and show once a second for 0.7 s, in their colours.
+  A heal shows with a "+", and not during cutscenes.
+- **Look.** Glyphs are 22 × 32 at a scale of 0.5 to 1.5 (bigger for bigger numbers). A number stays opaque and
+  drops away at its very end.
+
+**The pad's wheel** (`SpellWheel`), for a pad player whose wizard lives, outside cutscenes:
+- **Layout.** Eight 50 px icons at 64 px around the wizard's centre, two for each way of the stick (right Cold
+  and Fire, up Arcane and Life, left Lightning and Water, down Earth and Shield).
+- **Showing.** A way the stick points shows its pair, sliding out from the way's point over 0.2 s, and fading
+  over 0.2 s once let go. The wheel button shows all four.
+- **Ours.** The pair is drawn whole; the original cuts the second icon's crescent out of the first.
+
+**Not done:**
+- the Gold, Iron and Moba styles;
+- network players' queues (every player of the session is drawn; the network is not wired);
+- the wall shield's and the aura's exact bar anchors;
+- the keys' labels greying with the keys;
+- the wheel's keys' saturation and flash (it shares the keys' in the original).

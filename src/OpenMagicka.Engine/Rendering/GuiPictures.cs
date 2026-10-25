@@ -10,6 +10,24 @@ public sealed class GuiPictures
 {
     public List<SpeechBoxPicture> Boxes { get; } = [];
 
+    /// <summary>The health bars under characters and shields (the HUD's, OM-54).</summary>
+    public List<HealthBarPicture> Bars { get; } = [];
+
+    /// <summary>The element queues under the wizards (the HUD's, OM-54).</summary>
+    public List<QueuePicture> Queues { get; } = [];
+
+    /// <summary>The element keys in the bottom-left corner (the HUD's, OM-54); none while the UI is off.</summary>
+    public List<Hud.ElementKey> Keys { get; } = [];
+
+    /// <summary>The boss fight's bar at the top, or the scripts' own bar (the HUD's, OM-54); none.</summary>
+    public TopBarPicture? TopBar { get; set; }
+
+    /// <summary>The damage and heal numbers over heads (the HUD's, OM-54).</summary>
+    public List<Hud.FloatingNumber> Numbers { get; } = [];
+
+    /// <summary>The pad's element wheel around its wizard's centre (the HUD's, OM-54); none.</summary>
+    public (Vector3 Centre, List<Hud.WheelIcon> Icons)? Wheel { get; set; }
+
     /// <summary>How far the cutscene's bars are in (0…1), and how much its skip prompt shows; none outside a cutscene.</summary>
     public (float Bars, float Skip, string SkipText)? Letterbox { get; set; }
 
@@ -19,6 +37,12 @@ public sealed class GuiPictures
     public void Clear()
     {
         Boxes.Clear();
+        Bars.Clear();
+        Queues.Clear();
+        Keys.Clear();
+        TopBar = null;
+        Numbers.Clear();
+        Wheel = null;
         Letterbox = null;
         Prompt = null;
     }
@@ -34,3 +58,20 @@ public readonly record struct SpeechBoxPicture(string Text, int Visible, string?
 
 /// <summary>The interact prompt ("Talk"): its text, at the mouse in pixels, or over a point of the world with a pad's button; how much it shows.</summary>
 public readonly record struct PromptPicture(string Text, Vector2? Mouse, Vector3? Avatar, float Alpha);
+
+/// <summary>
+/// A health bar: the world point it hangs under (its top 16.5 px below it, centred), its share, its width (of the
+/// 64-unit bar, at most 1.5) and height (of 8) scales, its colour (rgb may pass 1: the HUD's colours are bright) and
+/// alpha, and how many pixels lower it sits (a stacked bar's).
+/// </summary>
+public readonly record struct HealthBarPicture(Vector3 At, float Share, float Width, float Height, Vector4 Colour, float Lower);
+
+/// <summary>
+/// A wizard's queue on the HUD: the world point of its feet, its icons, the selected magick's recipe from the slot
+/// the queue has reached (translucent), its name and how much it shows.
+/// </summary>
+public sealed record QueuePicture(Vector3 Feet, IReadOnlyList<Hud.QueueIcon> Icons, IReadOnlyList<Gameplay.Spells.Elements> Recipe, int RecipeFrom,
+    string? MagickName, float MagickAlpha);
+
+/// <summary>A bar across the screen's top: its width (a share of the screen's), the share it shows, its fill's colour and its alpha.</summary>
+public readonly record struct TopBarPicture(float Width, float Shown, Vector4 Fill, float Alpha);
