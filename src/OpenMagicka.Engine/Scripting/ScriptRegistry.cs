@@ -20,10 +20,12 @@ public sealed class ScriptRegistry
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> Settable = new();
 
     /// <summary>
-    /// The engine's own kinds: all the conditions; counters, timers, executing and clearing triggers,
-    /// points of interest, the characters' actions (spawn, orders, avatars' events, moves, removal), and
-    /// the things' (animated parts, effects, items), and the stage's (camera, fade, cutscene, input, and
-    /// the requests for sound, dialogs, checkpoints and scene changes).
+    /// The engine's own kinds, every one the original has (LEVELS_TRIGGERS.md §9): all the conditions;
+    /// counters, timers, executing and clearing triggers, points of interest; the characters' actions
+    /// (spawn, orders, avatars' events, moves, removal, kills, damage, factions, teleports, magicks, items),
+    /// the things' (animated parts, effects, items, props, books, eggs, dispensers), the stage's (camera,
+    /// fade, cutscene, input, lights, the HUD, the tutorial, and the requests for sound, dialogs, titles,
+    /// checkpoints, scene changes and the level's end), the profile's and the boss fights'.
     /// </summary>
     public static ScriptRegistry Engine() => new ScriptRegistry()
         .Condition<CounterCondition>("counter")
@@ -82,7 +84,87 @@ public sealed class ScriptRegistry
         .Action<PlayMusicAction>("playMusic")
         .Action<StartDialogAction>("startDialog")
         .Action<TriggerCheckpointAction>("triggerCheckpoint")
-        .Action<ChangeSceneAction>("changeScene");
+        .Action<ChangeSceneAction>("changeScene")
+        .Action<EnterSceneAction>("enterScene")
+        .Action<KillAction>("kill")
+        .Action<OverkillAction>("overkill")
+        .Action<DamageAction>("damage")
+        .Action<SetFactionAction>("setFaction")
+        .Action<RemoveAllStatusEffectsAction>("removeAllStatusEffects")
+        .Action<TeleportAction>("teleport")
+        .Action<MagickAction>("magick")
+        .Action<UnlockMagickAction>("unlockMagick")
+        .Action<SpawnMagickAction>("spawnMagick")
+        .Action<SpawnElementalAction>("spawnElemental")
+        .Action<AssignItemAction>("assignItem")
+        .Action<AddItemToAvatarsAction>("addItemToAvatars")
+        .Action<RemoveItemFromAvatarsAction>("removeItemFromAvatars")
+        .Action<SetDialogAction>("setDialog")
+        .Action<StopAnimationAction>("stopAnimation")
+        .Action<ResumeAnimationAction>("resumeAnimation")
+        .Action<HighlightAnimAction>("highlightAnim")
+        .Action<HighlightPhysAction>("highlightPhys")
+        .Action<SpawnDispenserAction>("spawnDispenser")
+        .Action<ActivateDispenserAction>("activateDispenser")
+        .Action<SpawnAnimPropAction>("spawnAnimProp")
+        .Action<SpawnCloneWizardsAction>("spawnCloneWizards")
+        .Action<EnableElementAction>("enableElement")
+        .Action<DisableElementAction>("disableElement")
+        .Action<EnableCastTypeAction>("enableCastType")
+        .Action<DisableCastTypeAction>("disableCastType")
+        .Action<EnablePushAction>("enablePush")
+        .Action<DisablePushAction>("disablePush")
+        .Action<EnableDarkAction>("enableDark")
+        .Action<DisableDarkAction>("disableDark")
+        .Action<SetHintAction>("setHint")
+        .Action<RemoveHintAction>("removeHint")
+        .Action<SetDialogHintAction>("setDialogHint")
+        .Action<RemoveDialogHintAction>("removeDialogHint")
+        .Action<NothingAction>("telemetryTutorialBegin")
+        .Action<NothingAction>("telemetryTutorialStep")
+        .Action<NothingAction>("telemetryTutorialEnd")
+        .Action<NothingAction>("telemetryTutorialSkip")
+        .Action<NothingAction>("printDebug")
+        .Action<DisableLightAction>("disableLight")
+        .Action<EnableLightAction>("enableLight")
+        .Action<CameraLockAction>("cameraLock")
+        .Action<CameraBiasAction>("cameraBias")
+        .Action<CameraFollowAction>("cameraFollow")
+        .Action<CameraPositionAction>("cameraPosition")
+        .Action<AddCameraEffectAction>("addCameraEffect")
+        .Action<RemoveCameraEffectAction>("removeCameraEffect")
+        .Action<FlashAction>("flash")
+        .Action<StopMusicAction>("stopMusic")
+        .Action<SetMusicFocusAction>("setMusicFocus")
+        .Action<SetVolumeAction>("setVolume")
+        .Action<DisplayTitleInLevelAction>("displayTitleInLevel")
+        .Action<BossTitleAction>("bossTitle")
+        .Action<HealthBarAction>("healthBar")
+        .Action<ActivateHealthBarAction>("activateHealthBar")
+        .Action<RemoveHealthBarAction>("removeHealthBar")
+        .Action<ScrollScoreAction>("scrollScore")
+        .Action<RollCreditsAction>("rollCredits")
+        .Action<EndGameAction>("endGame")
+        .Action<DisableUiAction>("disableUI")
+        .Action<EnableUiAction>("enableUI")
+        .Action<KillDialogsAction>("killDialogs")
+        .Action<BeginDefaultAvatarSectionAction>("beginDefaultAvatarSection")
+        .Action<EndDefaultAvatarSectionAction>("endDefaultAvatarSection")
+        .Action<BeginUnequipWeaponsSectionAction>("beginUnequipWeaponsSection")
+        .Action<EndUnequipWeaponsSectionAction>("endUnequipWeaponsSection")
+        .Action<UnlockAchievementAction>("unlockAchievement")
+        .Action<ConditionalUnlockAchievementAction>("conditionalUnlockAchievement")
+        .Action<FoundSecretAreaAction>("foundSecretArea")
+        .Action<FoundMooseAction>("foundMoose")
+        .Action<KilledAPonyAction>("killedAPony")
+        .Action<WizardControlAction>("wizardControl")
+        .Action<ReleaseGripAction>("releaseGrip")
+        .Action<PhysAnimationAction>("physAnimation")
+        .Action<SpawnBossAction>("spawnBoss")
+        .Action<SpawnGenericBossAction>("spawnGenericBoss")
+        .Action<ActivateBossAction>("activateBoss")
+        .Action<EndBossFightAction>("endBossFight")
+        .Action<BossMessageAction>("bossMessage");
 
     /// <summary>The tags met that no kind answers (they never hold, or do nothing).</summary>
     public IReadOnlyCollection<string> Unknown => unknown;

@@ -58,7 +58,7 @@ public class ScriptGameScenesTests(ITestOutputHelper output)
         Assert.True(fired > 0);
         Assert.True(spawned > 100);
         Assert.True(items > 0 && props > 0 && effects > 0 && parts > 0);
-        Assert.DoesNotContain(unknown, u => u.StartsWith("if:", StringComparison.Ordinal));      // every condition is known
+        Assert.Empty(unknown);                                                                     // every condition and action the game uses is known
         Assert.Empty(missing);                                                                     // no area condition looks for an area not there
     }
 }

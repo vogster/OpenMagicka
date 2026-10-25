@@ -88,6 +88,31 @@ public sealed class ScenePart
         (IsLooping, IsPlaying) = (loop, true);
     }
 
+    /// <summary>
+    /// Plays on from where it is, at a speed: for a length (back from its time when the speed is
+    /// negative), or, with none, to the clip's end. A loop given is taken; none given keeps its own. With
+    /// its children, they go on the same.
+    /// </summary>
+    public void Resume(bool withChildren, float length, float speed, bool? loop)
+    {
+        if (withChildren)
+        {
+            foreach (var child in children.Values)
+            {
+                child.Resume(withChildren: true, length, speed, loop);
+            }
+        }
+        this.speed = speed;
+        IsLooping = loop ?? IsLooping;
+        end = length > float.Epsilon ? (speed < 0 ? time - length : time + length) : Content.AnimationDuration;
+        IsPlaying = true;
+    }
+
+    /// <summary>How long it still shows highlighted (a script's highlightAnim); not above 0, not.</summary>
+    public float Highlighted { get; private set; } = -1;
+
+    public void Highlight(float time) => Highlighted = time;
+
     public void Stop(bool withChildren)
     {
         if (withChildren)
@@ -108,6 +133,7 @@ public sealed class ScenePart
     /// </summary>
     public void Update(float dt, Numerics.Matrix4x4 parent)
     {
+        Highlighted = MathF.Max(-1, Highlighted - dt);
         if (IsPlaying)
         {
             time += dt * speed;

@@ -20,6 +20,16 @@ public sealed partial class Character
     /// <summary>Its factions now: a charmed NPC is Friendly; else the template's, unless confusion took them.</summary>
     public Factions Factions => IsCharmed && !IsPlayer ? Factions.Friendly : factions ?? Template.Factions;
 
+    /// <summary>
+    /// Its own factions, as a script sets them (setFaction): the template's until then. A charm shows over
+    /// them, and confusion's end gives back a summon's master's (or the template's).
+    /// </summary>
+    public Factions OwnFactions
+    {
+        get => factions ?? Template.Factions;
+        set => factions = value;
+    }
+
     public bool IsFeared => fearTimer > 0 && !Dead;
 
     /// <summary>What it flees: the one who scared it, else the spot.</summary>
@@ -133,6 +143,25 @@ public sealed partial class Character
             return true;
         }
         return undone;
+    }
+
+    /// <summary>
+    /// A script's removeAllStatusEffects: its statuses, vines, self-shield, fear and invisibility go, its
+    /// spell stops, its queue empties, its levitation ends and its auras go (charm, confusion, haste and
+    /// enchantment stay, as the original).
+    /// </summary>
+    public void RemoveStatusEffects()
+    {
+        StopStatuses(StatusEffects.Burning | StatusEffects.Wet | StatusEffects.Frozen | StatusEffects.Cold | StatusEffects.Poisoned
+            | StatusEffects.Healing | StatusEffects.Greased | StatusEffects.Steamed);
+        ReleaseEntanglement();
+        RemoveSelfShield();
+        RemoveFear();
+        RemoveInvisibility();
+        StopSpell();
+        SpellQueue = SpellQueue.Cleared();
+        StopLevitate();
+        auras.Clear();
     }
 
     private bool CanFear() => (Factions & (Factions.Demon | Factions.Undead)) == 0 && !Template.Fearless;

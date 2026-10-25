@@ -25,6 +25,14 @@ internal static class ScriptTargets
         name.Length == 7 && name.StartsWith("player", StringComparison.Ordinal) && name[6] is >= '1' and <= '4'
         && scene.World.Session?.Players.FirstOrDefault(p => p.Id == name[6] - '1') is { Playing: true, Avatar: { } avatar } ? avatar : null;
 
+    /// <summary>A player's avatar by "player1".."player4", else the character of that script name.</summary>
+    public static Character? Named(ScriptScene scene, string name) =>
+        name is "player1" or "player2" or "player3" or "player4" ? Player(scene, name) : scene.World.Entities.FindByUniqueId(LegacyHash(name)) as Character;
+
+    /// <summary>The players' avatars of the game, in the players' order (the playing ones with one).</summary>
+    public static IEnumerable<Character> Avatars(ScriptScene scene) =>
+        (scene.World.Session?.Players ?? []).Where(p => p.Playing && p.Avatar is not null).Select(p => p.Avatar!).ToArray();
+
     private static int LegacyHash(string name) => Content.LegacyStringHash.Lower(name);
 }
 
@@ -35,7 +43,7 @@ internal static class ScriptTargets
 /// spawns none (the host's message does, OM-59); a full level stops it. Drawing, camera and mesh
 /// choices wait for the renderer.
 /// </summary>
-public sealed class SpawnAction : ScriptAction
+public class SpawnAction : ScriptAction
 {
     private AiEvent[] events = [];
 
@@ -125,7 +133,7 @@ public sealed class SpawnAction : ScriptAction
         }
     }
 
-    private Character Make(CharacterTemplate template, Gameplay.Animation.CharacterAnimations? animations)
+    private protected Character Make(CharacterTemplate template, Gameplay.Animation.CharacterAnimations? animations)
     {
         var placement = Scene.Places.Placement(Hash(Area), Scene.Random);
         var point = SnapToNavMesh ? Scene.World.Entities.Walkable(placement.Translation, template.MoveAbilities) : placement.Translation;
@@ -333,9 +341,7 @@ public sealed class SetPositionAction : ScriptAction
         {
             return;
         }
-        var target = Id is "player1" or "player2" or "player3" or "player4" ? ScriptTargets.Player(Scene, Id)
-            : Scene.World.Entities.FindByUniqueId(Hash(Id)) as Character;
-        if (target is null)
+        if (ScriptTargets.Named(Scene, Id) is not { } target)
         {
             return;
         }

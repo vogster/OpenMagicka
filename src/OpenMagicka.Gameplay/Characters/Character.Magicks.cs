@@ -308,7 +308,12 @@ public sealed partial class Character
     public bool PickUp(BookOfMagick book)
     {
         ArgumentNullException.ThrowIfNull(book);
-        return !Dead && Manager is not null && ReferenceEquals(book.Manager, Manager) && Vector3.Distance(book.Position, Position) <= PickUpReach + book.Radius && book.Unlock(Player);
+        if (Dead || Manager is null || !ReferenceEquals(book.Manager, Manager) || Vector3.Distance(book.Position, Position) > PickUpReach + book.Radius || !book.Unlock(Player))
+        {
+            return false;
+        }
+        RaiseScriptTrigger(book.OnPickupTrigger);
+        return true;
     }
 
     /// <summary>Only a script's explicit kill ends it: Crash to Desktop spares it.</summary>

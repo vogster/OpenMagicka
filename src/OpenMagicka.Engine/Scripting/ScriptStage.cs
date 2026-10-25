@@ -36,9 +36,12 @@ public sealed record EndDialogsRequest : ScriptRequest;
 /// </summary>
 public sealed record CheckpointRequest(IReadOnlyList<Matrix4x4> SpawnPoints, IReadOnlyList<int> Ignore, bool SaveToDisk, bool SpawnFairy) : ScriptRequest;
 
-/// <summary>A move to another scene of the level (OM-47): the players at the locators of the spawn point (its name and 0..3).</summary>
-public sealed record ChangeSceneRequest(string Scene, IReadOnlyList<int> SpawnPoints, ScriptTransition Transition, float Time, bool SpawnPlayers, bool SaveNpcs)
-    : ScriptRequest;
+/// <summary>
+/// A move to another scene of the level (OM-47): the players at the locators of the spawn point (its name
+/// and 0..3). What it does once the new scene is entered (an enterScene's walk in) comes last.
+/// </summary>
+public sealed record ChangeSceneRequest(string Scene, IReadOnlyList<int> SpawnPoints, ScriptTransition Transition, float Time, bool SpawnPlayers, bool SaveNpcs,
+    Action<ScriptScene>? Entered = null) : ScriptRequest;
 
 /// <summary>The level left one scene for another (the sound pauses the old scene's sounds when its NPCs were kept, else stops them).</summary>
 public sealed record SceneChangedRequest(int From, int To, bool Kept) : ScriptRequest;
@@ -75,6 +78,29 @@ public sealed class ScriptStage
 
     /// <summary>The scene change under way, for the renderer's transition; none when there is none.</summary>
     public SceneTransition? Transition { get; internal set; }
+
+    /// <summary>The entity the camera follows (a script's cameraFollow); the game's loop gives the camera its position.</summary>
+    public Gameplay.Entities.Entity? Followed { get; internal set; }
+
+    /// <summary>The camera's visual effects on (by name, lowered); the renderer draws them.</summary>
+    public IReadOnlySet<string> CameraEffects => cameraEffects;
+
+    private readonly HashSet<string> cameraEffects = [];
+
+    internal void AddCameraEffect(string effect) => cameraEffects.Add(effect);
+
+    /// <summary>An effect goes; an empty name takes them all.</summary>
+    internal void RemoveCameraEffect(string effect)
+    {
+        if (effect.Length == 0)
+        {
+            cameraEffects.Clear();
+        }
+        else
+        {
+            cameraEffects.Remove(effect);
+        }
+    }
 
     /// <summary>The HUD shows (a cutscene hides it).</summary>
     public bool IsUiEnabled { get; internal set; } = true;
@@ -130,12 +156,14 @@ public sealed class ScriptStage
 
     /// <summary>
     /// As a checkpoint's restart leaves it: no cutscene, fade, transition or input hold, the HUD shown, the
-    /// camera following the players, the requests not yet taken dropped.
+    /// camera following the players with no effects, the requests not yet taken dropped.
     /// </summary>
     public void Reset()
     {
         (Fade, Transition, IsUiEnabled, CutsceneSkipTrigger, CutsceneSkipsBarMove, IsCutsceneSkipped, ShowsSkipTip) = (null, null, true, 0, false, false, false);
         locks.Clear();
+        cameraEffects.Clear();
+        Followed = null;
         unlockDelay = 0;
         requests.Clear();
         Camera = Camera.Release(0.001f);

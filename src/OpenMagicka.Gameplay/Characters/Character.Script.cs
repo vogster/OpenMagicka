@@ -41,6 +41,7 @@ public sealed partial class Character
     /// </summary>
     public void PlayEvents(IReadOnlyList<AiEvent>? events)
     {
+        ignoresTriggers = false;                                              // the walk that set it is over
         if (events is not { Count: > 0 })
         {
             scriptedMind = null;
@@ -59,6 +60,18 @@ public sealed partial class Character
 
     /// <summary>Its scripted events still run (input waits for them); death ends them.</summary>
     public bool IsInEvent => !IsDead && (scriptedMind?.HasPendingEvents ?? false);
+
+    /// <summary>
+    /// The trigger areas do not see it while its scripted events run (an enterScene's walk in, set after
+    /// the events); once they end, or new events come, it is seen again, as the original's avatar.
+    /// </summary>
+    public bool IgnoresTriggers
+    {
+        get => ignoresTriggers && IsInEvent;
+        set => ignoresTriggers = value;
+    }
+
+    private bool ignoresTriggers;
 
     private void RunScriptedEvents(float dt)
     {

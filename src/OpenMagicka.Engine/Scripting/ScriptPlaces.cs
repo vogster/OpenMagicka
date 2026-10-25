@@ -126,7 +126,7 @@ public sealed class ScriptArea
         var all = manager.Entities;
         for (var i = 0; i < all.Count; i++)
         {
-            if (everyone || Holds(all[i]))
+            if (all[i] is not Character { IsPlayer: true, IgnoresTriggers: true } && (everyone || Holds(all[i])))
             {
                 Add(all[i]);
             }

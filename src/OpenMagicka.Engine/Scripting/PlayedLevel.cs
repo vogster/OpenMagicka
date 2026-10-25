@@ -60,7 +60,7 @@ public sealed partial class PlayedLevel
     private readonly List<Entity> waitingAvatars = [];
     private IReadOnlyList<StaticMesh> collision = [];
     private readonly ScriptRegistry registry;
-    private (SpawnPoint Point, ScriptTransition Transition, float Time, bool Keep)? pending;
+    private (SpawnPoint Point, ScriptTransition Transition, float Time, bool Keep, Action<ScriptScene>? Entered)? pending;
     private float transitionLeft, transitionInLeft;
 
     public PlayedLevel(LevelDefinition definition, ILevelContent content, GameWorld world, LevelServices? services = null)
@@ -142,14 +142,14 @@ public sealed partial class PlayedLevel
     /// A move to another scene: after the transition out (none, or no time: at the end of this frame),
     /// as the original. A scene the level lacks crashes the original; here nothing happens.
     /// </summary>
-    public void ChangeScene(SpawnPoint to, ScriptTransition transition, float time, bool keep)
+    public void ChangeScene(SpawnPoint to, ScriptTransition transition, float time, bool keep, Action<ScriptScene>? entered = null)
     {
         ArgumentNullException.ThrowIfNull(to);
         if (!scenes.ContainsKey(to.Scene))
         {
             return;
         }
-        pending = (to, transition, time, keep);
+        pending = (to, transition, time, keep, entered);
         var fades = transition != ScriptTransition.None && time >= float.Epsilon;
         transitionLeft = fades ? time : 0;
         Level.Stage.Transition = fades ? new SceneTransition(transition, time, Out: true) : null;
@@ -174,7 +174,7 @@ public sealed partial class PlayedLevel
             if (request is ChangeSceneRequest change)
             {
                 ChangeScene(new SpawnPoint(Content.LegacyStringHash.Lower(change.Scene), change.SpawnPoints, change.SpawnPlayers), change.Transition,
-                    change.Time, change.SaveNpcs);
+                    change.Time, change.SaveNpcs, change.Entered);
                 continue;
             }
             requests.Enqueue(request);                                        // a checkpoint was taken as it was asked (OnRequested)
@@ -221,6 +221,7 @@ public sealed partial class PlayedLevel
         }
         Enter(to, change.Point);
         requests.Enqueue(new SceneChangedRequest(from?.Key ?? 0, to.Key, change.Keep));
+        change.Entered?.Invoke(to.Scripts!);
         var fades = change.Transition != ScriptTransition.None && change.Time >= float.Epsilon;
         Level.Stage.Transition = fades ? new SceneTransition(change.Transition, change.Time, Out: false) : null;
         transitionInLeft = fades ? change.Time : 0;
@@ -232,10 +233,8 @@ public sealed partial class PlayedLevel
         scene.Model ??= scene.Definition.Model is { Length: > 0 } asset ? content.Model(asset) : null;
         if (scene.Scripts is null)
         {
-            scene.Scripts = new ScriptScene(scene.Definition, Level, registry, World, Services.Looped, Services.Seed, new ScriptPlaces(scene.Model), Game)
-            {
-                Assets = Services.Assets,
-            };
+            scene.Scripts = new ScriptScene(scene.Definition, Level, registry, World, Services.Looped, Services.Seed, new ScriptPlaces(scene.Model), Game,
+                Services.Assets);
             scene.NavMesh = SceneSetup.Navigation(scene.Model, scene.Scripts.Places);
         }
     }
@@ -254,7 +253,7 @@ public sealed partial class PlayedLevel
         (World.Entities.NavMesh, World.Entities.Bestiary) = (null, null);
     }
 
-    private void Enter(LevelScene scene, SpawnPoint point)
+    private void Enter(LevelScene scene, SpawnPoint point, bool replay = true)
     {
         Current = scene;
         collision = scene.Model is { } model ? LevelCollision.Load(World.Physics, model) : [];
@@ -279,9 +278,18 @@ public sealed partial class PlayedLevel
         scene.Pending.Clear();
         scene.Scripts!.Enter();
         PlacePlayers(point, scene.Scripts);
+        if (replay)
+        {
+            ReplayEntry(scene);
+        }
+    }
+
+    /// <summary>The scene's actions to replay (a checkpoint's), as the original: the startup actions, last of the entry.</summary>
+    private static void ReplayEntry(LevelScene scene)
+    {
         foreach (var action in scene.Replay)
         {
-            action.Replay();                                                  // as the original: the startup actions, last of the entry
+            action.Replay();
         }
         scene.Replay.Clear();
     }

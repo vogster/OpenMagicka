@@ -43,6 +43,9 @@ public sealed partial class Character
         return placed[bone];
     }
 
+    /// <summary>Whether an item can hang from the bone (any case); without a skeleton any can (the item sits at the root).</summary>
+    public bool HasBone(string bone) => skeleton is null || skeleton.IndexOf(bone) >= 0;
+
     /// <summary>The slot's attach matrix on its bone (§4.3); without a skeleton the item sits at the root.</summary>
     private (int Bone, Matrix4x4 Attach) AttachPoint(string bone, Vector3 rotation)
     {

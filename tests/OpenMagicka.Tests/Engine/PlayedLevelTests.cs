@@ -49,7 +49,7 @@ public class PlayedLevelTests
                 ["Levels/Town/town_s1.xml"] = $"<Scene><Model>m1</Model>{firstScripts}</Scene>",
                 ["Levels/Town/town_s2.xml"] = $"<Scene><Model>m2</Model>{secondScripts}</Scene>",
             },
-            new() { ["Levels/Town/m1"] = Model(0, ("start0", 2), ("door0", 8)), ["Levels/Town/m2"] = Model(5, ("gate0", -3), ("gate1", -1)) });
+            new() { ["Levels/Town/m1"] = Model(0, ("start0", 2), ("door0", 8)), ["Levels/Town/m2"] = Model(5, ("gate0", -3), ("gate1", -1), ("pier0", 6)) });
         var session = new GameSession();
         var world = new GameWorld(session: session);
         var first = session.AddPlayer();
@@ -272,6 +272,54 @@ public class PlayedLevelTests
         box.Resume();
         Assert.Same(box, world.Physics.CastSegment(down.Item1, down.Item2)?.Body);
         Assert.False(box.IsStatic);
+    }
+
+    [Fact]
+    public void ARestartsReplay_ActsOnTheFreshWizards()
+    {
+        var (level, world, first) = Level("""
+            <Trigger id="turn"><Then><setFaction id="player1" faction="undead" action="add"/></Then></Trigger>
+            <Trigger id="save" autorun="false"><Then><triggerCheckpoint spawnPoint="door"/></Then></Trigger>
+            """);
+        using var _ = world;
+        level.Start();
+        Run(level, 0.3f);
+        Assert.True(first.Avatar!.Factions.HasFlag(OpenMagicka.Gameplay.Characters.Factions.Undead));
+        level.Current!.Scripts!.ExecuteTrigger(ScriptScene.Hash("save"), null);
+        Run(level, 0.1f);
+        first.Avatar.Kill();
+
+        Assert.True(level.RestartAtCheckpoint());
+
+        Assert.True(first.Avatar.Factions.HasFlag(OpenMagicka.Gameplay.Characters.Factions.Undead));                              // the replay came after the fresh wizard
+    }
+
+    [Fact]
+    public void EnterScene_BringsThePlayersIn_ThenWalksThemToTheTargets_UnseenByTheAreas()
+    {
+        var (level, world, first) = Level("""
+            <Trigger id="go"><Then><enterScene scene="town_s2" spawnPoint="gate" moveTarget="pier" trigger="arrived" ignoreTriggers="true"
+              instantTrigger="hello" transition="none"/></Then></Trigger>
+            """, """
+            <Trigger id="hello" autorun="false"><Then><counter name="hi" action="inc" value="1"/></Then></Trigger>
+            <Trigger id="arrived" autorun="false"><Then><counter name="there" action="inc" value="1"/></Then></Trigger>
+            """);
+        using var _ = world;
+        level.Start();
+
+        Run(level, 0.2f);
+        Assert.Equal("town_s2", level.Current!.Definition.Name);
+        Assert.Equal(1, level.Level.Counter(ScriptScene.Hash("hi")));                            // the instant trigger, of the new scene
+        var avatar = first.Avatar!;
+        Assert.True(avatar.IsInEvent);
+        Assert.True(avatar.IgnoresTriggers);
+        Assert.DoesNotContain(avatar, level.Current.Scripts!.Places.AnyArea.Characters);
+
+        world.Entities.NavMesh = null;                                                             // the test model's nav mesh is empty: the walk goes straight
+        Run(level, 4);
+        Assert.Equal(6, avatar.Position.X, 0);                                                     // walked from gate0 to pier0
+        Assert.Equal(1, level.Level.Counter(ScriptScene.Hash("there")));
+        Assert.False(avatar.IgnoresTriggers);
     }
 
     private sealed class XnaComparer : IEqualityComparer<Xna.Vector3>

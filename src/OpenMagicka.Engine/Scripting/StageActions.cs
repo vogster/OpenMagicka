@@ -127,3 +127,87 @@ public sealed class EnableInputAction : ScriptAction
 
     protected override void Execute() => Scene.Stage.UnlimitInput(Scene.Level);
 }
+
+/// <summary><c>cameraLock area= time=</c>: the camera is kept in the trigger area's box, moving there over the time.</summary>
+public sealed class CameraLockAction : ScriptAction
+{
+    public float Time { get; set; } = 1;
+    public string Area { get; set; } = "";
+
+    protected override void Execute()
+    {
+        if (Scene.Places.Area(Hash(Area)) is { } area && area.Key != ScriptPlaces.Any)
+        {
+            var box = new CameraBox(new Microsoft.Xna.Framework.Vector3(area.Corner.X, area.Corner.Y, area.Corner.Z),
+                new Microsoft.Xna.Framework.Vector3(area.Sides.X, area.Sides.Y, area.Sides.Z),
+                new Microsoft.Xna.Framework.Quaternion(area.Orientation.X, area.Orientation.Y, area.Orientation.Z, area.Orientation.W));
+            Scene.Stage.Camera = Scene.Stage.Camera.LockOn(box, Time);
+        }
+    }
+}
+
+/// <summary><c>cameraBias bias= time=</c>: the camera's point shifts by the bias over the time.</summary>
+public sealed class CameraBiasAction : ScriptAction
+{
+    public Vector3 Bias { get; set; }
+    public float Time { get; set; } = 20;
+
+    protected override void Execute() =>
+        Scene.Stage.Camera = Scene.Stage.Camera.WithBias(new Microsoft.Xna.Framework.Vector3(Bias.X, Bias.Y, Bias.Z), Time);
+}
+
+/// <summary><c>cameraFollow id=</c>: the camera follows the named entity (none: it follows nothing, holding still).</summary>
+public sealed class CameraFollowAction : ScriptAction
+{
+    public string Id { get; set; } = "";
+
+    protected override void Execute()
+    {
+        Scene.Stage.Followed = Scene.World.Entities.FindByUniqueId(Hash(Id));
+        Scene.Stage.Camera = Scene.Stage.Camera.Follow();
+    }
+}
+
+/// <summary>
+/// <c>cameraPosition target= offset= magnification=</c>: the camera stands at once at the locator (none: where
+/// it stands) plus the offset; a magnification over 0 zooms at once.
+/// </summary>
+public sealed class CameraPositionAction : ScriptAction
+{
+    public string Target { get; set; } = "";
+    public Vector3 Offset { get; set; }
+    public float Magnification { get; set; } = -1;
+
+    protected override void Execute()
+    {
+        var stage = Scene.Stage;
+        var at = Scene.Places.LocatorPosition(Hash(Target)) is { } locator ? new Microsoft.Xna.Framework.Vector3(locator.X, locator.Y, locator.Z) : stage.Camera.Ground;
+        stage.Camera = stage.Camera.At(at + new Microsoft.Xna.Framework.Vector3(Offset.X, Offset.Y, Offset.Z));
+        if (Magnification > 0 && float.IsFinite(Magnification))
+        {
+            stage.Camera = stage.Camera with { Magnification = Magnification, TargetMagnification = Magnification };
+        }
+    }
+}
+
+/// <summary><c>addCameraEffect effect=</c>: the camera's visual effect comes on.</summary>
+public sealed class AddCameraEffectAction : ScriptAction
+{
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
+    public string Effect { get; set; } = "";
+
+    protected override void Execute() => Scene.Stage.AddCameraEffect(Effect);
+}
+
+/// <summary><c>removeCameraEffect effect=</c>: the camera's visual effect goes (none named: all of them).</summary>
+public sealed class RemoveCameraEffectAction : ScriptAction
+{
+    /// <summary>As the original, a replay does it again.</summary>
+    public override void Replay() => Execute();
+
+    public string Effect { get; set; } = "";
+
+    protected override void Execute() => Scene.Stage.RemoveCameraEffect(Effect);
+}

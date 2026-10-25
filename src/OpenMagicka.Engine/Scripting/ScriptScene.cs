@@ -16,14 +16,15 @@ public sealed class ScriptScene
     /// <param name="looped">A replayed campaign: the looped blocks are in.</param>
     /// <param name="places">The scene's areas and locators (from its level model); none for a bare scene.</param>
     /// <param name="game">What the scripts read of the game beyond the world; a quiet one when none is given.</param>
+    /// <param name="assets">Where the scripts find their items and props (the actions look them up as they are initialized).</param>
     public ScriptScene(SceneDefinition scene, ScriptLevel level, ScriptRegistry registry, GameWorld world, bool looped = false, int seed = 0,
-        ScriptPlaces? places = null, ScriptGame? game = null)
+        ScriptPlaces? places = null, ScriptGame? game = null, IScriptAssets? assets = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(world);
-        (Definition, Level, World, Random, Game, Looped) = (scene, level, world, new Random(seed), game ?? new ScriptGame(), looped);
+        (Definition, Level, World, Random, Game, Looped, Assets) = (scene, level, world, new Random(seed), game ?? new ScriptGame(), looped, assets);
         foreach (var trigger in scene.Triggers)
         {
             var conditions = trigger.Conditions.Select(block => block.Where(n => n.Type == System.Xml.XmlNodeType.Element)
@@ -46,6 +47,9 @@ public sealed class ScriptScene
 
     /// <summary>The named effects: the level's and its parts', started now, and those the scripts spawn.</summary>
     public SceneEffects Effects { get; }
+
+    /// <summary>The level model's lights the scripts turned off or on.</summary>
+    public SceneLights Lights { get; } = new();
 
     /// <summary>Where scripts find the items they put in the world; none: they make none.</summary>
     public IScriptAssets? Assets { get; set; }
@@ -198,6 +202,11 @@ public sealed class ScriptScene
         Effects.Update(World.Physics);
         Places.UpdateParts(dt);
         Stage.Update(dt);
+        Game.BossFight.Update();
+        if (Game.HealthBar.Update(dt) is var ended and not 0)
+        {
+            ExecuteTrigger(ended, null);
+        }
     }
 
     /// <summary>Fires a trigger by key, as the script's executeTrigger does (its conditions and repeat rule hold); a missing one is nothing.</summary>
@@ -262,6 +271,7 @@ public sealed class ScriptScene
             part.Load(state);
         }
         Places.UpdateParts(0);                                                 // the parts in their saved poses before the replay
+        Lights.Reset();                                                       // as the original: the replay switches them again
         log.Clear();
         log.AddRange(snapshot.Log);
         return [.. snapshot.Log.Where(a => ignored?.Contains(a.Parent.Key) != true)];

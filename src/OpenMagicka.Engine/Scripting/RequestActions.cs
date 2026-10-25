@@ -206,3 +206,54 @@ public sealed class ChangeSceneAction : ScriptAction
         }
     }
 }
+
+/// <summary>
+/// <c>enterScene scene= spawnPoint= transition= transitionTime= saveNPCs= moveTarget= facingDirection= trigger=
+/// ignoreTriggers= instantTrigger=</c>: a scene change that brings the players in; once there, each playing
+/// avatar walks to the locator <c>moveTarget</c> and its number (0..3), the trigger <c>trigger</c> set off on
+/// arrival, unseen by the trigger areas meanwhile with <c>ignoreTriggers</c>; then <c>instantTrigger</c>
+/// (of the new scene) is set off, its conditions checked.
+/// </summary>
+public sealed class EnterSceneAction : ScriptAction
+{
+    /// <summary>The scene to go to (the attribute's name hides the base's scene; that one is <c>base.Scene</c>).</summary>
+    public new string Scene { get; set; } = "";
+    public string SpawnPoint { get; set; } = "";
+    public ScriptTransition Transition { get; set; } = ScriptTransition.Fade;
+    public float TransitionTime { get; set; } = 1;
+    public bool SaveNpcs { get; set; }
+    public string MoveTarget { get; set; } = "";
+    public bool FacingDirection { get; set; }
+    public string Trigger { get; set; } = "";
+    public bool IgnoreTriggers { get; set; }
+    public string InstantTrigger { get; set; } = "";
+
+    protected override void Execute()
+    {
+        if (base.Scene.IsHost)
+        {
+            base.Scene.Stage.Request(new ChangeSceneRequest(Scene, [.. Enumerable.Range(0, 4).Select(i => Hash(SpawnPoint + i))], Transition,
+                TransitionTime, SpawnPlayers: true, SaveNpcs, Entered));
+        }
+    }
+
+    private void Entered(ScriptScene entered)
+    {
+        if (MoveTarget.Length > 0)
+        {
+            foreach (var player in entered.World.Session?.Players ?? [])
+            {
+                if (player is { Playing: true, Avatar: { } avatar, Id: < 4 } && entered.Places.LocatorTransform(Hash(MoveTarget + player.Id)) is { } target)
+                {
+                    avatar.PlayEvents([new Gameplay.AI.MoveAiEvent(Trigger.Length > 0 ? Hash(Trigger) : 0, 0, target.Translation, 1, FacingDirection,
+                        ScriptPlaces.Forward(target))]);
+                    avatar.IgnoresTriggers = IgnoreTriggers;
+                }
+            }
+        }
+        if (InstantTrigger.Length > 0)
+        {
+            entered.ExecuteTrigger(Hash(InstantTrigger), null);
+        }
+    }
+}

@@ -249,7 +249,7 @@ not those senders, so later runs take older senders (as the original).
 - A trigger that sets itself off again with no delay hangs the original (its action's run loop never ends); ours runs only
   the runs waiting as the frame began, so such a trigger runs once a frame.
 - An unknown tag in `<if>` or `<then>` crashes the original's loading; ours keeps a stand-in (never holds, does nothing) and lists
-  it, while the kinds are being written (the actions: OM-45, OM-46; every condition is known).
+  it. Every condition and action the game uses is known (OM-44, OM-45, OM-46).
 - On all 141 scenes: 2,801 triggers and points, 1,296 areas; in their first 2 s, 736 firings (with all the conditions known).
 
 `executeTrigger` calls the target **with condition checks** and the repeat rule: a one-shot trigger that
@@ -807,6 +807,147 @@ frame (`TakeRequests`).
   - the "checkpoint" text and the `ui_checkpoint01` cue go with it.
 - `changeScene`: a move to another scene (OM-47), the players at the spawn point's locators. A network client waits for the
   host's.
+### 9.4 Ours: the world's actions (OM-46)
+
+Ours is `CombatActions.cs`, `MagickActions.cs`, `ItemActions.cs`, `PartActions.cs`, `SpawnActions.cs` and `EnterSceneAction`.
+
+**Combat:**
+- `kill` and `overkill` take the named entity, or the characters in the area by the §9 filter. `kill` lifts a character's
+  need of an explicit kill first; a prop breaks. `overkill` shatters a character (no corpse) and breaks a damageable prop.
+- `damage` reads its `<damage attackProperty= element= amount= magnitude=/>` children when the scene is built (names in any
+  case; `physical` is Earth, as the original's enum). An unknown attribute is skipped, so `elements=` leaves the element
+  None, as the original; an element or property it does not know fails the loading.
+- Each entry hits the named entity, or each character in the area, from the `source` locator (none: the origin).
+- With `ignoreShields="false"` a character is spared when a shield covers it: inside a sphere shield with no source, else
+  when a shield stands between it and the source (a line 0.25 thick).
+- `setFaction` adds, removes or sets the factions of the named character (`player1`..`player4` too), or of those in the area
+  of the template (factions are not looked at). A charm shows over them; confusion's end gives a summon's master's back.
+- `removeAllStatusEffects`: every character's statuses, vines, self-shield, fear, invisibility, spell, queue, levitation and
+  auras go (charm, confusion, haste and enchantment stay). The original also ends a hypnosis, which ours does not have.
+- `teleport`: the named character goes onto the floor up to 4 below the locator (0.1 over it), turned its way. The effect
+  (`magick_teleport_appear` by default) shows where it left and where it came, and the sound (`magick_teleportb`, bank
+  Spells) plays where it came. A locator the scene lacks takes it to the origin, as the original.
+
+**Magicks:**
+- `magick` makes the named character's magick take effect at once, with no cast clip. With no `id` the original casts at a
+  `position` with no caster (rain, blizzard, nullify in some challenges); ours does not yet, its magicks needing a caster.
+- `unlockMagick` unlocks the magick for every player (in Versus, every playing one) and asks the HUD for its text
+  (`MagickUnlockedRequest`).
+- `spawnMagick` lays a book at the place, immovable unless told, its pick-up setting off `onPickup` with the picker. A magick
+  that is no player's fails the loading. Not replayed: the checkpoint keeps what was unlocked.
+- `spawnElemental` lays `nr` elemental eggs (snapped to the nav mesh when asked), turned the place's way; a wizard within
+  `proximity` may hatch one. Each run's replay lays `nr` again, so as many come back as were ever laid; ours gives them
+  their proximity, which the original's replay leaves out.
+
+**Items:**
+- The avatars' actions replay on the fresh wizards: a restart brings them in before the replay (ours; the original's
+  replay runs on the wizards it is about to replace).
+- `assignItem` gives the item `Data/Items/Wizard/<id>` to the living avatar of `player` (1–4), or the first one in `area`,
+  or (with neither) every living one. A staff goes in the staff's slot, anything else in the weapon's, on the bone the slot
+  uses; `staff_default` and `weapon_default` give back the template's own. The clip given plays (not on a replay). An item
+  the game lacks fails the loading. The original also gives back a profile's own choice, and remembers the new one for the
+  next level (OM-55).
+- `addItemToAvatars` hangs the item (a wizard's, else an NPC's) from the bone in each playing avatar's first empty slot.
+- `removeItemFromAvatars` gives each slot holding the item (by name, any case) the template's own item back, or empties it.
+
+**Parts and dialogs:**
+- `stopAnimation` stops a part where it is (its children too unless told not).
+- `resumeAnimation` plays a part on from where it is, for `length` (back from its time with a negative speed), or with none
+  to the clip's end. A `loop` given is taken, none keeps its own. A negative length fails the loading (the original throws
+  as it runs). As the original, its start stays, and backwards with no length it heads for the clip's end, so it stops
+  there at once.
+- `highlightAnim` and `highlightPhys` highlight a part or a named prop for a time; the renderer draws it (OM-75).
+- `setDialog` gives the named character its dialog.
+
+**Spawns:**
+- `enterScene` is a `changeScene` that brings the players in. Once in, each playing avatar walks to the locator `moveTarget`
+  and its number (0..3), unseen by the trigger areas meanwhile with `ignoreTriggers`; its arrival sets off `trigger`. Then
+  `instantTrigger`, of the new scene, is set off with its conditions.
+- `spawnCloneWizards`: for each living player, an NPC of its avatar's template at the locator `area` and the player's
+  number, named `clonewizard` (or `id`) and the number, whole, with a spawn's order, triggers, dialog and clips. A replay
+  makes them all again, as the original. Their colours go with the drawing.
+- `spawnAnimProp` stands the prop of `Data/AnimatedProps/<object>` at the locator; it takes hits only with
+  `damageable="true"` and stays put unless `gravity="true"`. Its clip waits for OM-75. The original keeps one per action and
+  puts it back afresh on each run; ours puts a new one once the last is gone.
+- `spawnDispenser` stands a dispenser (`Dispenser`: a spider hole, a goblin tent or a clutch of eggs) on the floor up to 4
+  below the locator, 1.75 over it, in a fixed capsule 1.25 wide. While active it lets out one character of its kinds (at
+  random) each `time`, attacking at once, reacting to nothing, rising with its `spawn` clip. Each kind has its count (one
+  count shared when only one is given); a spent kind drops out, and with none left the dispenser dies. 500 hit points; a
+  hit takes amount × magnitude, whole. A kind the game lacks is let out as none. A checkpoint does not keep a dispenser: a
+  replay makes it again.
+- `activateDispenser` with an `id` starts that dispenser. The original's form by area looks in the area for the dispenser
+  named by `id`, so without one it starts none; ours does the same, so the Mines' eggs it is used for stay shut.
+
+### 9.5 Ours: the stage's, the tutorial's and the profile's actions (OM-46)
+
+Ours is `StageActions.cs`, `PresentationActions.cs`, `ScriptHealthBar.cs`, `ScriptTutorial.cs`, `TutorialActions.cs` and
+`ProfileActions.cs`. What the HUD, the sound and the renderer show waits for them (OM-49, OM-51, OM-75); the scripts' side
+is whole.
+
+**Camera:**
+- `cameraLock` keeps the camera in the trigger area's box, moving there over `time`.
+- `cameraBias` shifts its point by `bias` over `time` (20 by default).
+- `cameraFollow` follows the named entity (the stage's `Followed`; the game's loop gives the camera its position).
+- `cameraPosition` stands it at once at the locator (none: where it stands) plus `offset`; a magnification over 0 zooms at
+  once.
+- `addCameraEffect` and `removeCameraEffect` turn the camera's visual effects on and off (none named: all off).
+
+**Lights:** `disableLight` and `enableLight` switch the level model's lights (a comma list), at once, fading or flickering
+over the time. A replay switches them at once; a checkpoint's load puts them back as the model has them before the replay.
+
+**Requests:** `flash`, `stopMusic`, `setMusicFocus` (the locator's point, the radius, the value it clears to), `setVolume`,
+`displayTitleInLevel` and `bossTitle` (for 2 s with no time given; raw text needs both lines), `scrollScore` (an area's
+random point, else the locator, plus the offset), `rollCredits`, `endGame` and `killDialogs`.
+
+**The HUD:** `disableUI` and `enableUI` hide and show it.
+
+**The generic bar** (`healthBar`, `activateHealthBar`, `removeHealthBar`): set up, then shown. A timer runs, after its first
+delay, down from its time to 0 or up from 0 to it; once done, its `onEndTrigger` is set off once, in the scene then current.
+The original's counter and hit-point bars also creep by a random amount every 4 s, a test left in; ours do not. A
+checkpoint's restart takes the bar away before the replay sets it up again (ours).
+
+**The tutorial** (`ScriptGame.Tutorial`, outliving a checkpoint as the original's):
+- `enableElement`/`disableElement`, `enableCastType`/`disableCastType` (`blast` is the "none" cast, as the original's
+  enum), `enablePush`/`disablePush` and `enableDark`/`disableDark` set what the players may use (their controls read it,
+  OM-56).
+- `setHint` shows a hint: the loc key (its `_key` or `_pad` form with `appendController`), a clip and a place. On the
+  original's other HUD the bottom right moves to the centre right; ours has one HUD.
+- `setDialogHint` shows a dialog hint over a magick (when given) or an element; its closing sets `dialogHintDone` and the
+  trigger. `removeHint` and `removeDialogHint` take them away.
+- The telemetry actions and `printDebug` do nothing, as the original's release.
+
+**The profile:**
+- `unlockAchievement` wins an achievement once (`AchievementRequest` for the platform).
+- `conditionalUnlockAchievement` knows the original's rules only: `thisismagicka` and `therecanbeonlyone` when the victim's
+  last attacker is a playing wizard; `drivenmad`, `breezedthrough` and `handlingthefrustration` when no player died on the
+  level. Any other fails the loading (the original throws as it runs).
+- `foundSecretArea`, `foundMoose` and `killedAPony` note the name for the profile (OM-55).
+
+**The wizards:** `wizardControl` lights the staffs or puts them out; `beginDefaultAvatarSection`/`end…` and
+`beginUnequipWeaponsSection`/`end…` mark those stretches; the latter's end plays its clip on every avatar.
+
+**Never used by the game:** `releaseGrip` waits for the grips (OM-33), and `physAnimation` for the parts' world (OM-74).
+
+### 9.6 Ours: the boss fights (OM-46)
+
+Ours is `BossFight.cs` and `BossActions.cs`. The fight (`ScriptGame.BossFight`, one for the game as the original's) holds
+the bosses the scripts spawned; once a boss joins, `ScriptGame.Boss` is the fight, which `bossDead` and `bossHealth` read.
+- Its health is the bosses' hit points summed over their most, 0..1, once it runs (before, a sliver); it is dead when every
+  boss is.
+- `spawnBoss` sets the fight up once (its bar's width; as the original, the health's delay given is not kept), puts the boss
+  in at the place and starts the fight unless `delayed`:
+  - with `prop`, a prop of `Data/PhysicsEntities` with the name and triggers (as the original, the damage trigger only when
+    a death trigger is given too); a checkpoint does not keep it, the replay makes it again; a prop the game lacks fails the
+    loading;
+  - with `generic`, a character of `Data/Characters`;
+  - else the named boss of the game's own code (`IScriptAssets.Boss`): Grimnir, Fafnir, Vlad, Jörmungandr, Cthulhu and the
+    rest come with OM-42; until then the fight has none of it.
+- `spawnGenericBoss` makes one character as a `spawn` does and has it join; not replayed, as the original.
+- `activateBoss` starts the fight, `endBossFight` ends it (no bosses, the game sees none), and `bossMessage` tells its
+  bosses a message (a named boss's own code acts on it).
+- A checkpoint's restart ends the fight before the replay (ours: the replay's spawns bring the bosses in anew). As the
+  original's replay of `spawnBoss`, a boss beaten before the checkpoint comes back whole.
+
 ## 10. Condition catalogue (24)
 
 All conditions have the base attribute `invert` (bool).

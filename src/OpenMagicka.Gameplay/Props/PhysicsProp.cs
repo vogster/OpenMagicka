@@ -139,8 +139,17 @@ public sealed partial class PhysicsProp : Entity
         return true;
     }
 
+    /// <summary>A boss fight's prop: its fight's spawn makes it again on a checkpoint's replay, so the checkpoint does not keep it.</summary>
+    public bool IsBoss { get; set; }
+
+    /// <summary>How long it still shows highlighted (a script's highlightPhys); not above 0, not.</summary>
+    public float Highlighted { get; private set; } = -1;
+
+    public void Highlight(float time) => Highlighted = float.IsFinite(time) ? time : throw new ArgumentOutOfRangeException(nameof(time), time, "must be finite");
+
     public override void Update(float dt)
     {
+        Highlighted = MathF.Max(-1, Highlighted - dt);
         if (!started)
         {
             started = true;

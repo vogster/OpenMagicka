@@ -46,6 +46,9 @@ public sealed class BookOfMagick : Entity
 
     public MagickType Magick { get; }
 
+    /// <summary>The script trigger its pick-up sets off, with the picker (0 for none).</summary>
+    public int OnPickupTrigger { get; set; }
+
     public override Vector3 Position => body is { IsRemoved: false } && !world.IsDisposed ? body.Position : lastPosition;
 
     public override float Radius => Size;

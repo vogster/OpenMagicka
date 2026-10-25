@@ -11,6 +11,9 @@ public interface IScriptAssets
 
     /// <summary>The physics prop of an asset ("data/physicsentities/…"); null when there is none.</summary>
     Gameplay.Props.PropTemplate? Prop(string asset) => null;
+
+    /// <summary>A named boss of the game's own code (grimnir, fafnir, vlad…, OM-42); null for one not yet made.</summary>
+    IFightBoss? Boss(string name) => null;
 }
 
 /// <summary>The game's content as script assets: items and props from the template library, each read once.</summary>

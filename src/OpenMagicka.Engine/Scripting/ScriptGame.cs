@@ -49,4 +49,29 @@ public sealed class ScriptGame
     public ISet<string> Achievements { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     public ISet<Dlc> InstalledDlc { get; } = new HashSet<Dlc>();
+
+    /// <summary>The tutorial's locks and hints.</summary>
+    public ScriptTutorial Tutorial { get; } = new();
+
+    /// <summary>The boss fight the scripts set up (the game's one, as the original's); <see cref="Boss"/> is it once a boss joins.</summary>
+    public ScriptBossFight BossFight { get; } = new();
+
+    /// <summary>The level's generic bar (a timer, a counter).</summary>
+    public ScriptHealthBar HealthBar { get; } = new();
+
+    /// <summary>The secret areas found, the moose found and the ponies killed, by name (the profile keeps them, OM-55).</summary>
+    public ISet<string> SecretAreas { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public ISet<string> Moose { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public ISet<string> Ponies { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The wizards' staffs give light (dark levels: the Mines, Niflheim).</summary>
+    public bool StaffLight { get; set; }
+
+    /// <summary>A stretch played as the default wizard (a level's own look stands aside).</summary>
+    public bool DefaultAvatarSection { get; set; }
+
+    /// <summary>A stretch where the wizards hold no weapons.</summary>
+    public bool UnequipWeaponsSection { get; set; }
 }

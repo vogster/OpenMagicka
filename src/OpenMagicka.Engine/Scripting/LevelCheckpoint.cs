@@ -15,7 +15,7 @@ public abstract record EntityState
     /// <summary>What of an entity a checkpoint keeps; null for one it does not.</summary>
     public static EntityState? Of(Entity entity) => entity switch
     {
-        PhysicsProp { IsDead: false } prop => new PropState(prop.Template, prop.Transform, prop.HitPoints, prop.OnDeathTrigger, prop.OnDamageTrigger,
+        PhysicsProp { IsDead: false, IsBoss: false } prop => new PropState(prop.Template, prop.Transform, prop.HitPoints, prop.OnDeathTrigger, prop.OnDamageTrigger,
             prop.UniqueId),
         WorldItem { IsPickable: true, IsDead: false } item => new ItemState(item.Item.Template, item.Position, item.IsPinned, item.OnPickupTrigger,
             item.IgnoresTractorPull, item.UniqueId),

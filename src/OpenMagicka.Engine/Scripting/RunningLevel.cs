@@ -21,10 +21,10 @@ public sealed class RunningLevel
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(scene);
         World = world;
-        Scene = new ScriptScene(scene, level ?? new ScriptLevel(), registry ?? ScriptRegistry.Engine(), world, looped, seed, new ScriptPlaces(model), game);
+        Scene = new ScriptScene(scene, level ?? new ScriptLevel(), registry ?? ScriptRegistry.Engine(), world, looped, seed, new ScriptPlaces(model), game,
+            assets);
         (Bestiary, NavMesh) = (bestiary, SceneSetup.Navigation(model, Scene.Places));
         (world.Entities.Bestiary, world.Entities.NavMesh) = (Bestiary, NavMesh);
-        Scene.Assets = assets;
         SceneSetup.PlaceProps(world, model, assets);                         // the level's own props stand when it starts
         Scene.Enter();
     }

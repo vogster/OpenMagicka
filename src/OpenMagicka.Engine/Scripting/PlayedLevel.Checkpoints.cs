@@ -43,6 +43,8 @@ public sealed partial class PlayedLevel
         var from = Current?.Key ?? 0;
         pending = null;
         Game.InCutscene = false;
+        Game.BossFight.Reset(Game);                                           // ours: the replay's spawns bring the bosses in anew
+        Game.HealthBar.Reset();                                               // ours: the replay sets the bar up again
         Level.Stage.Reset();
         requests.Clear();
         Empty();
@@ -51,9 +53,10 @@ public sealed partial class PlayedLevel
             Apply(scene, checkpoint.Scenes.GetValueOrDefault(scene.Key), ReferenceEquals(scene, target) ? checkpoint.Ignored : null);
         }
         Prepare(target);
-        Enter(target, new SpawnPoint(target.Key, [], SpawnPlayers: false));
-        Level.Load(checkpoint.Level);
+        Enter(target, new SpawnPoint(target.Key, [], SpawnPlayers: false), replay: false);
         Respawn(checkpoint);
+        ReplayEntry(target);                                                  // after the fresh wizards: the replay's items and factions are theirs
+        Level.Load(checkpoint.Level);
         Game.PlayerDiedInLevel = true;
         requests.Enqueue(new SceneChangedRequest(from, target.Key, Kept: false));
         return true;
