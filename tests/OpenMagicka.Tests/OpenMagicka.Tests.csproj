@@ -25,4 +25,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- FAudio (and SDL3, which it runs on) for the sound tests (OM-51); they pass silently without them. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <None Include="$(RootDir)lib/fnalibs/x64/FAudio.dll;$(RootDir)lib/fnalibs/x64/SDL3.dll" Condition="Exists('$(RootDir)lib/fnalibs/x64/FAudio.dll')"
+      CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <None Include="$(RootDir)lib/fnalibs/lib64/libFAudio.so.0;$(RootDir)lib/fnalibs/lib64/libSDL3.so.0" Condition="Exists('$(RootDir)lib/fnalibs/lib64/libFAudio.so.0')"
+      CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
 </Project>

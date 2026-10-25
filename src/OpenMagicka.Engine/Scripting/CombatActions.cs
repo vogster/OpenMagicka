@@ -291,6 +291,6 @@ public sealed class TeleportAction : ScriptAction
         var body = character.Body;
         (body.Body.Position, body.Body.Velocity) = (point + Vector3.UnitY * (0.1f - body.HeightOffset), Vector3.Zero);
         body.Face(ScriptPlaces.Forward(locator));
-        Scene.Stage.Request(new PlaySoundRequest(0, SoundBanks.Spells, Sound.Length > 0 ? Sound : DefaultSound, 1, body.Body.Position, 0, true));
+        Scene.Stage.Request(new PlaySoundRequest(0, SoundBanks.Spells, Sound.Length > 0 ? Sound : DefaultSound, null, body.Body.Position, 0, true));
     }
 }

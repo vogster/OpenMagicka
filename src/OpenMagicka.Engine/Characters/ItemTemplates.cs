@@ -33,10 +33,18 @@ public static class ItemTemplates
             content.Ranged.RangedConditions.Count > 0 ? Ranged(content, projectile) : null,
             Bounds(model),
             content.SpecialAbility is { } special ? Special(special) : null,
-            content.SpecialRechargeTime ?? 0);
+            content.SpecialRechargeTime ?? 0)
+        {
+            Sounds = Sounds(content.Sounds),
+            PauseSounds = content.PauseSounds,
+        };
         template.Validate();
         return template;
     }
+
+    /// <summary>A template's sounds: its first 4 named ones, lowered (as the original hashes them).</summary>
+    public static IReadOnlyList<Gameplay.Characters.TemplateSound> Sounds(IReadOnlyList<SoundContent> sounds) =>
+        [.. sounds.Where(s => !string.IsNullOrEmpty(s.Cue)).Take(4).Select(s => new Gameplay.Characters.TemplateSound(s.Cue.ToLowerInvariant(), (int)s.Banks))];
 
     /// <summary>A special ability as the rules need it: an empty animation is <c>cast_self</c>, an empty display name none (§8.1.7).</summary>
     internal static Gameplay.Items.SpecialAbilityTemplate Special(SpecialAbilityContent content)

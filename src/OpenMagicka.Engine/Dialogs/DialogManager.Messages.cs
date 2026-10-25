@@ -89,7 +89,7 @@ public sealed partial class DialogManager
         if (line.Sound is { Length: > 0 } cue)
         {
             interact.Cues[message] = ++nextCue;
-            stage.Request(new PlaySoundRequest(-nextCue, line.Bank, cue, 1, speaker?.Position, 0, speaker is not null));
+            stage.Request(new PlaySoundRequest(-nextCue, line.Bank, cue, null, speaker?.Position, 0, speaker is not null));
         }
         if (interact.Definition.FocusOwner && speaker is not null)
         {

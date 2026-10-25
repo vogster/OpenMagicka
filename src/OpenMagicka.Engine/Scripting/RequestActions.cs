@@ -56,7 +56,7 @@ public sealed class PlayMusicAction : ScriptAction
     private (SoundBanks Bank, string Cue) cue;
 
     public string Cue { get; set; } = "";
-    public float FocusValue { get; set; }
+    public float? FocusValue { get; set; }
 
     public override void Initialize() => cue = ScriptCues.Read(Cue, SoundBanks.Music, "playMusic");
 
@@ -162,7 +162,7 @@ public sealed class TriggerCheckpointAction : ScriptAction
         var players = session?.Players ?? [];
         var fairy = SpawnFairy && players.Count(p => p.Playing) == 1 && session?.Type != GameType.Versus;
         Scene.Stage.Request(new CheckpointRequest([.. spawnPoints], [.. ignore], SaveToDisk, fairy));
-        Scene.Stage.Request(new PlaySoundRequest(0, SoundBanks.UI, "ui_checkpoint01", 1, null, 0, false));
+        Scene.Stage.Request(new PlaySoundRequest(0, SoundBanks.UI, "ui_checkpoint01", null, null, 0, false));
         foreach (var player in players.Where(p => p.Playing && p.Id < spawnPoints.Length))
         {
             if (player.Avatar is not { } avatar)

@@ -170,9 +170,9 @@ public sealed partial class LevelPlay : IDisposable
         foreach (var request in Level.TakeRequests())
         {
             changed |= request is SceneChangedRequest;
-            if (!Take(request))
+            if (!Take(request) && !TakeSound(request))
             {
-                Requests.Add(request);                                        // for the sound and the HUD (OM-51, OM-54)
+                Requests.Add(request);                                        // for the HUD (OM-54)
             }
         }
         if (changed)
@@ -189,6 +189,7 @@ public sealed partial class LevelPlay : IDisposable
         StepDialogs(dt);
         StepPrompt(dt, input, pad is not null);
         StepCamera(dt, snap: false);
+        StepSound(dt);
         StepCover(dt);
     }
 
@@ -295,6 +296,7 @@ public sealed partial class LevelPlay : IDisposable
     {
         Spells.Dispose();
         Effects.Dispose();
+        DisposeSound();
         Level.End();
         World.Dispose();
     }

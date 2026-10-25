@@ -89,6 +89,11 @@ public sealed record ItemTemplate(
     SpecialAbilityTemplate? Special = null,
     float SpecialRechargeTime = 0)
 {
+    /// <summary>What it sounds of while held (up to 4 cues, lowered), and whether they pause rather than play (docs/engine/ARCHITECTURE.md §8).</summary>
+    public IReadOnlyList<Characters.TemplateSound> Sounds { get; init; } = [];
+
+    public bool PauseSounds { get; init; }
+
     /// <summary>Throws on a value the rules cannot use; loaders call it as they read.</summary>
     public void Validate()
     {

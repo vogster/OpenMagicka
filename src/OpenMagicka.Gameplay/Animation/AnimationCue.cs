@@ -24,6 +24,9 @@ public sealed record EffectCue(string Effect, string Bone, bool Attached, Animat
 /// <summary>The attached effect of this source ends (one never started may end too).</summary>
 public sealed record EffectEndCue(AnimationAction Source) : AnimationCue;
 
+/// <summary>An element went into the character's queue (it joined, merged or cancelled): the HUD's sound of it.</summary>
+public sealed record ConjureCue(Spells.Elements Element) : AnimationCue;
+
 /// <summary>A step on the ground: the sound and dust come from the material.</summary>
 public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3 Facing) : AnimationCue;
 

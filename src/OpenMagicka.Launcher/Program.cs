@@ -53,6 +53,18 @@ internal static class Program
         var loader = new OpenMagicka.Content.ContentLoader(files, OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka);
         var definition = OpenMagicka.Content.Levels.LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path);
         var play = LevelPlay.Open(definition, files, loader);
+        using var audio = screenshot is null ? OpenAudio(files) : null;      // a screenshot is taken in silence
+        if (audio is not null)
+        {
+            if (SoundNames(loader) is { } names)
+            {
+                play.Hear(new OpenMagicka.Engine.Audio.SoundSystem(audio, names));
+            }
+            else
+            {
+                audio.Dispose();                                              // no names, no sound: the device closes at once
+            }
+        }
         var controls = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenMagicka", "controls.json");
         if (File.Exists(controls))
         {
@@ -68,6 +80,31 @@ internal static class Program
         using var game = new PlayGame(loader, play, Path.GetFileNameWithoutExtension(path), screenshot);
         game.Run();
         return game.ExitCode;
+    }
+
+    /// <summary>The game's sound (OM-51); none, with a word why, when there is no device or the content lacks it.</summary>
+    private static OpenMagicka.Engine.Audio.XactAudio? OpenAudio(OpenMagicka.Content.ContentFileSystem files)
+    {
+        var audio = OpenMagicka.Engine.Audio.XactAudio.Open(files, OpenMagicka.Content.Localization.LanguagePack.Fallback, out var failure);
+        if (audio is null)
+        {
+            Console.Error.WriteLine($"OpenMagicka: no sound ({failure})");
+        }
+        return audio;
+    }
+
+    /// <summary>The cues' names; none, with a word why, when the content's list does not read (the game is then silent).</summary>
+    private static OpenMagicka.Engine.Audio.SoundNames? SoundNames(OpenMagicka.Content.ContentLoader loader)
+    {
+        try
+        {
+            return OpenMagicka.Engine.Audio.SoundNames.Load(loader);
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException or NotSupportedException or FormatException)
+        {
+            Console.Error.WriteLine($"OpenMagicka: no sound ({OpenMagicka.Engine.Audio.SoundNames.Asset}: {e.Message})");
+            return null;
+        }
     }
 
     private static int RunViewer(string content, GameOptions options)

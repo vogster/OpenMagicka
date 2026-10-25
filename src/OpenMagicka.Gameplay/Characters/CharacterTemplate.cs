@@ -4,6 +4,9 @@ using OpenMagicka.Gameplay.Entities;
 
 namespace OpenMagicka.Gameplay.Characters;
 
+/// <summary>A cue a template sounds of, by its bank flags (the original's).</summary>
+public sealed record TemplateSound(string Cue, int Banks);
+
 /// <summary>The factions of docs/engine/ENTITIES_AI.md §3: characters with no shared bit are enemies.</summary>
 [Flags]
 public enum Factions
@@ -74,6 +77,9 @@ public sealed record CharacterTemplate(
 {
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
+
+    /// <summary>What it sounds of while it lives (a hum, an engine): up to 4 cues, lowered (docs/engine/ARCHITECTURE.md §8).</summary>
+    public IReadOnlyList<TemplateSound> Sounds { get; init; } = [];
 
     public bool CanBeKnockedDown => KnockdownTolerance != NoKnockdown;
 

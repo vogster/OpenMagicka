@@ -14,12 +14,15 @@ public enum ScriptTransition { None, Fade, CrossFade }
 /// </summary>
 public abstract record ScriptRequest;
 
-/// <summary>A cue of a bank; with a name (its id) a scene sound kept to stop or tune later; at a place, a 3D one.</summary>
-public sealed record PlaySoundRequest(int Id, SoundBanks Bank, string Cue, float Volume, Vector3? At, float Radius, bool Apply3D) : ScriptRequest;
+/// <summary>
+/// A cue of a bank; with a name (its id) a scene sound kept to stop or tune later; at a place, a 3D one. The scripts
+/// set its Volume variable (a dialog's line and the checkpoint's sound do not).
+/// </summary>
+public sealed record PlaySoundRequest(int Id, SoundBanks Bank, string Cue, float? Volume, Vector3? At, float Radius, bool Apply3D) : ScriptRequest;
 
 public sealed record StopSoundRequest(int Id, bool Instant) : ScriptRequest;
 
-public sealed record PlayMusicRequest(SoundBanks Bank, string Cue, float Focus) : ScriptRequest;
+public sealed record PlayMusicRequest(SoundBanks Bank, string Cue, float? Focus) : ScriptRequest;
 
 /// <summary>
 /// A dialog's next interact, shown over a speaker, at a point in the level, or at a point on the screen

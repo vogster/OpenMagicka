@@ -61,6 +61,9 @@ public static class CharacterTemplates
             Ai: AiProfiles.From(content),
             CanSeeInvisible: content.CanSeeInvisible,
             MoveAbilities: content.MoveAnimations.Aggregate(Gameplay.Navigation.NavMovement.Default, (all, m) => all | (Gameplay.Navigation.NavMovement)(byte)m.Movement),
-            MaxPanic: stats.MaxPanic);
+            MaxPanic: stats.MaxPanic)
+        {
+            Sounds = ItemTemplates.Sounds(content.Sounds),
+        };
     }
 }

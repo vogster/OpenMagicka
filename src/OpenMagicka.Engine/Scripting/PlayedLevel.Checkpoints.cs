@@ -27,6 +27,7 @@ public sealed partial class PlayedLevel
         return Checkpoint = new LevelCheckpoint(Current?.Key ?? 0, Level.Save(), states, [.. spawnPoints], [.. ignored], magicks)
         {
             Dialogs = Game.Dialogs?.Save(),
+            Sounds = Game.Sounds?.Save(),
         };
     }
 
@@ -50,6 +51,7 @@ public sealed partial class PlayedLevel
         Game.HealthBar.Reset();                                               // ours: the replay sets the bar up again
         Level.Stage.Reset();
         Game.Dialogs?.Restore(checkpoint.Dialogs);
+        Game.Sounds?.Restore(checkpoint.Sounds);
         requests.Clear();
         Empty();
         foreach (var scene in scenes.Values)

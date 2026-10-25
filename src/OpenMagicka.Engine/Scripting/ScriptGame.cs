@@ -29,6 +29,15 @@ public interface IScriptDialogs
     }
 }
 
+/// <summary>The sound's part of a checkpoint (OM-51): the music the scripts chose and the scene's named sounds.</summary>
+public interface IScriptSounds
+{
+    object? Save();
+
+    /// <summary>Back to a checkpoint's sound: every sound stops at once, then its music and named sounds play again.</summary>
+    void Restore(object? saved);
+}
+
 /// <summary>The downloadable packs the scripts ask about.</summary>
 public enum Dlc { WizardHat, Vietnam }
 
@@ -39,6 +48,9 @@ public enum Dlc { WizardHat, Vietnam }
 /// </summary>
 public sealed class ScriptGame
 {
+    /// <summary>The sound, for checkpoints; none plays without one.</summary>
+    public IScriptSounds? Sounds { get; set; }
+
     public bool InCutscene { get; set; }
 
     /// <summary>A player has died on this level.</summary>

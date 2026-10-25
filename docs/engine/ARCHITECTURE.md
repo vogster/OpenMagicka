@@ -960,21 +960,84 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
 - Cue names: `Audio/SoundList.xnb` (`List<string>`) is turned into a dictionary
   "hash of lowercase name → name". Code and XML refer to sounds by hash (§12.1).
 - Volume categories: Music, plus Sfx, Ambient, Default, UI, VO, VOloc under the common
-  sound volume (0…10 → ×0.1).
+  sound volume (0…10 → ×0.1). The audio manager starts at 8/8; the settings' defaults are 7/7.
 - XACT global variables:
   - `RoomType` — the scene's reverb preset: None 0, Generic 10, SmallRoom 20, StoneRoom 30,
     Cave 40, Forest 50. Reverb is implemented with RPC/DSP presets in `.xgs`;
     the scene sets the `RoomType` attribute;
   - `ReverbMix` — smoothly, up to 50 units per second;
-  - `MusicFocus` = distance of the nearest player to the focus point / radius, clamped to
-    [0,1], or the default value;
-  - `MusicThreat` — rises by 5/s up to 10 in combat, falls by 2/s.
-- Music: one current cue. On change, the old one is stopped with `AsAuthored`
-  (authored crossfade). Restarting the same cue is ignored.
-- 3D: `Cue.Apply3D(listener, emitter)`; the camera updates the listener (§6). Active cues
-  are kept in a list; stopped ones are removed in `Update`. There is group pause and
-  resume.
-- `AudioManager.Update` is called from the logic thread, `engine.Update()` every tick.
+  - `MusicFocus` = distance of the nearest living avatar to the focus point / radius, clamped
+    to [0,1], or the default value (1 at first; `setMusicFocus clearTo=` and `playMusic
+    focusValue=` set it);
+  - `MusicThreat` — rises by 5/s up to 10 while any AI agent has a target, falls by 2/s.
+- Per-cue variables: `Volume` (scene sounds), `Distance` and `NormalizedDistance` (located
+  scene sounds: the camera's distance over the sound's radius, which only scales it),
+  `Magnitude` (spells, events, blood), `Weight` and `WaterDepth` (footsteps), `Health`
+  (shields), `Pages` (the tome).
+- Music: one current cue, outside the active list (stopping, pausing and resuming all leave it
+  alone). On change, the old one is stopped with `AsAuthored` (authored crossfade). The same cue
+  again is ignored unless it is stopping. Only `playMusic` actions choose a level's music; a
+  scene change does not stop it. A checkpoint keeps the last `playMusic` (bank, cue, focus).
+- 3D: `Cue.Apply3D(listener, emitter)`; the camera updates the listener (§6): 20 above its
+  ground point, looking down, world forward as up. No velocity anywhere, so no Doppler. A cue
+  stays where it was placed unless placed again (status loops, guns, shields, barriers, located
+  scene sounds and a few magicks are). Active cues are kept in a list; stopped ones are removed
+  in `Update`. There is group pause and resume.
+- `AudioManager.Update` is called from the logic thread before the game's update: forget
+  stopped music and cues, step `ReverbMix` (50/s), `MusicFocus`, `MusicThreat`, then
+  `engine.Update()`.
+- Reverb: a scene's `<Reverb roomType= mix=/>` sets `RoomType` at once when it is entered;
+  `ReverbMix` moves to its mix, and to 0 while a scene transition fades out.
+- Dialog lines' sounds are in the Characters bank unless named, played 3D at the speaker (flat
+  without one); their speech waves are in the Loc bank.
+
+### 8.1 Ours: the sound (OM-51)
+
+- `IAudioBackend` (ADR-0001) is the device: `XactAudio` over FNA's XACT (FACT), or
+  `SilentAudio` (no device, no content, screenshots, tests). `XactAudio` loads the banks in
+  the original's order on a task of its own; a bank not loaded yet plays nothing.
+- A wave bank with WMA entries (`Wave Bank.xwb` and `Loc.xwb`) is left out
+  (`WaveBankInfo` reads each bank's entry formats), as FAudio cannot play WMA (RISK_CHECKS.md
+  §2). Cues that use it play without those waves until OM-61 transcodes them. So
+  `Sound Bank.xsb`'s narration and the dialogs' speech are silent for now.
+- `SoundNames` maps hashes to names from `Audio/SoundList`, lowering every name (the original
+  hashes some as written, so an upper-case letter there finds nothing).
+- `SoundSystem` is the audio manager: cues by bank and hash, flat or for the listener; the
+  active list, stop, pause and resume all; the music with its focus and threat; the reverb.
+- `SoundDirector` is a level's sound (logic thread, after the camera):
+  - the entities' cues: `SoundCue` (placed once), `SoundStopCue` (that source's cues by name),
+    `FootstepCue` (by ground material), `GunfireCue` (a gun's sound following its holder while
+    it fires);
+  - the scripts' requests: `playSound` without an id plays once; with one it is a named scene
+    sound, global (played again when asked again, its volume kept) or located (played once
+    while it lasts). `stopSound`, `setVolume`, `playMusic`, `stopMusic`, `setMusicFocus`;
+  - a scene left with its NPCs kept pauses its named sounds till it is entered again; otherwise
+    they stop;
+  - the world's state:
+    - a character's template sounds while it lives;
+    - its burning, wet and frozen loops, started as the status comes and following it;
+      `spell_steam_hit` plays as the wet dry, the frozen thaw and the burning are put out by
+      water;
+    - `misc_gib` when it shatters;
+    - a player's element as it goes into the queue (`ConjureCue`, `ui_element_*`), also when it
+      merges or cancels;
+    - held items' sounds (an item with `PauseSounds` keeps them paused, as the original's);
+    - a shield's `spell_shield` (with `Health`);
+    - a barrier's element loops;
+    - a mine's `spell_mine01`;
+  - the threat: any living character with a target;
+  - checkpoints (`IScriptSounds`): the last `playMusic` and the scene's named sounds. A restart
+    stops every sound at once, then plays the music again and the named sounds that were
+    playing. A stopped global sound stays known, so a later `playSound` with its id plays it;
+  - a dialog's lines are no scene's: each plays once (3D at its speaker, flat without one) and
+    is stopped by its id.
+- Not done:
+  - blood on hits (`misc_hit_blood`): the gameplay has no hit event for the sound;
+  - spells' element sound sets (sprays, beams' stages) beyond what the gameplay raises;
+  - barrier breaks and mine detonations;
+  - pausing (no pause menu yet);
+  - the menus' sounds and music (OM-53);
+  - the volume settings (OM-53).
 
 ---
 

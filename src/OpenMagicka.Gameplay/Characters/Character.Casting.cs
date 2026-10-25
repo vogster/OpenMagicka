@@ -103,7 +103,12 @@ public sealed partial class Character
             }
             return false;
         }
+        var before = SpellQueue;
         (SpellQueue, var added) = SpellQueue.Conjure(element);
+        if (!ReferenceEquals(before, SpellQueue))
+        {
+            RaiseCue(new Animation.ConjureCue(element));
+        }
         return added;
     }
 

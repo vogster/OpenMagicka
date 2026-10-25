@@ -66,4 +66,7 @@ public sealed record LevelCheckpoint(int Scene, ScriptLevel.Snapshot Level, IRea
 {
     /// <summary>The dialogs' state (OM-49); none when the level plays without them.</summary>
     public object? Dialogs { get; init; }
+
+    /// <summary>The sound's state (OM-51); none when the level plays without it.</summary>
+    public object? Sounds { get; init; }
 }
