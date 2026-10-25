@@ -5,8 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- The beta's version (OM-53); the build adds the commit (+hash) to the informational version. -->
-    <Version>0.1.0-beta.1</Version>
+    <!-- The version (OM-53); a release's comes from its tag (.github/workflows/release.yml). The build adds the
+         commit (+hash) to the informational version. -->
+    <Version>0.0.1</Version>
     <RootDir>$(MSBuildThisFileDirectory)</RootDir>
     <FnaProject>$(RootDir)lib/FNA/FNA.Core.csproj</FnaProject>
   </PropertyGroup>

@@ -5,16 +5,19 @@
 # Windows loses). The game's own files are never in it: the player's Magicka is found at run time. Needs
 # tools/fetch_fnalibs.sh to have been run.
 #
-#   pwsh tools/package_beta.ps1 [-Runtimes win-x64,linux-x64]
+# The version is Directory.Build.props', or the one given (the release workflow gives its tag's).
+#
+#   pwsh tools/package_beta.ps1 [-Runtimes win-x64,linux-x64] [-Version 0.0.1]
 param(
-    [string[]]$Runtimes = @('win-x64', 'linux-x64')
+    [string[]]$Runtimes = @('win-x64', 'linux-x64'),
+    [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project = Join-Path $root 'src/OpenMagicka.Launcher/OpenMagicka.Launcher.csproj'
 $artifacts = Join-Path $root 'artifacts'
-$version = (Select-Xml -Path (Join-Path $root 'Directory.Build.props') -XPath '//Version').Node.InnerText
+$version = if ($Version) { $Version } else { (Select-Xml -Path (Join-Path $root 'Directory.Build.props') -XPath '//Version').Node.InnerText }
 
 # A .tar.gz of a folder (under its own name), the launcher and the native libraries executable, the rest not.
 function Write-TarGz([string]$folder, [string]$package) {
@@ -50,7 +53,7 @@ foreach ($runtime in $Runtimes) {
     if (Test-Path $out) {
         Remove-Item -Recurse -Force $out
     }
-    dotnet publish $project -c Release -r $runtime --self-contained true -p:DebugType=embedded -o $out
+    dotnet publish $project -c Release -r $runtime --self-contained true -p:DebugType=embedded -p:Version=$version -o $out
     if ($LASTEXITCODE -ne 0) {
         throw "the publish for $runtime failed"
     }

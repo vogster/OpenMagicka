@@ -1,0 +1,56 @@
+name: Release
+
+# A version tag (v0.0.1, v0.1.0-beta.2...) builds the testers' packages for Windows and Linux
+# (tools/package_beta.ps1) and publishes them as a GitHub release, the testers' guide as its text.
+# Run by hand, it builds the packages and keeps them as the run's artifacts, without a release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The FNA native libraries of the build our own are tested with (lib/fnalibs/SOURCE locally);
+      # its artifacts expire on 2027-01-20, after which tools/fetch_fnalibs.sh takes a newer run.
+      - name: Fetch the FNA native libraries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tools/fetch_fnalibs.sh 39715067086
+
+      - name: Test
+        run: dotnet test tests/OpenMagicka.Tests -c Release --logger "console;verbosity=minimal"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '' }
+          ./tools/package_beta.ps1 -Version $version
+
+      - name: Keep the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            artifacts/*.zip
+            artifacts/*.tar.gz
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip artifacts/*.tar.gz \
+            --title "OpenMagicka $GITHUB_REF_NAME" --notes-file docs/TESTING.md --prerelease

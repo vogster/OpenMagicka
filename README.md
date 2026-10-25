@@ -55,6 +55,13 @@ Studio's C++ tools and CMake needed).
 
 Tests that need the game files run when `MAGICKA_DIR` points at a Magicka installation.
 
+## Download
+
+Testers' builds for Windows and Linux are on the [releases page](https://github.com/vogster/OpenMagicka/releases):
+unpack one, run `OpenMagicka`, and it finds your Magicka (or asks for its folder).
+[docs/TESTING.md](docs/TESTING.md) is the testers' guide. Each `v*` tag builds and publishes a release
+(`.github/workflows/release.yml`): `git tag v0.0.2 && git push origin v0.0.2`.
+
 ## Playing
 
 The launcher runs the game: the Tome's menu, the campaign's chapters, pause, the options. It finds Magicka itself
