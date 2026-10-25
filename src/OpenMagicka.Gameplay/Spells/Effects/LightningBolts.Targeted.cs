@@ -42,7 +42,7 @@ public static partial class LightningBolts
             hits.Add(target);
             var deflected = Hit(caster, source, target, damage);
             var at = target is IShield shield ? Nearest(shield, source) : target.Position;
-            Raise(manager, caster, cueSource, new LightningCue(source, at, Faded: false));
+            Raise(manager, caster, cueSource, new LightningCue(source, at, Faded: false, SpellColours.Lightning, LightningCue.Targeted));
             if (deflected || !(range > 0.05f) || target is Barrier || target is IShield)
             {
                 return;
@@ -50,7 +50,7 @@ public static partial class LightningBolts
             var way = Flat(at - source);
             if (Next(manager, at, way, range, hits) is not { } next)
             {
-                Raise(manager, caster, cueSource, new LightningCue(at, at + way * range, Faded: true));
+                Raise(manager, caster, cueSource, new LightningCue(at, at + way * range, Faded: true, SpellColours.Lightning));
                 return;
             }
             range -= Vector3.Distance(at, next.Position);

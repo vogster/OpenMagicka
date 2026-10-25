@@ -1392,8 +1392,7 @@ frame. Each effect that plays out goes back on a queue, so the scene hears of it
   - lives 10 to 20 s; characters pass through it;
   - trails the prop's gib effect, unless frozen: frozen pieces are drawn icy and trail nothing.
 - **Camera shake:** a `CameraShakeCue` shakes the camera.
-- **Left to other tasks:** sounds (OM-51), decals (OM-66), and the beams', lightning's, blasts', tracers', shields',
-  barriers' and missiles' own drawing (OM-76).
+- **Left to other tasks:** sounds (OM-51) and decals (OM-66). The spells' own pictures are §17.
 - An effect the library lacks is said once and counted as played out.
 
 **Render thread** (`PlayGame`):
@@ -1409,4 +1408,62 @@ frame. Each effect that plays out goes back on a queue, so the scene hears of it
   - a static batch at its model transform × the instance's place;
   - a skinned one with the instance's bones as its palette (none: the bind pose at the place; bones past the effect's
     count are left out); a posed one is not culled by its bind pose's bounds.
-- Entities are drawn as of the last tick, not interpolated (OM-76).
+- Entities are drawn as of the last tick, not interpolated (OM-77).
+
+## 17. Ours: the spells' own pictures (OM-76)
+
+What the original draws of the spells with renderers of its own, rather than particles. The colours are SPELLS.md §14.
+The logic thread writes them into each frame (`SpellVisuals` → `SpellPictures`); the renderer draws them with the
+original's effects (`SpellPass`). Without what they need in the game's content, the spells show only their particles
+(`DeferredRenderer.SpellsUnavailable` says why).
+
+**Capsule lights** (`CapsuleLights`): a light along a segment, drawn in the light pass after the level's lights with the
+original's `CapsuleLight` effect over its unit capsule (`models/effects/Capsule`). The vertex shader stretches the
+capsule to the segment and swells it to the radius; the light falls off linearly from the segment. It casts no shadow
+and has no shine.
+
+**Beams** (`BeamDrawing`, the original's `Railgun`):
+- A beam of Arcane or Life alone is `ArcaneEffect`'s Beam technique over one strip of 512 vertices (the vertices crowd
+  near the caster). The shader bends the strip along the beam and turns it to the camera. Its colour is the beam's;
+  the centre is drawn at two thirds of it and the edges at a third.
+- First a straight core is drawn (0.333 wide), then helices round it: 4 for a first beam, and for a merged or bounced
+  one 2 plus 2 for each caster whose damage it carries. Each helix is wider and slower than the one before and turns
+  the other way. A first beam's helices are wide (up to 1.25) near the caster and narrow along it; a branch's stay
+  narrow.
+- Their waves run 30 a second. Arcane and Life take the Arcane row of `EffectTextures/Beams`.
+- A beam with other elements shows only their rows of that sheet, through `AdditiveEffect` (the original skips the
+  arcane picture then). Each row is drawn twice: once along the beam, turned to the camera, 2 wide, and once mirrored,
+  narrower and drifting faster. Lightning's row is tinted its colour.
+- A beam's light lies along it: radius 5, its colour × 0.6, and a branch's ambient half that.
+- A new beam starts `arcane_source` (a first beam only) and `arcane_hit` (`life_…` for Life), which follow its start
+  and its end.
+- A dying beam is gone the next frame, as the original's.
+
+**Lightning bolts** (`BurstDrawing`):
+- A bolt is one of 16 fixed zig-zag strips: 1 wide, a pair every 2 units, each pair after the first pushed aside by up to
+  0.75. It is drawn on the lightning row of the beams' sheet, stretched from its start to its end in an even number of
+  steps (at most 32 triangles), and turned to the camera.
+- Its tint is its colour × 2, as bright as √(10 × the life it has left). It shows 0.25 s (a targeted bolt 0.4 s, one
+  from the sky 1 s); a spell's bolt is its spell's colour, the others Lightning's.
+- Its light lies along it: radius 5, its colour × 1.5√life.
+- Each bolt starts `lightning_source` at its start and `lightning_hit` at its end.
+- Chains are separate bolts. A miss ends where it does.
+
+**Blasts:**
+- A blast of an element throws its effect eight ways round, one eighth apart (`area_<element>1_b`, a ground blast's or
+  Earth's `area_ground_<element>`). Each copy's level axes are scaled by how far that way reaches × radius / 10, so a
+  wall shortens that side.
+- A ground blast (but Earth's) lights a while: its element's colour × 6, radius twice the blast's. It comes up over
+  0.25 s within its 1 s, then goes over 0.25 s from full, as the original's.
+- An arcane or life blast spreads its disc instead: two squares of `EffectTextures/ArcaneDisc` turning against each
+  other at 4 a second, one band of the sheet for each of its elements. It grows from nothing past the blast's radius as
+  its life runs at 5 a second, fades in its last 0.05 s of showing (0.2–0.25 s), and goes at 0.4 s.
+- Each of its elements explodes (`beam_<element>_explosion`; Earth, Shield and Ice have none), and its light comes up
+  and goes over half a second.
+
+**Tracers and guns:**
+- A tracer is one particle: it flies its shot at the gun's speed from a unit past the muzzle to a unit short of the end,
+  after its delay. A shot shorter than that has none. Ours is drawn along its flight; the original's turn is undefined.
+- A gun flashes its muzzle effect at its `attach0` with each shot, and throws its shells effect at its `attach1` while it
+  fires.
+

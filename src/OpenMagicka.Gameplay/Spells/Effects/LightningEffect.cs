@@ -8,8 +8,14 @@ using OpenMagicka.Gameplay.Items;
 
 namespace OpenMagicka.Gameplay.Spells.Effects;
 
-/// <summary>A bolt for the renderer: from where it left to where it ended.</summary>
-public sealed record LightningCue(Vector3 From, Vector3 To, bool Faded) : AnimationCue;
+/// <summary>
+/// A bolt for the renderer: from where it left to where it ended (a faded one, a miss, ends nowhere), its colour
+/// and how long it shows (SPELLS.md §14: a quarter second; a targeted bolt 0.4 s, one from the sky 1 s).
+/// </summary>
+public sealed record LightningCue(Vector3 From, Vector3 To, bool Faded, Vector3 Colour, float Life = LightningCue.Short) : AnimationCue
+{
+    public const float Short = 0.25f, Targeted = 0.4f, FromTheSky = 1;
+}
 
 /// <summary>Lightning: bolts fired one after another along the facing or all around, chaining from target to target (docs/gameplay/SPELLS.md §5.5).</summary>
 public sealed class LightningEffect : SpellEffect
@@ -128,7 +134,7 @@ public static partial class LightningBolts
                 {
                     end = wall.Position;
                 }
-                caster.RaiseCue(new LightningCue(source, end, Faded: true));
+                caster.RaiseCue(new LightningCue(source, end, Faded: true, SpellColours.Of(spell)));
                 hitList.Clear();
                 return;
             }
@@ -144,7 +150,7 @@ public static partial class LightningBolts
             {
                 deflected = target.Damage(damage, caster, source) == DamageResult.Deflected;   // a wholly deflected bolt goes no further
             }
-            caster.RaiseCue(new LightningCue(source, at, Faded: false));
+            caster.RaiseCue(new LightningCue(source, at, Faded: false, SpellColours.Of(spell)));
             if (deflected || target is IShield)
             {
                 return;

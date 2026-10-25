@@ -145,6 +145,28 @@ public class BeamTests
     }
 
     [Fact]
+    public void ABeam_HasItsSpellsColour_AgesAsItRuns_AndAMergedOne_IsHalfwayBetween_WithMoreRings()
+    {
+        using var world = World();
+        var one = Caster(world, new Vector3(-5, 0.9f, 0), null, Elements.Arcane);
+        var two = Caster(world, new Vector3(5, 0.9f, 0), Foe, Elements.Arcane, Elements.Fire);
+        Face(world, one, Vector3.Normalize(new Vector3(1, 0, -1)));
+        Face(world, two, Vector3.Normalize(new Vector3(-1, 0, -1)));
+
+        var a = Fire(one).Beam!;
+        var b = Fire(two).Beam!;
+        Run(world, 0.3f);
+
+        Assert.Equal(SpellColours.Arcane, a.Colour);
+        Assert.Equal(new Vector3(1.9f, 0.5f, 0.5f), b.Colour, (x, y) => Vector3.Distance(x, y) < 1e-4f);   // arcane once, fire by its magnitude
+        Assert.Equal(4, a.Rings);
+        Assert.InRange(a.Age, 0.25f, 0.35f);
+        var child = (a.Child ?? b.Child)!;
+        Assert.Equal(Vector3.Lerp(a.Colour, b.Colour, 0.5f), child.Colour, (x, y) => Vector3.Distance(x, y) < 1e-4f);
+        Assert.Equal(6, child.Rings);                                                              // 2, and 2 for each of the two casters
+    }
+
+    [Fact]
     public void ACharacterWithGibs_BloatsWhenABeamKillsIt_AndBursts()
     {
         using var world = World();

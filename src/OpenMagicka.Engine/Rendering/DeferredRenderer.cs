@@ -9,11 +9,11 @@ namespace OpenMagicka.Engine.Rendering;
 /// What one frame is drawn with besides the geometry; <see cref="ShadowFocus"/> is where the sun's
 /// shadows are wanted (see <see cref="SunShadowView.Focus"/>), <see cref="Seconds"/> the time the
 /// liquids' waves and flow have run, <see cref="Parts"/> where the level's animated parts are now (by
-/// <see cref="LevelParts.Order"/>; none, or one missing: at rest).
+/// <see cref="LevelParts.Order"/>; none, or one missing: at rest), <see cref="Spells"/> the spells' own pictures.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
-    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null);
+    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -72,7 +72,7 @@ public sealed partial class DeferredRenderer : IDisposable
     private static readonly Vector4 NoCaster = new(1e6f);
 
     /// <summary>Additive objects: InvDestColor / One.</summary>
-    private static readonly BlendState AdditiveBlend = new()
+    internal static readonly BlendState AdditiveBlend = new()
     {
         ColorSourceBlend = Blend.InverseDestinationColor, ColorDestinationBlend = Blend.One,
         AlphaSourceBlend = Blend.InverseDestinationColor, AlphaDestinationBlend = Blend.One,
@@ -91,6 +91,7 @@ public sealed partial class DeferredRenderer : IDisposable
     private readonly LightPass lights;
     private readonly ParticlePass? particles;
     private readonly PostPass? post;
+    private SpellPass? spells;
     private readonly LightShadows lightShadows = new();
     private Matrix[] partMoves = [];
     private readonly Matrix[] bindPose;
@@ -164,6 +165,9 @@ public sealed partial class DeferredRenderer : IDisposable
     /// <summary>Why the particles are not drawn, when they were asked for but could not be set up.</summary>
     public string? ParticlesUnavailable { get; private set; }
 
+    /// <summary>Why the spells show only their particles (their own pictures could not be set up), or null.</summary>
+    public string? SpellsUnavailable { get; private set; }
+
     /// <summary>Why the filter and bloom are not applied (the scene is then shown as it is), or null.</summary>
     public string? PostUnavailable { get; private set; }
 
@@ -180,11 +184,16 @@ public sealed partial class DeferredRenderer : IDisposable
         frustum.Matrix = globals.ViewProjection;
         PlaceParts(level, frame);
         var lit = PartLight.Place(level, frame.Parts);
+        if (frame.Spells is { Points.Count: > 0 } passing)
+        {
+            lit = lit with { Points = [.. lit.Points, .. passing.Points] };            // the blasts' lights, as the level's but for a while
+        }
         frame = frame with { Sun = lit.Sun(frame.Sun) };
         var shadow = DrawSunShadow(device, level, frame);
         lightShadows.Draw(device, lit, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
-        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects).Concat(post?.Effects ?? []))
+        foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects).Concat(post?.Effects ?? [])
+            .Concat(spells?.Effects ?? []))
         {
             effect.Globals.Apply(globals);
         }
@@ -212,6 +221,10 @@ public sealed partial class DeferredRenderer : IDisposable
         device.SetRenderTarget(light);
         device.Clear(Color.Transparent);
         lights.Accumulate(device, quad, lit, frame, frustum, normal!, depth!, shadow, lightShadows);
+        if (frame.Spells is { } lamps)
+        {
+            spells?.Capsules.Draw(device, lamps.Lights, frustum, globals.CameraPosition, normal!, depth!);
+        }
 
         // Composition: Main is copied, then shaded back into Main with fog (Main keeps its depth for the additives).
         UnbindTextures(device);
@@ -231,6 +244,10 @@ public sealed partial class DeferredRenderer : IDisposable
         quad.Draw(device, shading, BlendState.Opaque);
         DrawSky(device, level);
         DrawAdditive(device, level, level.TextureFor, frame.Models);
+        if (frame.Spells is { } pictures)
+        {
+            spells?.Draw(device, pictures, globals);
+        }
         if (particles is not null && frame.Particles is { } pool)
         {
             particles.Draw(device, pool, globals.View, globals.Projection, depth!);
@@ -306,5 +323,6 @@ public sealed partial class DeferredRenderer : IDisposable
         lights.Dispose();
         particles?.Dispose();
         post?.Dispose();
+        spells?.Dispose();
     }
 }

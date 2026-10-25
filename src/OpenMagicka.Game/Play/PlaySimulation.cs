@@ -28,6 +28,9 @@ public sealed class PlayFrame
     /// <summary>The models to draw (the characters, their items, the props, the lying items and books).</summary>
     public List<DrawnModel> Models { get; } = [];
 
+    /// <summary>The spells' own pictures (beams, their lights).</summary>
+    public Engine.Rendering.SpellPictures Spells { get; } = new();
+
     /// <summary>Where the level's animated parts are, as its batches number them (LevelParts.Order).</summary>
     public List<System.Numerics.Matrix4x4> Parts { get; } = [];
 
@@ -119,6 +122,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         frame.Cover = play.Cover;
         play.Requests.Clear();                                                // nothing takes them yet (OM-49, OM-51)
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
+        play.Spells.Write(frame.Spells);
         if (scene?.Scripts is { } scripts)
         {
             scripts.Places.Placements(frame.Parts);

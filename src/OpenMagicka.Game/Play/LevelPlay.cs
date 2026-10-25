@@ -83,12 +83,16 @@ public sealed class LevelPlay : IDisposable
         Player.Avatar = new Character(wizard.Template, World.Physics, new Numerics.Vector3(0, 50, 0), animations: wizard.Animations) { IsPlayer = true, Player = Player };
         Level = new PlayedLevel(definition, content, World, services);
         Effects = new EffectDirector(World, Level, Channel, gibShapes ?? (_ => null));
+        Spells = new SpellVisuals(World, Effects);
     }
 
     /// <summary>The effects passed to the renderer, and back.</summary>
     public EffectChannel Channel { get; } = new();
 
     public EffectDirector Effects { get; }
+
+    /// <summary>The spells' own pictures (OM-76).</summary>
+    public SpellVisuals Spells { get; }
 
     public GameSession Session { get; }
 
@@ -115,6 +119,7 @@ public sealed class LevelPlay : IDisposable
     {
         Level.Start();
         Effects.Update();
+        Spells.Update(0);
         StepCamera(0, snap: true);
     }
 
@@ -158,9 +163,11 @@ public sealed class LevelPlay : IDisposable
             Controls.Reset();
             Pad.Reset();
             Effects.Clear();
+            Spells.Clear();
             meshScene = -1;                                                   // the camera stands over the players at once
         }
         Effects.Update();
+        Spells.Update(dt);
         StepCamera(dt, snap: false);
         StepCover(dt);
     }
@@ -266,6 +273,7 @@ public sealed class LevelPlay : IDisposable
 
     public void Dispose()
     {
+        Spells.Dispose();
         Effects.Dispose();
         Level.End();
         World.Dispose();

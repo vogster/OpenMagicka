@@ -10,11 +10,11 @@ using OpenMagicka.Gameplay.Props;
 
 namespace OpenMagicka.Game.Play;
 
-/// <summary>What the renderer is told to do with a visual effect.</summary>
-public enum EffectCommandKind : byte { Start, Move, Stop }
+/// <summary>What the renderer is told to do with a visual effect, or a lone particle (a tracer).</summary>
+public enum EffectCommandKind : byte { Start, Move, Stop, Particle }
 
-/// <summary>An effect started (its name), moved or stopped, by its number; a start or a move gives its place.</summary>
-public readonly record struct EffectCommand(EffectCommandKind Kind, long Id, string? Effect, Matrix4x4 World);
+/// <summary>An effect started (its name), moved or stopped, by its number; a start or a move gives its place. A lone particle is given whole.</summary>
+public readonly record struct EffectCommand(EffectCommandKind Kind, long Id, string? Effect, Matrix4x4 World, Engine.Particles.ParticleSpawn Particle = default);
 
 /// <summary>
 /// The effects passed between the threads: the logic thread's commands to the renderer, in order, and the
@@ -156,6 +156,23 @@ public sealed class EffectDirector : IDisposable
         Entity entity => () => entity.IsRemovable || entity.Manager is null ? null : Facing(entity.Position, direction),
         _ => () => Facing(position, direction),
     };
+
+    /// <summary>An effect that follows its place until the place is gone (null), under a key a new one of the same replaces.</summary>
+    public void Follow(object key, string effect, Func<Matrix4x4?> where)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(where);
+        Start(key, effect, where);
+    }
+
+    /// <summary>An effect started at a place and left to play out.</summary>
+    public void Once(string effect, Matrix4x4 at) => Start(null, effect, () => at);
+
+    /// <summary>The effect under a key stops (its particles fly on).</summary>
+    public void Unfollow(object key) => Stop(key ?? throw new ArgumentNullException(nameof(key)));
+
+    /// <summary>A lone particle into the pool (a tracer).</summary>
+    public void Spawn(Engine.Particles.ParticleSpawn particle) => channel.Commands.Enqueue(new EffectCommand(EffectCommandKind.Particle, 0, null, default, particle));
 
     /// <summary>The level went to a scene, or back to a checkpoint: what followed things of the old world stops.</summary>
     public void Clear()

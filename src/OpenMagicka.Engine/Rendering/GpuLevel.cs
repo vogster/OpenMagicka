@@ -259,7 +259,7 @@ public sealed class GpuLevel : IDisposable
     };
 
     /// <summary>Uploads the stored mip levels; a partial chain is not used (FNA would allocate the rest uninitialised).</summary>
-    private static Texture2D CreateTexture2D(GraphicsDevice device, Texture2DContent image)
+    internal static Texture2D CreateTexture2D(GraphicsDevice device, Texture2DContent image)
     {
         var mipmaps = image.Levels.Count > 1 && image.Levels.Count >= FullChain(Math.Max(image.Width, image.Height));
         var texture = new Texture2D(device, image.Width, image.Height, mipmaps, TextureFormats.ToFna(image.Format));

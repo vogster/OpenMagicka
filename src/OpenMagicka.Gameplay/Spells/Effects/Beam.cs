@@ -60,6 +60,15 @@ public sealed class Beam : Entity
     /// <summary>Whose damage it carries.</summary>
     public IEnumerable<Entity> Owners => owners.Select(o => o.Owner);
 
+    /// <summary>Its colour (SPELLS.md §14): its spell's; a merged beam's is halfway between its parents', a bounced one's its parent's.</summary>
+    public Vector3 Colour { get; private set; }
+
+    /// <summary>How long it has been alive: its picture's waves run with it.</summary>
+    public float Age { get; private set; }
+
+    /// <summary>The helices its picture winds round it: 4 for a first beam, else 2 and 2 for each caster whose damage it carries.</summary>
+    public int Rings => parents.Count == 0 ? 4 : 2 + 2 * owners.Select(o => o.Owner).Distinct(ReferenceEqualityComparer.Instance).Count();
+
     public bool IsExploding => exploding;
 
     public override float Radius => 0;
@@ -77,6 +86,7 @@ public sealed class Beam : Entity
         }
         var beam = new Beam(caster.World, caster.CastSource, caster.Body.Facing, (spell.Element & Elements.Arcane) != 0, spell.Element & BeamRules.ExtraElements, 0);
         beam.owners.Add((caster, damage));
+        beam.Colour = SpellColours.Of(spell);
         manager.Add(beam);
         return beam;
     }
@@ -98,6 +108,7 @@ public sealed class Beam : Entity
         {
             return;
         }
+        Age += dt;
         if ((parents.Count > 0 && parents.All(p => p.dead))
             || (parents.Count == 0 && owners.Count > 0 && !ReferenceEquals(owners[0].Owner.Manager, manager)))
         {
@@ -341,7 +352,10 @@ public sealed class Beam : Entity
         {
             return;
         }
-        var child = new Beam(world, from, along, IsArcane, ExtraElements | (second?.ExtraElements ?? 0), depth);
+        var child = new Beam(world, from, along, IsArcane, ExtraElements | (second?.ExtraElements ?? 0), depth)
+        {
+            Colour = second is null ? Colour : Vector3.Lerp(Colour, second.Colour, 0.5f),
+        };
         child.parents.Add(this);
         child.owners.AddRange(owners);
         if (second is not null)

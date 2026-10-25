@@ -85,7 +85,7 @@ public sealed class Thunderbolt() : Magick(MagickType.ThunderB, DirectClip)
     /// <summary>The bolt's looks and sounds at a point: the bolt from 40 above, its flash, a scorch on the floor, a shake.</summary>
     internal static void Strike(EntityManager manager, Entity source, Vector3 at, bool scorch, float shake = 1.5f)
     {
-        manager.RaiseCue(source, new LightningCue(at + Vector3.UnitY * 40, at, Faded: false));
+        manager.RaiseCue(source, new LightningCue(at + Vector3.UnitY * 40, at, Faded: false, SpellColours.Lightning, LightningCue.FromTheSky));
         manager.RaiseCue(source, new WorldEffectCue(BoltEffect, at, Vector3.UnitX));
         if (scorch && source is Character { World: var world } && world.CastSegment(at + Vector3.UnitY, at - Vector3.UnitY * 9, levelOnly: true) is { } floor)
         {

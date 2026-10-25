@@ -139,7 +139,7 @@ public sealed class PlayGame : ThreadedGame<PlayFrame>
         var ground = Vector3.Lerp(frame.Previous.Ground, frame.Current.Ground, alpha);
         return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(frame.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, ground,
             (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models?.Instances(frame.Models),
-            CharacterRimLight.For(frame.Settings), Parts(frame));
+            CharacterRimLight.For(frame.Settings), Parts(frame), frame.Spells);
     }
 
     /// <summary>The level's parts where the frame has them, when the frame is of the level shown (none: at rest).</summary>

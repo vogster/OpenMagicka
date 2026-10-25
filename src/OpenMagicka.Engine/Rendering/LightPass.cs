@@ -33,7 +33,7 @@ internal sealed class LightPass : IDisposable
     private static readonly Vector2 NoHalfPixel = Vector2.Zero;
 
     /// <summary>Light accumulation: the original adds lights as One / InvSrcColor (a screen-like sum).</summary>
-    private static readonly BlendState LightBlend = new()
+    internal static readonly BlendState LightBlend = new()
     {
         ColorSourceBlend = Blend.One, ColorDestinationBlend = Blend.InverseSourceColor,
         AlphaSourceBlend = Blend.One, AlphaDestinationBlend = Blend.InverseSourceColor,
@@ -191,7 +191,7 @@ internal sealed class LightPass : IDisposable
     }
 
     /// <summary>The outer side of a light volume, or the inner one when the camera is in or near it.</summary>
-    private static RasterizerState Cull(Vector3 camera, Vector3 light, float reach) =>
+    internal static RasterizerState Cull(Vector3 camera, Vector3 light, float reach) =>
         Vector3.Distance(camera, light) < reach + NearMargin ? RasterizerState.CullClockwise : RasterizerState.CullCounterClockwise;
 
     public void Dispose()

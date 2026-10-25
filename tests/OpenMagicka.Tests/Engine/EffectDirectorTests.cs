@@ -32,12 +32,12 @@ public class EffectDirectorTests
             new NavMeshContent([], []));
     }
 
-    private static LevelPlay Play(string scripts = "") =>
+    internal static LevelPlay Play(string scripts = "") =>
         new(new LevelDefinition("#C", "#D", "#D", "loading", new LevelStart("t_s1", "start", true, false, null, true), null, ["Levels/T/t_s1.xml"],
             LevelDefinition.DefaultAvatar, [], []), new Content($"<Scene><Model>m</Model>{scripts}</Scene>"), new LevelServices(), (Goblin, null),
             gibShapes: model => model == "models/gib" ? (Numerics.Vector3.Zero, 0.3f) : null);
 
-    private static List<EffectCommand> Drain(LevelPlay play)
+    internal static List<EffectCommand> Drain(LevelPlay play)
     {
         var taken = new List<EffectCommand>();
         while (play.Channel.Commands.TryDequeue(out var command))
@@ -72,6 +72,33 @@ public class EffectDirectorTests
         play.Channel.Ended.Enqueue(spark.Id);                                                       // it played out
         play.Tick(Tick);
         Assert.False(play.Scene.Scripts.Effects.Find(ScriptScene.Hash("spark"))!.IsActive);
+    }
+
+    [Fact]
+    public void ABeam_StartsItsSourceAndEndEffects_ThatFollowIt_AndIsDrawnWithItsLight()
+    {
+        using var play = Play();
+        play.Start();
+        play.Tick(Tick);
+        Drain(play);
+        var wizard = play.Player.Avatar!;
+        wizard.Conjure(OpenMagicka.Gameplay.Spells.Elements.Arcane);
+        wizard.CastType = OpenMagicka.Gameplay.Spells.CastType.Force;
+        wizard.CastSpell(fromStaff: true);
+        play.Tick(Tick);
+
+        var started = Drain(play).Where(c => c.Kind == EffectCommandKind.Start).ToList();
+        Assert.Equal(["arcane_hit", "arcane_source"], started.Select(c => c.Effect).Order());
+        play.Tick(Tick);
+        var ids = started.Select(c => c.Id).ToHashSet();
+        Assert.Equal(2, Drain(play).Count(c => c.Kind == EffectCommandKind.Move && ids.Contains(c.Id)));   // both follow the beam
+        var pictures = new OpenMagicka.Engine.Rendering.SpellPictures();
+        play.Spells.Write(pictures);
+        var beam = Assert.Single(pictures.Beams);
+        var light = Assert.Single(pictures.Lights);
+        Assert.Equal((4, false, OpenMagicka.Engine.Rendering.BeamRows.None), (beam.Rings, beam.Branch, beam.Rows));
+        Assert.Equal(beam.Origin + beam.Direction * beam.Length, light.End);
+        Assert.Equal(new Xna.Vector3(2, 0.4f, 0.6f) * 0.6f, light.Diffuse);
     }
 
     [Fact]

@@ -1445,3 +1445,25 @@ The spell color is the average of the colors (Fire and Lightning weighted by mag
     order.
 13. Network model (who computes damage, `DamageFeatures`): whether compatibility is needed is decided outside
     this document.
+
+## 14. Ours: the spells' colours (OM-76)
+
+The spells are drawn and lit in their elements' colours, as the original's (values above 1 glow):
+
+| Element | Colour |
+|---|---|
+| Arcane | 2, 0.4, 0.6 |
+| Life | 0.2, 1.6, 0.2 |
+| Lightning | 0.75, 0.5, 1 |
+| Fire | 1.8, 0.6, 0.4 |
+| Cold | 1, 1, 1.4 |
+| Water | 0, 0.7, 1.3 |
+| Ice | 0.8, 0.9, 1.4 |
+| Earth | 0.3, 0.2, 0.1 |
+| Shield | 2, 1.5, 1 |
+
+A spell's colour is the average over its elements. Lightning and Fire count by their magnitude. Every other element
+it has counts once, whatever its magnitude. Steam and Poison have no colour and do not count. A beam takes its spell's
+colour; a merged beam's is halfway between its parents', a bounced one's its parent's. How the pictures are drawn is
+ARCHITECTURE.md §17.
+

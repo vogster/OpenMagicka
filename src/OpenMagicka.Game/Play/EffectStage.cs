@@ -75,6 +75,9 @@ public sealed class EffectStage(Task<EffectLibrary> library, EffectChannel chann
             case EffectCommandKind.Move when running.TryGetValue(command.Id, out var moved):
                 moved.Move(ModelCache.Xna(command.World));
                 break;
+            case EffectCommandKind.Particle:
+                Pool.Spawn(command.Particle);
+                break;
             case EffectCommandKind.Stop when running.Remove(command.Id, out var stopped):
                 stopped.Stop();                                               // its particles fly on in the pool
                 break;

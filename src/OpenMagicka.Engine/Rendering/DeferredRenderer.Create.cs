@@ -21,12 +21,10 @@ public sealed partial class DeferredRenderer
         var effects = await Task.WhenAll(EffectNames.Select(shaders.Load)).ConfigureAwait(false);
         var (particleResources, unavailable) = loader is null ? (null, null) : await LoadParticles(shaders, gpu, loader).ConfigureAwait(false);
         var (postEffects, postUnavailable) = await LoadPost(shaders).ConfigureAwait(false);
+        DeferredRenderer renderer;
         try
         {
-            var renderer = await gpu.Enqueue(device => new DeferredRenderer(device, effects, particleResources, postEffects)).ConfigureAwait(false);
-            renderer.ParticlesUnavailable ??= unavailable;
-            renderer.PostUnavailable ??= postUnavailable;
-            return renderer;
+            renderer = await gpu.Enqueue(device => new DeferredRenderer(device, effects, particleResources, postEffects)).ConfigureAwait(false);
         }
         catch
         {
@@ -36,6 +34,34 @@ public sealed partial class DeferredRenderer
                 _ = gpu.Enqueue(_ => Array.ForEach(particleResources.Sheets, s => s.Dispose()));
             }
             throw;
+        }
+        renderer.ParticlesUnavailable ??= unavailable;
+        renderer.PostUnavailable ??= postUnavailable;
+        if (loader is not null)
+        {
+            try
+            {
+                await renderer.LoadSpells(shaders, gpu, loader).ConfigureAwait(false);
+            }
+            catch
+            {
+                _ = gpu.Enqueue(_ => renderer.Dispose());                   // cancelled: the renderer, with what it took, goes
+                throw;
+            }
+        }
+        return renderer;
+    }
+
+    /// <summary>The spells' own pictures, optional like the particles (<see cref="SpellsUnavailable"/>).</summary>
+    private async Task LoadSpells(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader loader)
+    {
+        try
+        {
+            spells = await SpellPass.Load(shaders, gpu, loader, additive).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            SpellsUnavailable = e.GetBaseException().Message;
         }
     }
 
