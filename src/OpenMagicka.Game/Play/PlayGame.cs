@@ -136,7 +136,8 @@ public sealed class PlayGame : ThreadedGame<PlayFrame>
         var globals = new GlobalEffectValues(view, projection, eye, beholder, time);
         var ground = Vector3.Lerp(frame.Previous.Ground, frame.Current.Ground, alpha);
         return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(frame.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, ground,
-            (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models?.Instances(frame.Models));
+            (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models?.Instances(frame.Models),
+            CharacterRimLight.For(frame.Settings));
     }
 
     /// <summary>The screen's cover (a fade, a scene change) over everything.</summary>

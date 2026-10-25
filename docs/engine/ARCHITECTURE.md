@@ -1336,6 +1336,8 @@ frame. Each effect that plays out goes back on a queue, so the scene hears of it
 - The frame is drawn with the original pipeline (§3) through the game camera, interpolated between the two ticks. The
   sun's shadows centre on the camera's ground point. The scene's fog and post settings apply, then the cover is drawn
   over everything.
+- The characters' edges are lit by the scene's `<RimLight>` (the original's 0.8, 1.5 and 0.2 without one), as the
+  original sets the skinned effect when a scene starts; the viewer does the same.
 - Models are `ModelInstance`s in the `DeferredFrame`, drawn through the shadow, depth and G-buffer passes like the
   level's batches (their additive parts in the additive pass):
   - a static batch at its model transform × the instance's place;

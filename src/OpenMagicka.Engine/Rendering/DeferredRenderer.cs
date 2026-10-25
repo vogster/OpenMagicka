@@ -11,7 +11,20 @@ namespace OpenMagicka.Engine.Rendering;
 /// liquids' waves and flow have run.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
-    float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null);
+    float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
+    CharacterRimLight? RimLight = null);
+
+/// <summary>
+/// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
+/// original sets it when the scene starts; the original's values before a scene sets its own by default.
+/// </summary>
+public sealed record CharacterRimLight(float Glow, float Power, float Bias)
+{
+    public static CharacterRimLight Default { get; } = new(0.8f, 1.5f, 0.2f);
+
+    public static CharacterRimLight For(Content.Levels.SceneSettings? settings) =>
+        settings?.RimLight is { } rim ? new(rim.Glow, rim.Power, rim.Bias) : Default;
+}
 
 /// <summary>
 /// A model drawn at a place this frame (a character, a prop, an item): its batches placed by the world

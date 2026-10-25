@@ -66,6 +66,10 @@ public sealed partial class DeferredRenderer
             _ => SkinnedDeferredMaterial.Default,
         }];
         var drawn = 0;
+        var rim = frame.RimLight ?? CharacterRimLight.Default;
+        effects.Characters.SetValue("RimLightGlow", rim.Glow);
+        effects.Characters.SetValue("RimLightPower", rim.Power);
+        effects.Characters.SetValue("RimLightBias", rim.Bias);
         skinned.Effect.Parameters["Bones"].SetValue(bindPose);
         foreach (var batch in level.Batches)
         {

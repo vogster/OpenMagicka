@@ -203,7 +203,7 @@ public sealed class ViewerGame : ThreadedGame<ViewerFrame>
         var focus = SunShadowView.Focus(view.Position, view.Forward, ViewerSimulation.GroundHeight(level!.Bounds));
         return new DeferredFrame(globals, level.Sun, SceneLighting.Fog(scene.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, focus,
             (float)(clock.Elapsed.TotalSeconds % 3600),   // the liquids' time, wrapped to keep float precision
-            particles?.Pool, PostProcessing.For(scene.Settings));
+            particles?.Pool, PostProcessing.For(scene.Settings), RimLight: CharacterRimLight.For(scene.Settings));
     }
 
     /// <summary>Starts the shown level's effects once the effect library is in, then steps them with the frame time.</summary>
