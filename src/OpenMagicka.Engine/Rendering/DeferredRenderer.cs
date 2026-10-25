@@ -9,11 +9,12 @@ namespace OpenMagicka.Engine.Rendering;
 /// What one frame is drawn with besides the geometry; <see cref="ShadowFocus"/> is where the sun's
 /// shadows are wanted (see <see cref="SunShadowView.Focus"/>), <see cref="Seconds"/> the time the
 /// liquids' waves and flow have run, <see cref="Parts"/> where the level's animated parts are now (by
-/// <see cref="LevelParts.Order"/>; none, or one missing: at rest), <see cref="Spells"/> the spells' own pictures.
+/// <see cref="LevelParts.Order"/>; none, or one missing: at rest), <see cref="Spells"/> the spells' own pictures and
+/// <see cref="ModelOf"/> the models they are drawn on, by asset.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
-    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null);
+    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -30,9 +31,14 @@ public sealed record CharacterRimLight(float Glow, float Power, float Bias)
 /// <summary>
 /// A model drawn at a place this frame (a character, a prop, an item): its batches placed by the world
 /// matrix; a skinned one posed by its bones, which are in the world already (none: its bind pose at the
-/// place). The tint colours a character's skin.
+/// place). The tint colours a character's skin. <see cref="Parts"/> picks which of its batches are drawn (by their order,
+/// a bit each; all by default); <see cref="Emissive"/> overrides a skinned material's glow (a mine's, as the original sets it).
 /// </summary>
-public sealed record ModelInstance(GpuLevel Model, Matrix World, Matrix[]? Bones = null, Vector3? Tint = null);
+public sealed record ModelInstance(GpuLevel Model, Matrix World, Matrix[]? Bones = null, Vector3? Tint = null, int Parts = -1, float? Emissive = null)
+{
+    /// <summary>The batches drawn of it.</summary>
+    public IEnumerable<GpuBatch> Drawn => Parts == -1 ? Model.Batches : Model.Batches.Where((_, i) => i < 32 && (Parts & (1 << i)) != 0);
+}
 
 /// <summary>
 /// The original deferred pipeline on the original effects (docs/engine/ARCHITECTURE.md §3.2–3.3):
@@ -246,7 +252,7 @@ public sealed partial class DeferredRenderer : IDisposable
         DrawAdditive(device, level, level.TextureFor, frame.Models);
         if (frame.Spells is { } pictures)
         {
-            spells?.Draw(device, pictures, globals);
+            spells?.Draw(device, pictures, globals, frame.ModelOf);
         }
         if (particles is not null && frame.Particles is { } pool)
         {

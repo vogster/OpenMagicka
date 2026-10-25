@@ -82,11 +82,11 @@ public sealed partial class DeferredRenderer
         foreach (var instance in frame.Models ?? [])
         {
             skinned.Effect.Parameters["Bones"].SetValue(Palette(instance));
-            foreach (var batch in instance.Model.Batches)
+            foreach (var batch in instance.Drawn)
             {
                 var posed = instance.Bones is not null && batch.Material is SkinnedModelBasicEffectContent;   // its pose may be far from its bind pose
                 if ((posed || view.Intersects(Transformed(batch.Bounds, instance.World))) && DrawOpaque(device, instance.Model, batch, batch.World * instance.World, frame, pass,
-                    effects, instance.Tint))
+                    effects, instance.Tint, instance.Emissive))
                 {
                     drawn++;
                 }
@@ -101,11 +101,15 @@ public sealed partial class DeferredRenderer
 
     /// <summary>One opaque batch at a place; false when it is not drawn with these passes (an additive one).</summary>
     private bool DrawOpaque(GraphicsDevice device, GpuLevel source, GpuBatch batch, Matrix world, DeferredFrame frame, OpaqueKind pass, OpaqueEffects effects,
-        Vector3? tint = null)
+        Vector3? tint = null, float? emissive = null)
     {
         if (batch.Material is SkinnedModelBasicEffectContent character && !batch.Additive)
         {
             SkinnedDeferredMaterial.Apply(effects.Characters, character, source.TextureFor);
+            if (emissive is { } glow)
+            {
+                effects.Characters.SetValue("EmissiveAmount", glow);
+            }
             if (tint is { } colour)
             {
                 effects.Characters.SetValue("TintColor", colour);
@@ -203,7 +207,7 @@ public sealed partial class DeferredRenderer
         device.DepthStencilState = DepthStencilState.DepthRead;
         var parameters = new FnaEffectParameters(additive.Effect);
         foreach (var (source, batch, place) in level.Batches.Select(b => (level, b, Move(b)))
-            .Concat((frameModels ?? []).SelectMany(m => m.Model.Batches.Select(b => (m.Model, b, m.World)))))
+            .Concat((frameModels ?? []).SelectMany(m => m.Drawn.Select(b => (m.Model, b, m.World)))))
         {
             var world = batch.World * place;
             if (!batch.Additive || batch.Material is not AdditiveEffectContent material || !frustum.Intersects(Transformed(batch.Bounds, place)))

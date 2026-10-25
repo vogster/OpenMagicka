@@ -20,9 +20,9 @@ public sealed class SpellPass : IDisposable
 
     private readonly Texture2D[] sheets;
 
-    private SpellPass(CapsuleLights capsules, BeamDrawing beams, BurstDrawing bursts, ShieldDrawing shields, Texture2D[] sheets, GameEffect arcane,
-        GameEffect shield) =>
-        (Capsules, Beams, Bursts, Shields, this.sheets, Arcane, Shield) = (capsules, beams, bursts, shields, sheets, arcane, shield);
+    private SpellPass(CapsuleLights capsules, BeamDrawing beams, BurstDrawing bursts, ShieldDrawing shields, BubbleDrawing bubbles, Texture2D[] sheets,
+        GameEffect arcane, GameEffect shield, GameEffect bubble) =>
+        (Capsules, Beams, Bursts, Shields, Bubbles, this.sheets, Arcane, Shield, Bubble) = (capsules, beams, bursts, shields, bubbles, sheets, arcane, shield, bubble);
 
     public CapsuleLights Capsules { get; }
 
@@ -32,12 +32,16 @@ public sealed class SpellPass : IDisposable
 
     public ShieldDrawing Shields { get; }
 
+    public BubbleDrawing Bubbles { get; }
+
     private GameEffect Shield { get; }
+
+    private GameEffect Bubble { get; }
 
     private GameEffect Arcane { get; }
 
     /// <summary>Its effects, which take the frame's shared values.</summary>
-    public IEnumerable<GameEffect> Effects => [Arcane, Capsules.Effect, Shield];
+    public IEnumerable<GameEffect> Effects => [Arcane, Capsules.Effect, Shield, Bubble];
 
     /// <summary>
     /// Reads the effects, the sheets and the capsule on the calling thread and builds the pass on the render thread;
@@ -52,7 +56,7 @@ public sealed class SpellPass : IDisposable
         var sheets = new[] { BeamSheet, DiscSheet, ShieldNoise }.Select(path => loader.LoadUncached(path).Root as Texture2DContent
             ?? throw new InvalidDataException($"{path} is not a picture")).ToArray();
         var capsule = loader.LoadUncached(CapsuleLights.Mesh).Root as ModelContent ?? throw new InvalidDataException($"{CapsuleLights.Mesh} is not a model");
-        var loading = new[] { shaders.Load("ArcaneEffect"), shaders.Load("CapsuleLight"), shaders.Load("ShieldEffect") };
+        var loading = new[] { shaders.Load("ArcaneEffect"), shaders.Load("CapsuleLight"), shaders.Load("ShieldEffect"), shaders.Load("SkinnedShieldEffect") };
         try
         {
             await Task.WhenAll(loading).ConfigureAwait(false);
@@ -62,10 +66,10 @@ public sealed class SpellPass : IDisposable
             Release(gpu, loading);
             throw;
         }
-        var (arcane, light, shield) = (loading[0].Result, loading[1].Result, loading[2].Result);
+        var (arcane, light, shield, bubble) = (loading[0].Result, loading[1].Result, loading[2].Result, loading[3].Result);
         try
         {
-            return await gpu.Enqueue(device => Build(device, arcane, light, shield, additive, sheets, capsule)).ConfigureAwait(false);
+            return await gpu.Enqueue(device => Build(device, arcane, light, shield, bubble, additive, sheets, capsule)).ConfigureAwait(false);
         }
         catch
         {
@@ -74,23 +78,26 @@ public sealed class SpellPass : IDisposable
         }
     }
 
-    private static SpellPass Build(GraphicsDevice device, GameEffect arcane, GameEffect light, GameEffect shield, GameEffect additive, Texture2DContent[] sheets,
-        ModelContent capsule)
+    private static SpellPass Build(GraphicsDevice device, GameEffect arcane, GameEffect light, GameEffect shield, GameEffect bubble, GameEffect additive,
+        Texture2DContent[] sheets, ModelContent capsule)
     {
         var textures = new List<Texture2D>();
         CapsuleLights? capsules = null;
         BeamDrawing? beams = null;
         BurstDrawing? bursts = null;
+        ShieldDrawing? shields = null;
         try
         {
             textures.AddRange(sheets.Select(sheet => GpuLevel.CreateTexture2D(device, sheet)));
             capsules = CapsuleLights.Create(device, light, capsule);
             beams = new BeamDrawing(device, arcane, additive, textures[0]);
             bursts = new BurstDrawing(device, additive, textures[0], textures[1]);
-            return new SpellPass(capsules, beams, bursts, new ShieldDrawing(device, shield, textures[2]), [.. textures], arcane, shield);
+            shields = new ShieldDrawing(device, shield, textures[2]);
+            return new SpellPass(capsules, beams, bursts, shields, new BubbleDrawing(bubble, textures[2]), [.. textures], arcane, shield, bubble);
         }
         catch
         {
+            shields?.Dispose();
             bursts?.Dispose();
             beams?.Dispose();
             capsules?.Dispose();                                              // with the light's effect (the caller's release finds it gone)
@@ -109,11 +116,16 @@ public sealed class SpellPass : IDisposable
     }
 
     /// <summary>The spells' shapes, with the additive objects (after the composition, before the particles).</summary>
-    public void Draw(GraphicsDevice device, SpellPictures pictures, GlobalEffectValues globals)
+    /// <param name="modelOf">The frame's models by asset (the bubbles are drawn on theirs); none: no bubbles.</param>
+    public void Draw(GraphicsDevice device, SpellPictures pictures, GlobalEffectValues globals, Func<string, GpuLevel?>? modelOf = null)
     {
         ArgumentNullException.ThrowIfNull(pictures);
         Beams.Draw(device, pictures.Beams, globals);
         Bursts.Draw(device, pictures.Bolts, pictures.Discs, globals.CameraPosition);
+        if (modelOf is not null)
+        {
+            Bubbles.Draw(device, pictures.Bubbles, modelOf);
+        }
     }
 
     /// <summary>The shields, the original's post effects: over the particles, cut by the scene's depth.</summary>
@@ -132,5 +144,6 @@ public sealed class SpellPass : IDisposable
         Array.ForEach(sheets, s => s.Dispose());
         Arcane.Dispose();
         Shield.Dispose();
+        Bubble.Dispose();
     }
 }

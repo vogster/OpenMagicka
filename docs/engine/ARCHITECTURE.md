@@ -1382,7 +1382,7 @@ frame. Each effect that plays out goes back on a queue, so the scene hears of it
 - **Following effects** last until their end cue, until their source is gone, or until they play out, and a new one
   of the same source replaces the old:
   - an `ItemEffectCue` that follows its missile, its item's tip or its entity (another source, an item's passive or a
-    spray, cannot be followed: its effect stays where it began, OM-76);
+    spray, cannot be followed: its effect stays where it began);
   - an attached `EffectCue` on its bone;
   - a `PropEffectCue` on its prop, ended with the rest of the prop's by `PropEffectsEndCue`.
 - **Debris:** a `GibsCue` breaks a prop into `Gib`s. Each piece:
@@ -1500,5 +1500,26 @@ and has no shine.
   (`barrier_ice_death`, `barrier_earth_death`). One of Arcane or Life bursts as a mine does (`mine_explosion`).
 - A mine flares as it is set off (`mine_activation`) and bursts as it goes off (`mine_explosion`); one merely
   removed (Nullify) does not.
-- The solid barriers' and the mines' models, and the self shields, are the next phase.
+
+**Animated models** (`SpellVisuals`, `AnimatedModels`): the solid barriers and the mines are skinned models, posed here
+by their clips (bones not in a clip stay at their bind) and drawn as the entities' models are.
+- A solid barrier is its ice and its rock: `iceBarrier0_mesh`, a geyser's with a sprayed element and no Arcane or Life
+  (`icebarrier_geyser`, `icebarrier_tesla` with Lightning), or `iceBarrier_Earth` over rock; and `earthBarrier0_mesh`
+  (the original's pick always takes the first), or `earthBarrier_volcano` with Water, Cold, Fire, Steam or Poison and no
+  Arcane or Life.
+- It stands on the ground along its way, scaled by the barrier. It rises by a random clip of its kind at twice its speed
+  (0.25 s) and, breaking, sinks back by the first clip played backwards as it goes.
+- A geyser's, tesla's or volcano's jet plays from its `effect0` bone, turned about, while the barrier strikes:
+  `barrier_ice_tesla` with Lightning, else `barrier_geyser_<element>` of the strongest of Water, Cold, Fire and Steam.
+- A barrier of Life stands on `runesLife`, one of Arcane on `runesArcane`, turning at −0.25 a second (ours untinted).
+- A mine is `Models/Effects/mine` scaled 2.1, turned at random, in its spell's colour and glowing 2 (its file says 3),
+  unfolding once by its clip at three times its speed. How bright it shows is not checked against the original.
+- A self shield's armour is `combined_armor` on its wearer's bones: its first part for Earth, its second for Ice, both
+  with both. A blow bursts where it struck (`earth_self_shield_hit`, `ice_self_shield_hit`), and the armour bursts as it
+  falls away (`barrier_earth_death`, `barrier_ice_death`).
+- A bubble (`BubbleDrawing`) is its wearer's first mesh part again, swollen 0.075 along its normals, through the
+  original's `SkinnedShieldEffect`, with the additive objects. The noise of `EffectTextures/Shield` is cast on it from
+  where the wearer looks and from two more sides a third round, drifting by its wear. It is drawn at 4, flashing up
+  to 24 for a third of a second after each blow, which bursts where it struck (`pure_self_shield_hit`).
+- Not drawn: a stronger cast's overlay on barriers and armour, and the ice melting off a rock before the rock goes.
 

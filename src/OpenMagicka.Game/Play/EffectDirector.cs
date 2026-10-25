@@ -33,8 +33,7 @@ public sealed class EffectChannel
 /// and the gameplay's effect cues (a one-shot at a point; one following a bone, an item, a missile or a
 /// prop until its end cue or its source is gone) become the renderer's commands. A broken prop's pieces
 /// fly off as debris (<see cref="Gib"/>) trailing their effect, and a camera shake shakes the stage's
-/// camera. Sounds go to OM-51, decals to OM-66, the beams', lightning's, blasts' and tracers' own drawing
-/// to OM-76.
+/// camera. Sounds go to OM-51, decals to OM-66; the spells' own pictures are <see cref="SpellVisuals"/>'.
 /// </summary>
 public sealed class EffectDirector : IDisposable
 {
@@ -147,7 +146,7 @@ public sealed class EffectDirector : IDisposable
     /// <summary>
     /// Where a following item's effect is: on its missile, at its item's tip, on the entity; none once the
     /// missile or entity is gone. Another source (an item's passive, a spray) cannot be followed: its effect
-    /// stays where it began, until its end cue or the scene's end (OM-76).
+    /// stays where it began, until its end cue or the scene's end.
     /// </summary>
     private static Func<Matrix4x4?> Follower(object source, Vector3 position, Vector3 direction) => source switch
     {

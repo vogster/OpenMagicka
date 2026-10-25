@@ -39,7 +39,8 @@ public sealed class LevelPlay : IDisposable
         var bestiary = new ContentBestiary(library);
         var services = new LevelServices(bestiary, new ContentScriptAssets(library), ScriptRegistry.Engine());
         var wizard = bestiary.Find(WizardAsset) ?? throw new InvalidDataException($"the game has no {WizardAsset}");
-        return new LevelPlay(definition, new ContentLevel(files, loader), services, wizard, library.LookOf, GibShapes(loader));
+        return new LevelPlay(definition, new ContentLevel(files, loader), services, wizard, library.LookOf, GibShapes(loader),
+            AnimatedModels.Loader(loader, SpellVisuals.ModelAssets));
     }
 
     /// <summary>A model's bounding sphere (its meshes' together), by asset, each read once; null for one that is no model.</summary>
@@ -73,7 +74,8 @@ public sealed class LevelPlay : IDisposable
     /// <param name="wizard">The first player's template and clips.</param>
     /// <param name="looks">What the templates look like (none: nothing is drawn as a model).</param>
     public LevelPlay(LevelDefinition definition, ILevelContent content, LevelServices services, (CharacterTemplate Template, Gameplay.Animation.CharacterAnimations? Animations) wizard,
-        Func<object, Engine.Rendering.ModelLook?>? looks = null, Func<string, (Numerics.Vector3 Centre, float Radius)?>? gibShapes = null)
+        Func<object, Engine.Rendering.ModelLook?>? looks = null, Func<string, (Numerics.Vector3 Centre, float Radius)?>? gibShapes = null,
+        Func<string, AnimatedModel?>? spellModels = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         Looks = looks ?? (_ => null);
@@ -83,7 +85,7 @@ public sealed class LevelPlay : IDisposable
         Player.Avatar = new Character(wizard.Template, World.Physics, new Numerics.Vector3(0, 50, 0), animations: wizard.Animations) { IsPlayer = true, Player = Player };
         Level = new PlayedLevel(definition, content, World, services);
         Effects = new EffectDirector(World, Level, Channel, gibShapes ?? (_ => null));
-        Spells = new SpellVisuals(World, Effects);
+        Spells = new SpellVisuals(World, Effects, spellModels, Looks);
     }
 
     /// <summary>The effects passed to the renderer, and back.</summary>

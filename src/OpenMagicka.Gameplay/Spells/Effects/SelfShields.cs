@@ -5,6 +5,9 @@ using OpenMagicka.Gameplay.Entities;
 
 namespace OpenMagicka.Gameplay.Spells.Effects;
 
+/// <summary>A self shield struck by a blow that hurts: where, for its flash and its burst.</summary>
+public sealed record SelfShieldHitCue(Character Owner, SelfShield Shield, Vector3 At) : Animation.AnimationCue;
+
 /// <summary>
 /// A self-cast shield: the bubble (pure Shield) or armour (with Earth or Ice) (docs/gameplay/SPELLS.md
 /// §5.6). It changes in place as it takes damage.
@@ -33,6 +36,9 @@ public sealed class SelfShield : ISelfShield
 
     public bool IsArmour { get; }
 
+    /// <summary>The spell it was cast of: its armour's Earth and Ice.</summary>
+    public Spell Spell => spell;
+
     public float HitPoints { get; private set; }
 
     public float MaxHitPoints { get; }
@@ -47,6 +53,10 @@ public sealed class SelfShield : ISelfShield
     {
         var physical = (damage.Element & ElementSets.Physical) != 0;
         var hurts = damage.Attack.HasFlag(AttackProperties.Damage);
+        if (hurts && damage.Amount * damage.Magnitude > 0)
+        {
+            owner.RaiseCue(new SelfShieldHitCue(owner, this, attackPosition));
+        }
         if (!IsArmour)
         {
             if (hurts || damage.Attack.HasFlag(AttackProperties.Status))

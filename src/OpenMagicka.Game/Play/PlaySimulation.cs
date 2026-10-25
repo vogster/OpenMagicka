@@ -122,6 +122,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         frame.Cover = play.Cover;
         play.Requests.Clear();                                                // nothing takes them yet (OM-49, OM-51)
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
+        play.Spells.WriteModels(frame.Models);
         play.Spells.Write(frame.Spells);
         if (scene?.Scripts is { } scripts)
         {

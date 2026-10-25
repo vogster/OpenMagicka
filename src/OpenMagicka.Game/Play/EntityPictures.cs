@@ -8,8 +8,11 @@ using OpenMagicka.Gameplay.Props;
 
 namespace OpenMagicka.Game.Play;
 
-/// <summary>A model to draw this tick: its asset, its place, a skinned one's bones (in the world already) and its tint.</summary>
-public readonly record struct DrawnModel(string Asset, Matrix4x4 World, Matrix4x4[]? Bones, Vector3 Tint);
+/// <summary>
+/// A model to draw this tick: its asset, its place, a skinned one's bones (in the world already), its tint, and which of
+/// its batches (by their order, a bit each; all by default), and a glow its skinned material is drawn with instead of its own.
+/// </summary>
+public readonly record struct DrawnModel(string Asset, Matrix4x4 World, Matrix4x4[]? Bones, Vector3 Tint, int Parts = -1, float? Emissive = null);
 
 /// <summary>
 /// What of the world is drawn as models (logic thread): the characters posed by their bones (none yet:

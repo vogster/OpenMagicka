@@ -47,7 +47,8 @@ public sealed class ModelCache(ContentLoader loader, RenderQueue<GraphicsDevice>
         {
             if (Get(model.Asset) is { } gpuModel)
             {
-                instances.Add(new ModelInstance(gpuModel, Xna(model.World), model.Bones?.Select(Xna).ToArray(), new Vector3(model.Tint.X, model.Tint.Y, model.Tint.Z)));
+                instances.Add(new ModelInstance(gpuModel, Xna(model.World), model.Bones?.Select(Xna).ToArray(), new Vector3(model.Tint.X, model.Tint.Y, model.Tint.Z),
+                    model.Parts, model.Emissive));
             }
         }
         return instances;

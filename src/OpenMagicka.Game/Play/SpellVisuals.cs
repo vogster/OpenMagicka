@@ -24,11 +24,17 @@ public sealed partial class SpellVisuals : IDisposable
     private readonly GameWorld world;
     private readonly EffectDirector effects;
     private readonly HashSet<Beam> seen = new(ReferenceEqualityComparer.Instance);
+    private readonly Func<object, ModelLook?> looks;
 
-    public SpellVisuals(GameWorld world, EffectDirector effects)
+    /// <param name="models">The skinned models the barriers and mines are drawn as, by asset; none without the game's content.</param>
+    /// <param name="looks">What the templates look like (a bubble is its wearer's model).</param>
+    public SpellVisuals(GameWorld world, EffectDirector effects, Func<string, Engine.Characters.AnimatedModel?>? models = null,
+        Func<object, ModelLook?>? looks = null)
     {
+        this.looks = looks ?? (_ => null);
         this.world = world ?? throw new ArgumentNullException(nameof(world));
         this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
+        this.models = models ?? (_ => null);
         world.Entities.Cue += Hear;
     }
 
@@ -42,6 +48,8 @@ public sealed partial class SpellVisuals : IDisposable
         AgeShields(dt);
         TakeCues();
         WatchStanding();
+        AgeModels(dt);
+        AgeSelfShields(dt);
         var beams = world.Entities.Entities.OfType<Beam>().Where(b => !b.IsDead).ToList();
         seen.IntersectWith(beams);
         foreach (var beam in beams.Where(seen.Add))
@@ -62,6 +70,9 @@ public sealed partial class SpellVisuals : IDisposable
         shields.Clear();
         barriers.Clear();
         mines.Clear();
+        barrierModels.Clear();
+        mineModels.Clear();
+        selfShields.Clear();
         ClearBursts();
     }
 
@@ -78,6 +89,7 @@ public sealed partial class SpellVisuals : IDisposable
         }
         WriteBursts(into);
         WriteShields(into);
+        WriteBubbles(into);
         foreach (var missile in world.Entities.Entities.OfType<Gameplay.Entities.Missile>())
         {
             if (!missile.IsDead && MissileLight(missile.Glow) is { } colour)
