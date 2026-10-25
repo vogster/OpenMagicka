@@ -163,6 +163,21 @@ public sealed class DialogCollection
         return new DialogCollection(merged.ToFrozenDictionary());
     }
 
+    /// <summary>Dialogs given as they are (a test's); a key twice is an error.</summary>
+    public static DialogCollection Of(IEnumerable<DialogDefinition> dialogs)
+    {
+        ArgumentNullException.ThrowIfNull(dialogs);
+        var merged = new Dictionary<int, DialogDefinition>();
+        foreach (var dialog in dialogs)
+        {
+            if (!merged.TryAdd(dialog.Key, dialog))
+            {
+                throw new InvalidDataException($"dialog {DialogReader.Describe(dialog.Id)} is already defined");
+            }
+        }
+        return new DialogCollection(merged.ToFrozenDictionary());
+    }
+
     public DialogDefinition Get(int key) =>
         dialogs.TryGetValue(key, out var dialog) ? dialog : throw new KeyNotFoundException($"no dialog with key {key}");
 

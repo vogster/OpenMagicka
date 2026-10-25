@@ -43,6 +43,9 @@ public sealed class KeyboardMouseControl(ControlBindings bindings)
     /// <summary>The player's directions toward an element (its spell tree).</summary>
     public SpellCombos Combos { get; } = new();
 
+    /// <summary>What the cursor points at (a character to talk to, an item, a point of interest), as of the last update.</summary>
+    public object? Hovered { get; private set; }
+
     public void Update(ControlFrame input, Player player, ScriptScene scene, CursorPick cursor, float dt)
     {
         ArgumentNullException.ThrowIfNull(player);
@@ -60,11 +63,13 @@ public sealed class KeyboardMouseControl(ControlBindings bindings)
         {
             ControlTargets.LetGo(avatar);                                     // held: it stands, its hands off
             Reset();
+            Hovered = null;
             return;
         }
         var shift = input.IsDown(bindings[KeyboardBindings.Shift]);
         walking &= !shift;                                                    // an attack stands
         var target = shift ? null : lockedTarget ?? ControlTargets.UnderCursor(avatar, scene, cursor);
+        Hovered = shift ? null : ControlTargets.UnderCursor(avatar, scene, cursor);
         var inReach = target is not null && ControlTargets.InReach(avatar, scene, target);
         var aim = (lockedTarget is null ? cursor.Ground : ControlTargets.Where(scene, lockedTarget)) - avatar.Position;   // a target that moves is followed
         avatar.Steer(aim, walking);

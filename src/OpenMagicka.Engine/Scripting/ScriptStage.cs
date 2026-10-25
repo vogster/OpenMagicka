@@ -23,9 +23,10 @@ public sealed record PlayMusicRequest(SoundBanks Bank, string Cue, float Focus) 
 
 /// <summary>
 /// A dialog's next interact, shown over a speaker, at a point in the level, or at a point on the screen
-/// (0..1); none of them: at the level's origin.
+/// (−1…1, y down); none of them: at the level's origin.
 /// </summary>
-public sealed record StartDialogRequest(int Dialog, Character? Speaker, Vector3? At, Vector2? OnScreen, bool ForceOnScreen) : ScriptRequest;
+public sealed record StartDialogRequest(int Dialog, Character? Speaker, Vector3? At, Vector2? OnScreen, bool ForceOnScreen, Character? Interactor = null)
+    : ScriptRequest;
 
 /// <summary>Every dialog ends (a cutscene's start or end).</summary>
 public sealed record EndDialogsRequest : ScriptRequest;

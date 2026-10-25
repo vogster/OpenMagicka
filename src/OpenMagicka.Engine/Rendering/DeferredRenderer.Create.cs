@@ -42,6 +42,7 @@ public sealed partial class DeferredRenderer
             try
             {
                 await renderer.LoadSpells(shaders, gpu, loader).ConfigureAwait(false);
+                await renderer.LoadGui(shaders, gpu, loader).ConfigureAwait(false);
             }
             catch
             {
@@ -62,6 +63,19 @@ public sealed partial class DeferredRenderer
         catch (Exception e) when (e is not OperationCanceledException)
         {
             SpellsUnavailable = e.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>What the screen shows over the world, optional like the particles (<see cref="GuiUnavailable"/>); in English till OM-52.</summary>
+    private async Task LoadGui(ShaderLibrary shaders, Threading.RenderQueue<GraphicsDevice> gpu, Content.ContentLoader loader)
+    {
+        try
+        {
+            gui = await GuiPass.Load(shaders, gpu, loader, Content.Localization.LanguagePack.Fallback).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            GuiUnavailable = e.GetBaseException().Message;
         }
     }
 

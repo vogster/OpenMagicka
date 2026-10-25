@@ -1,5 +1,6 @@
 using OpenMagicka.Content;
 using OpenMagicka.Content.Levels;
+using OpenMagicka.Content.Localization;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine.Cameras;
 using OpenMagicka.Engine.Characters;
@@ -22,7 +23,7 @@ public readonly record struct ScreenCover(Numerics.Vector4 Color, float Amount);
 /// are passed on (<see cref="EffectDirector"/>), and the screen's fades and scene transitions are stepped
 /// into a cover.
 /// </summary>
-public sealed class LevelPlay : IDisposable
+public sealed partial class LevelPlay : IDisposable
 {
     public const string WizardAsset = "data/characters/wizard";
 
@@ -40,7 +41,7 @@ public sealed class LevelPlay : IDisposable
         var services = new LevelServices(bestiary, new ContentScriptAssets(library), ScriptRegistry.Engine());
         var wizard = bestiary.Find(WizardAsset) ?? throw new InvalidDataException($"the game has no {WizardAsset}");
         return new LevelPlay(definition, new ContentLevel(files, loader), services, wizard, library.LookOf, GibShapes(loader),
-            AnimatedModels.Loader(loader, SpellVisuals.ModelAssets));
+            AnimatedModels.Loader(loader, SpellVisuals.ModelAssets), LevelDialogs.Load(files, loader, definition, LanguagePack.Fallback));
     }
 
     /// <summary>A model's bounding sphere (its meshes' together), by asset, each read once; null for one that is no model.</summary>
@@ -75,7 +76,7 @@ public sealed class LevelPlay : IDisposable
     /// <param name="looks">What the templates look like (none: nothing is drawn as a model).</param>
     public LevelPlay(LevelDefinition definition, ILevelContent content, LevelServices services, (CharacterTemplate Template, Gameplay.Animation.CharacterAnimations? Animations) wizard,
         Func<object, Engine.Rendering.ModelLook?>? looks = null, Func<string, (Numerics.Vector3 Centre, float Radius)?>? gibShapes = null,
-        Func<string, AnimatedModel?>? spellModels = null)
+        Func<string, AnimatedModel?>? spellModels = null, LevelDialogs? dialogs = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         Looks = looks ?? (_ => null);
@@ -86,6 +87,7 @@ public sealed class LevelPlay : IDisposable
         Level = new PlayedLevel(definition, content, World, services);
         Effects = new EffectDirector(World, Level, Channel, gibShapes ?? (_ => null));
         Spells = new SpellVisuals(World, Effects, spellModels, Looks);
+        SetUpDialogs(dialogs);
     }
 
     /// <summary>The effects passed to the renderer, and back.</summary>
@@ -145,7 +147,17 @@ public sealed class LevelPlay : IDisposable
     /// </summary>
     public void Tick(float dt, ControlFrame? input = null, Xna.Point screen = default, PadFrame? pad = null)
     {
-        if (pad is { } padFrame && Scene?.Scripts is { } padScripts)
+        var talking = Talk(input, pad);                                       // the player drives a dialog: its wizard stands
+        if (talking)
+        {
+            if (Player.Avatar is { IsDead: false } talker)
+            {
+                ControlTargets.LetGo(talker);                                 // it stands, its hands off
+            }
+            Controls.Reset();
+            Pad.Reset();
+        }
+        else if (pad is { } padFrame && Scene?.Scripts is { } padScripts)
         {
             Pad.Update(padFrame, Player, padScripts);
         }
@@ -158,7 +170,10 @@ public sealed class LevelPlay : IDisposable
         foreach (var request in Level.TakeRequests())
         {
             changed |= request is SceneChangedRequest;
-            Requests.Add(request);                                            // for the sound, the dialogs and the HUD (OM-49, OM-51)
+            if (!Take(request))
+            {
+                Requests.Add(request);                                        // for the sound and the HUD (OM-51, OM-54)
+            }
         }
         if (changed)
         {
@@ -170,6 +185,9 @@ public sealed class LevelPlay : IDisposable
         }
         Effects.Update();
         Spells.Update(dt);
+        StepCutscene(dt, input, pad);
+        StepDialogs(dt);
+        StepPrompt(dt, input, pad is not null);
         StepCamera(dt, snap: false);
         StepCover(dt);
     }

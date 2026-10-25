@@ -160,4 +160,24 @@ public class KeyboardMouseControlTests
         }
         Assert.Same(far.Item, s.Avatar.ItemIn(0));                                                // walked there and took it
     }
+
+    [Fact]
+    public void TheCursor_HoversACharacterToTalkTo_OfTheAvatarsSide_ButNotWithShift()
+    {
+        using var s = Start();
+        var talker = Spawn(s.World, at: s.Avatar.Position + new Numerics.Vector3(2, 0, 0));
+        talker.Dialog = 7;
+        s.World.Tick(Tick);                                                                        // the grid finds it from the next tick
+
+        talker.OwnFactions = s.Avatar.Factions;
+        Step(s, Nothing, Nothing, talker.Position);
+        Assert.Same(talker, s.Control.Hovered);
+
+        Step(s, ([Keys.LeftShift], Mouse()), Nothing, talker.Position);
+        Assert.Null(s.Control.Hovered);
+
+        talker.OwnFactions = 0;
+        Step(s, Nothing, Nothing, talker.Position);
+        Assert.Null(s.Control.Hovered);                                                            // another side's: not to talk to
+    }
 }

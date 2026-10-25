@@ -24,7 +24,10 @@ public sealed partial class PlayedLevel
             [.. (ReferenceEquals(s, Current) ? World.Entities.Entities : s.Kept).Select(EntityState.Of).OfType<EntityState>()
                 .Concat(s.Pending)]));
         var magicks = (World.Session?.Players ?? []).Aggregate(0UL, (all, p) => all | p.UnlockedMagicks);
-        return Checkpoint = new LevelCheckpoint(Current?.Key ?? 0, Level.Save(), states, [.. spawnPoints], [.. ignored], magicks);
+        return Checkpoint = new LevelCheckpoint(Current?.Key ?? 0, Level.Save(), states, [.. spawnPoints], [.. ignored], magicks)
+        {
+            Dialogs = Game.Dialogs?.Save(),
+        };
     }
 
     /// <summary>
@@ -46,6 +49,7 @@ public sealed partial class PlayedLevel
         Game.BossFight.Reset(Game);                                           // ours: the replay's spawns bring the bosses in anew
         Game.HealthBar.Reset();                                               // ours: the replay sets the bar up again
         Level.Stage.Reset();
+        Game.Dialogs?.Restore(checkpoint.Dialogs);
         requests.Clear();
         Empty();
         foreach (var scene in scenes.Values)

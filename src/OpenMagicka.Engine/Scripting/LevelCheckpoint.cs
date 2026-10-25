@@ -62,4 +62,8 @@ public sealed record SceneCheckpoint(bool FirstEntry, ScriptScene.Snapshot? Scri
 /// Writing it to disk goes with the saves (OM-55).
 /// </summary>
 public sealed record LevelCheckpoint(int Scene, ScriptLevel.Snapshot Level, IReadOnlyDictionary<int, SceneCheckpoint> Scenes,
-    IReadOnlyList<Matrix4x4> SpawnPoints, IReadOnlyList<int> Ignored, ulong UnlockedMagicks);
+    IReadOnlyList<Matrix4x4> SpawnPoints, IReadOnlyList<int> Ignored, ulong UnlockedMagicks)
+{
+    /// <summary>The dialogs' state (OM-49); none when the level plays without them.</summary>
+    public object? Dialogs { get; init; }
+}

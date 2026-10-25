@@ -28,6 +28,9 @@ public sealed class PlayFrame
     /// <summary>The models to draw (the characters, their items, the props, the lying items and books).</summary>
     public List<DrawnModel> Models { get; } = [];
 
+    /// <summary>What the screen shows over the world (the speech boxes).</summary>
+    public Engine.Rendering.GuiPictures Gui { get; } = new();
+
     /// <summary>The spells' own pictures (beams, their lights).</summary>
     public Engine.Rendering.SpellPictures Spells { get; } = new();
 
@@ -124,6 +127,10 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play) : ISimulation
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
         play.Spells.WriteModels(frame.Models);
         play.Spells.Write(frame.Spells);
+        frame.Gui.Clear();
+        play.Dialogs?.Write(frame.Gui);
+        play.WriteCutscene(frame.Gui);
+        frame.Gui.Prompt = play.Prompt;
         if (scene?.Scripts is { } scripts)
         {
             scripts.Places.Placements(frame.Parts);

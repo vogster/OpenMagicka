@@ -503,6 +503,9 @@ There are two different mechanisms:
 Keys are sorted by time, with smoothstep interpolation between neighbors; duration =
 the maximum of the last keys' times. At least one key of each kind is required.
 
+Ours (OM-49): the in-level cutscene's bars, skip prompt and skip input are ARCHITECTURE.md §18.
+Campaign map cutscenes are left to the menu (OM-53).
+
 ## 9. Action catalogue (113)
 
 > The `Triggers.Actions` namespace has 116 files: the abstract base `Action`, two enums
@@ -1103,6 +1106,18 @@ Parsing details (18 files, 615 dialogs, 728 interacts, 759 messages, 907 lines i
   lowered and split at `/`: one part = cue in the Characters bank, two = bank (Banks enum) and
   cue, more → error. Other line attributes are ignored. The text is lowered and split at `,`
   (no trimming): the first part is the loc key, the others the argument keys.
+
+### 11.1 Ours: the dialogs at play (OM-49)
+
+`DialogManager` plays them as above (ARCHITECTURE.md §18). Where we differ from the original:
+- With all 8 slots taken, a new dialog ends the first one; the original overwrites it as it stands.
+- A `lock` interact's input limit is lifted when it ends, however it ends (played through, ended by a script, its
+  owner dead or gone, or pushed out by a ninth dialog).
+- A second dialog started in a cutscene takes the bottom box, and the one playing there counts as played through;
+  the original leaves it in its slot, where it never ends.
+- A message whose speaker is dead or gone is skipped, as in the original, but its line count is reset; the
+  original leaves it where it was.
+- A malformed `[p=N]` tag is passed over with no pause; the original throws.
 
 ## 12. Parsing quirks and pitfalls (for compatibility)
 

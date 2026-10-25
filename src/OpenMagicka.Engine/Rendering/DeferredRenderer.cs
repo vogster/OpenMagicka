@@ -10,11 +10,12 @@ namespace OpenMagicka.Engine.Rendering;
 /// shadows are wanted (see <see cref="SunShadowView.Focus"/>), <see cref="Seconds"/> the time the
 /// liquids' waves and flow have run, <see cref="Parts"/> where the level's animated parts are now (by
 /// <see cref="LevelParts.Order"/>; none, or one missing: at rest), <see cref="Spells"/> the spells' own pictures and
-/// <see cref="ModelOf"/> the models they are drawn on, by asset.
+/// <see cref="ModelOf"/> the models they are drawn on, by asset; <see cref="Gui"/> what the screen shows over the world.
 /// </summary>
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
-    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null);
+    CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null,
+    GuiPictures? Gui = null);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -98,6 +99,7 @@ public sealed partial class DeferredRenderer : IDisposable
     private readonly ParticlePass? particles;
     private readonly PostPass? post;
     private SpellPass? spells;
+    private GuiPass? gui;
     private readonly LightShadows lightShadows = new();
     private Matrix[] partMoves = [];
     private readonly Matrix[] bindPose;
@@ -171,6 +173,9 @@ public sealed partial class DeferredRenderer : IDisposable
     /// <summary>Why the particles are not drawn, when they were asked for but could not be set up.</summary>
     public string? ParticlesUnavailable { get; private set; }
 
+    /// <summary>Why nothing is drawn over the world (the GUI could not be set up), or null.</summary>
+    public string? GuiUnavailable { get; private set; }
+
     /// <summary>Why the spells show only their particles (their own pictures could not be set up), or null.</summary>
     public string? SpellsUnavailable { get; private set; }
 
@@ -199,7 +204,7 @@ public sealed partial class DeferredRenderer : IDisposable
         lightShadows.Draw(device, lit, frustum, (viewProjection, cull) => DrawCasters(device, level, frame, viewProjection, Matrix.Identity, cull));
 
         foreach (var effect in new[] { deferred, clear, restoreDepth, shading, additive, skinned, water, lava, sky }.Concat(lights.Effects).Concat(post?.Effects ?? [])
-            .Concat(spells?.Effects ?? []))
+            .Concat(spells?.Effects ?? []).Concat(gui?.Effects ?? []))
         {
             effect.Globals.Apply(globals);
         }
@@ -261,6 +266,10 @@ public sealed partial class DeferredRenderer : IDisposable
         if (frame.Spells is { Shields.Count: > 0 } shielded)
         {
             spells?.DrawShields(device, shielded, globals, depth!);
+        }
+        if (frame.Gui is { } screen)
+        {
+            gui?.Draw(device, screen, globals.ViewProjection, main!.Width, main.Height);
         }
 
         UnbindTextures(device);
@@ -334,5 +343,6 @@ public sealed partial class DeferredRenderer : IDisposable
         particles?.Dispose();
         post?.Dispose();
         spells?.Dispose();
+        gui?.Dispose();
     }
 }

@@ -76,7 +76,7 @@ public sealed class ScriptScene
     public void EndCutscene(bool skipBarMove)
     {
         Game.InCutscene = false;
-        (Stage.IsUiEnabled, Stage.IsCutsceneSkipped, Stage.CutsceneSkipsBarMove, Stage.ShowsSkipTip) = (true, false, skipBarMove, false);
+        (Stage.IsUiEnabled, Stage.IsCutsceneSkipped, Stage.CutsceneSkipsBarMove) = (true, false, skipBarMove);   // the tip goes with the bars
         Stage.Request(new EndDialogsRequest());
     }
 

@@ -1523,3 +1523,81 @@ by their clips (bones not in a clip stay at their bind) and drawn as the entitie
   to 24 for a third of a second after each blow, which bursts where it struck (`pure_self_shield_hit`).
 - Not drawn: a stronger cast's overlay on barriers and armour, and the ice melting off a rock before the rock goes.
 
+
+## 18. Ours: dialogs, cutscenes and the text on the screen (OM-49)
+
+How a level's dialogs play and what the screen shows over the world. The dialog data is LEVELS_TRIGGERS.md §11; the
+cutscene actions are its §8. The logic thread plays the dialogs and writes what to draw into each frame (`GuiPictures`);
+the render thread draws it (`GuiPass`). Without the game's fonts, frame or effects the level plays with no text
+(`DeferredRenderer.GuiUnavailable` says why).
+
+**Text** (`OpenMagicka.Engine.Text`):
+- `BitmapFont` reads the game's bitmap fonts (`Languages/<lang>/Font/Maiandra14|16|18`, English's when a language ships
+  none) with the original's spacing, kerning and measuring. Its quirk is kept: a line break counts the width of `?`.
+- `Wrap` is the original's greedy wrap: words are split at spaces; a first word longer than the width widens the line.
+- `TextLayout` places glyph quads. `[c=r,g,b]…[/c]` colours a span; `[p=N]` pauses typing (it draws nothing).
+- `TypingText` types a text out at 40 glyphs a second, waits 0.25 s after punctuation and N s at a `[p=N]`.
+
+**Dialogs** (`OpenMagicka.Engine.Dialogs`):
+- `DialogManager` is the scripts' `IScriptDialogs`. It has 8 slots, each an interact being shown with its world box,
+  plus the one cutscene box.
+- `Start` pops the dialog's next interact (`DialogRun.Pop`: an interact repeats its count, then the next one; after the
+  last, the run goes back to `repeatFrom`, and a negative one ends it). It is ignored while the dialog is shown. With all
+  slots taken, the first is ended (the original overwrites it).
+- Each message is shown in turn:
+  - Its speaker is the owner (`owner`), else the character with that unique id; none when it is not in the level. Its
+    name comes from the loc table.
+  - Its line's sound and animation (0.3 s blend) start.
+  - When `focusOwner` is set, the camera moves to the speaker over 2 s at magnification 1.5, and is released over 2 s at
+    the end.
+- **Advancing:**
+  - A press of the player who drives the interact advances it: Enter, Space or the left button on the keyboard;
+    Interact on a pad. It first finishes the typing, then goes on. Presses wait 0.2 s after any dialog starts and
+    after a press that ends an interact. The press that goes to a dialog does nothing else (it neither boosts nor walks).
+  - A line with a TTL goes on by itself that long after it has been typed.
+  - A dialog nobody drives goes on only by TTL.
+  - In a cutscene presses do nothing.
+- **Ending:**
+  - A dialog is finished when its last message ends (`dialogDone` = finished and more than k interacts played).
+  - A dead or removed owner ends its dialog (its lock lifted). A dying owner of its own dialog marks it finished.
+  - A message whose speaker is dead or gone is skipped, and the next one shows.
+  - `EndAll` (the scripts' `endDialogs`, and a cutscene's start with `killDialogs`) ends every box.
+- While a `lock` interact shows, physics stops (`GameWorld.IsPhysicsFrozen`) and the stage limits input.
+- A player who talks to a character (`ControlTargets.Use` → `StartDialogRequest.Interactor` → `DialogManager.Talk`)
+  drives that dialog. The speaker turns to them when the message says `facing`; only this path turns speakers.
+- The runs and their counters are part of a checkpoint (`LevelCheckpoint.Dialogs`).
+
+**Boxes** (`SpeechBox`, drawn by `GuiPass`):
+- A world box hangs over its speaker's head (or a point, or a place on the screen). Its text is in Maiandra14, wrapped
+  and sized as the original's in Maiandra16, within the message's width. Its name is above it.
+- The frame is a 9-slice of `UI/HUD/Dialog_Say` through `TextBoxEffect` with 32 px borders. The box grows open at 4 a
+  second and shuts at 8. With `forceOnScreen` it is kept on the screen.
+- In a cutscene the text goes to one box at the bottom: Maiandra16, 640 wide, centred at 80 % of the screen's height and
+  kept above the bars. A dialog started there while another plays in it plays the other through.
+- The text colour is the dialogs' tan (0.704, 0.558, 0.320). References in a line (`#N;`, `#key;`) are white.
+- The GUI is drawn into the scene after the shields and before the filter, with `GUIBasicEffect` (`ScaleToHDR`), so
+  that the filter's encoding leaves it as it was.
+
+**Cutscenes** (`CutsceneBars`, `LevelPlay.Cutscene`):
+- The black bars, a tenth of the screen high, slide in over 1 s and out over 1 s. A replayed cutscene that skips the
+  bar move starts with them in.
+- While the bars are fully in, the level counts as in a cutscene: dialogs use its box, and presses skip.
+- The skip prompt `#cut_press_skip` shows when the cutscene has an `onSkip` and its tip is on. Its `#1;` is the space
+  bar's glyph, or the pad's A. It is in Maiandra18, right-aligned at the bottom right, and fades at 2 a second.
+- A skip is a fresh key whose code shares no bit with Escape's (as the original's test: Space and D skip; Enter and the
+  mouse do not), or a pad's Attack, Boost, Interact or Special.
+
+**The interact prompt** (`LevelPlay.Prompt`, `GuiPass.Prompt`):
+- It shows while the mouse hovers a character to talk to (`KeyboardMouseControl.Hovered`: one of the avatar's side
+  with a dialog), at the mouse. On a pad it shows for the one ahead within 3 (`ControlTargets.Ahead`), under the
+  wizard, with the X button's glyph.
+- Its text is `#interact_NN`, NN being the next interact's InteractType in two digits (Talk's, 08, by default).
+- It is hidden while presses wait, while the player drives a dialog, in a cutscene, and with the HUD off. It fades in
+  and out at 3 a second.
+- It is drawn as the original's notifier button: a strip 32 high of `UI/HUD/NotifierButton` (or `…_Keyboard`) through
+  `NotifierButtonEffect`. The middle stretches to the text, and the strip starts 42 px left of and 20 below its anchor.
+
+**Not done:**
+- The campaign map's cutscenes (`Levels/Cutscenes.xml`) go with the menu (OM-53).
+- Choosing the language (OM-52): English is used.
+- Online replication of dialogs.

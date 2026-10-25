@@ -42,6 +42,9 @@ public sealed class GameWorld : IDisposable
         return character;
     }
 
+    /// <summary>Whether the physics stands still (a dialog that locks the world); the rest of the world goes on.</summary>
+    public bool IsPhysicsFrozen { get; set; }
+
     /// <summary>The characters in the level, in the manager's order.</summary>
     public IEnumerable<Character> Characters => Entities.Entities.OfType<Character>();
 
@@ -59,7 +62,10 @@ public sealed class GameWorld : IDisposable
             character.PrepareStep();
             character.Body.BeforeStep(dt);
         }
-        Physics.Step(dt);
+        if (!IsPhysicsFrozen)
+        {
+            Physics.Step(dt);
+        }
         foreach (var character in characters)
         {
             character.ApplyPhysics(character.Body.AfterStep());

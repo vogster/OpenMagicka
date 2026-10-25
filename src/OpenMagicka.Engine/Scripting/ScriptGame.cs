@@ -19,6 +19,14 @@ public interface IScriptDialogs
 
     /// <summary>Whether the dialog has finished, past the interact (−1: any).</summary>
     bool IsDone(int dialog, int interactIndex);
+
+    /// <summary>The dialogs' state for a checkpoint (none to keep by default).</summary>
+    object? Save() => null;
+
+    /// <summary>Back to a checkpoint's state (every dialog ends first).</summary>
+    void Restore(object? saved)
+    {
+    }
 }
 
 /// <summary>The downloadable packs the scripts ask about.</summary>

@@ -91,7 +91,7 @@ public static class ControlTargets
                 avatar.PickUp(book);
                 break;
             case Character talker:
-                scene.Stage.Request(new StartDialogRequest(talker.Dialog, talker, null, null, ForceOnScreen: false));
+                scene.Stage.Request(new StartDialogRequest(talker.Dialog, talker, null, null, ForceOnScreen: false, Interactor: avatar));
                 break;
             case ScriptInteractable point:
                 point.Interact(avatar);
