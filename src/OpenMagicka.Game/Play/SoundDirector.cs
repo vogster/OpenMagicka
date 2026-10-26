@@ -31,6 +31,9 @@ public sealed partial class SoundDirector : IDisposable
     private readonly PlayedLevel level;
     private readonly List<(Entity Source, AnimationCue Cue)> cues = [];
     private readonly Dictionary<Entity, List<ISoundCue>> bySource = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The sounds that go with their source (a spell's from its caster), placed with it each step.</summary>
+    private readonly Dictionary<Entity, List<ISoundCue>> following = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<Item, (Entity Holder, ISoundCue Cue)> guns = new(ReferenceEqualityComparer.Instance);
     private int scene = -1;
     private bool fadingOut;
@@ -88,6 +91,10 @@ public sealed partial class SoundDirector : IDisposable
                 if (played is not null)
                 {
                     (bySource.TryGetValue(source, out var list) ? list : bySource[source] = []).Add(played);
+                    if (sound.Follow)
+                    {
+                        (following.TryGetValue(source, out var followed) ? followed : following[source] = []).Add(played);
+                    }
                 }
                 break;
             case SoundStopCue stop when bySource.TryGetValue(source, out var playing):
@@ -160,6 +167,26 @@ public sealed partial class SoundDirector : IDisposable
             if (list.Count == 0 || source.Manager is null)
             {
                 bySource.Remove(source);
+            }
+        }
+        foreach (var (source, list) in following.ToList())
+        {
+            list.RemoveAll(c => c.IsStopped);
+            if (source.Manager is null)
+            {
+                list.ForEach(c => c.Stop(immediate: false));                  // its caster gone mid-spell: its spell's sounds with it
+                following.Remove(source);
+                continue;
+            }
+            if (list.Count == 0)
+            {
+                following.Remove(source);
+                continue;
+            }
+            var at = SoundPlace.At(source.Position, Forward(source));         // a caster's spray, its beam: they go with it
+            foreach (var cue in list)
+            {
+                Sounds.Place(cue, at);
             }
         }
     }

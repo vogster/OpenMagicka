@@ -16,7 +16,7 @@ namespace OpenMagicka.Tests.Engine;
 public class SoundDirectorTests
 {
     private static readonly string[] Cues = ["spell_fire_hit", "chr_goblin_pain", "footstep_grass", "music_a", "music_b", "amb_wind", "amb_bird",
-        "spell_fire_onfire", "spell_steam_hit", "ui_element_fire", "ui_element_water", "ui_element_cold", "spell_water_drip", "spell_mine01", "misc_gib", "hum"];
+        "spell_fire_onfire", "spell_steam_hit", "ui_element_fire", "ui_element_water", "ui_element_cold", "spell_water_drip", "spell_mine01", "misc_gib", "hum", "spell_fire_spray"];
 
     private static (LevelPlay Play, FakeAudio Audio) Heard(string scripts = "")
     {
@@ -64,6 +64,21 @@ public class SoundDirectorTests
         Raise(play, avatar, new SoundStopCue("CHR_GOBLIN_PAIN"));
         play.Tick(Tick);
         Assert.True(pain.IsStopping);
+    }
+
+    [Fact]
+    public void ASpellsSound_GoesWithItsCaster_TheRestStayWhereTheyRose()
+    {
+        var (play, audio) = Heard();
+        using var _ = play;
+        var avatar = play.Player.Avatar!;
+
+        Raise(play, avatar, new SoundCue("spell_fire_spray", (int)SoundBanks.Spells, new Numerics.Vector3(9, 0, 9), Numerics.Vector3.UnitX) { Follow = true });
+        Raise(play, avatar, new SoundCue("chr_goblin_pain", (int)SoundBanks.Characters, new Numerics.Vector3(1, 0, 2), Numerics.Vector3.UnitX));
+        play.Tick(Tick);
+
+        Assert.Equal(avatar.Position, Made(audio, "spell_fire_spray").Places.Last().Position);
+        Assert.Equal(new Numerics.Vector3(1, 0, 2), Assert.Single(Made(audio, "chr_goblin_pain").Places).Position);
     }
 
     [Fact]

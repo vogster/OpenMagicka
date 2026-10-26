@@ -7,7 +7,11 @@ public abstract record AnimationCue;
 
 /// <param name="Banks">The original's sound bank flags.</param>
 /// <param name="Magnitude">The cue's magnitude variable, when the source sets one.</param>
-public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue;
+public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue
+{
+    /// <summary>The sound goes with its source while it plays (a spell's, from its caster); else it stays where it rose.</summary>
+    public bool Follow { get; init; }
+}
 
 /// <summary>A decal on the level: where, its surface's normal, the way it faces and its scale.</summary>
 public sealed record DecalCue(string Decal, Vector3 Position, Vector3 Normal, Vector3 Direction, float Scale) : AnimationCue;

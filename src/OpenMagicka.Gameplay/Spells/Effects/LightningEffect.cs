@@ -35,6 +35,7 @@ public sealed class LightningEffect : SpellEffect
     {
         FromStaff = false;
         Begin(caster, CastType.Force);
+        PlaySounds(caster, SpellType.Lightning, CastType.Force);
     }
 
     protected override void Weapon(Character caster)
@@ -47,6 +48,7 @@ public sealed class LightningEffect : SpellEffect
     {
         FromStaff = false;
         Begin(caster, CastType.Area);
+        PlaySounds(caster, SpellType.Lightning, CastType.Area);
     }
 
     protected override void Self(Character caster)

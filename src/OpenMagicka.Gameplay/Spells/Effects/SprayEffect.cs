@@ -50,14 +50,16 @@ public sealed class SprayEffect : SpellEffect
         FromStaff = false;                                                    // outside panic, a Force spray follows the facing
         (timeLeft, MaxTime, range) = (SprayRules.MaxDuration, SprayRules.MaxDuration, SprayRules.Range(Spell));
         damage = SpellDamage.For(Spell, SpellType.Spray, CastType.Force);
+        PlaySounds(caster, SpellType.Spray, CastType.Force);
         Show(caster, ForceEffects, caster.CastSource);
         GreaseBurn(caster);
     }
 
     protected override void Area(Character caster)
     {
-        timeLeft = 0;                                                         // the blast is all of it: the effect ends on its next frame
+        timeLeft = 0;                                                         // the blast is all of it: the effect ends at once
         damage = SpellDamage.For(Spell, SpellType.Spray, CastType.Area);
+        PlaySounds(caster, Spell.Type, CastType.Area, playOut: true);     // the effect ends this very step: its blast is heard out
         if (caster.Manager is { } manager)
         {
             Blasts.Full(manager, caster.World, caster, caster, SprayRules.AreaRadius(Spell), caster.Position, damage);

@@ -23,6 +23,35 @@ public abstract class SpellEffect
 
     protected float MaxTime { get; set; }
 
+    /// <summary>The spell's sounds this effect plays (stopped when it ends, or when it plays others).</summary>
+    private IReadOnlyList<string> sounds = [];
+
+    /// <summary>
+    /// The spell's sounds for a type and a cast (<see cref="SpellSounds"/>), going with the caster, as the original's
+    /// effects play them; the ones played before stop first. Those of an effect that ends at once play out
+    /// (<paramref name="playOut"/>: an area spray's blast), the others stop with the effect.
+    /// </summary>
+    protected void PlaySounds(Character caster, SpellType type, CastType cast, bool playOut = false)
+    {
+        StopSounds(caster);
+        var played = SpellSounds.For(Spell, type, cast);
+        foreach (var (cue, magnitude) in played)
+        {
+            caster.RaiseCue(new Animation.SoundCue(cue, SpellMissiles.SpellsBank, caster.Position, caster.Body.Facing, magnitude) { Follow = true });
+        }
+        sounds = playOut ? [] : [.. played.Select(p => p.Cue)];
+    }
+
+    /// <summary>The effect's spell sounds stop (as authored: they fade).</summary>
+    private void StopSounds(Character caster)
+    {
+        foreach (var cue in sounds)
+        {
+            caster.RaiseCue(new Animation.SoundStopCue(cue));
+        }
+        sounds = [];
+    }
+
     /// <summary>A continuous effect goes on while the button is held (all but projectiles).</summary>
     protected virtual bool IsContinuous => true;
 
@@ -95,6 +124,7 @@ public abstract class SpellEffect
         if (IsActive)
         {
             IsActive = false;
+            StopSounds(caster);
             End(caster);
         }
     }

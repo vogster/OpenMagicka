@@ -87,6 +87,26 @@ public class SprayTests
     }
 
     [Fact]
+    public void AForceSpray_PlaysItsElementsSpraySounds_AndStopsThemWhenItEnds()
+    {
+        using var world = World();
+        var wizard = Wizard(world, Elements.Fire, Elements.Fire);
+        var cues = new List<AnimationCue>();
+        world.Entities.Cue += (_, cue) => cues.Add(cue);
+        Assert.True(wizard.PressCast(CastType.Force));
+        Assert.True(RunUntil(world, () => wizard.CurrentSpell is SprayEffect));
+        var spray = wizard.CurrentSpell!;
+
+        var sound = Assert.Single(cues.OfType<SoundCue>(), c => c.Cue.StartsWith("spell_", StringComparison.Ordinal));
+        Assert.Equal(("spell_fire_spray", 2f), (sound.Cue, sound.Magnitude));
+        Assert.Empty(cues.OfType<SoundStopCue>());
+
+        wizard.ReleaseCast(CastType.Force);
+        Assert.True(RunUntil(world, () => !spray.IsActive, 1));
+        Assert.Equal("spell_fire_spray", Assert.Single(cues.OfType<SoundStopCue>()).Cue);
+    }
+
+    [Fact]
     public void AForceSpray_LastsFourSecondsAtMost()
     {
         using var world = World();

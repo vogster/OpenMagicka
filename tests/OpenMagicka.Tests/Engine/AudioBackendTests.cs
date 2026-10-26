@@ -54,6 +54,15 @@ public class AudioBackendTests
         var files = new ContentFileSystem(GameContent.ContentDirectory!);
         var names = SoundNames.Load(new ContentLoader(files, XnbReaderRegistry.Magicka));
         Assert.Equal("ui_checkpoint01", names.Find("UI_CHECKPOINT01"));
+        foreach (var element in (global::OpenMagicka.Gameplay.Spells.Elements[])[global::OpenMagicka.Gameplay.Spells.Elements.Water,
+            global::OpenMagicka.Gameplay.Spells.Elements.Cold, global::OpenMagicka.Gameplay.Spells.Elements.Fire, global::OpenMagicka.Gameplay.Spells.Elements.Lightning,
+            global::OpenMagicka.Gameplay.Spells.Elements.Arcane, global::OpenMagicka.Gameplay.Spells.Elements.Life, global::OpenMagicka.Gameplay.Spells.Elements.Steam,
+            global::OpenMagicka.Gameplay.Spells.Elements.Poison])
+        {
+            var sound = Assert.Single(global::OpenMagicka.Gameplay.Spells.SpellSounds.For(global::OpenMagicka.Gameplay.Spells.Spell.Of(element),
+                global::OpenMagicka.Gameplay.Spells.SpellType.Spray, global::OpenMagicka.Gameplay.Spells.CastType.Force));
+            Assert.NotNull(names.Find(sound.Cue));                           // what sprays and strikes sounds (0.0.3); earth, shield and ice never spray
+        }
 
         using var audio = XactAudio.Open(files, "eng", out var failure);
         if (audio is null)
@@ -112,7 +121,7 @@ public class AudioBackendTests
 
         public short[] Decode(OpenMagicka.Content.Audio.WaveBankEntry entry, ReadOnlySpan<byte> wave)
         {
-            Thread.Sleep(20);
+            Thread.Sleep(250);                                                // slow enough that quitting always comes mid-bank
             return new short[entry.Duration * entry.Format.Channels];
         }
     }

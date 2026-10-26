@@ -268,6 +268,7 @@ public sealed partial class SoundDirector : IScriptSounds
         }
         guns.Clear();
         bySource.Clear();
+        following.Clear();
         cues.Clear();
         ForgetTheWorld();
         foreach (var line in lines.Values)
