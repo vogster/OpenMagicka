@@ -4,7 +4,8 @@ An open-source reimplementation of the engine of **Magicka** (Arrowhead Game Stu
 in the spirit of [OpenMW](https://openmw.org): you bring the game data from your own copy,
 OpenMagicka runs it on modern systems.
 
-> Status: early development. Nothing is playable yet.
+> Status: early beta. The menu, the campaign's chapters, pause and the options work; chapter 1 is being played
+> through. Testers' builds are on the [releases page](https://github.com/vogster/OpenMagicka/releases).
 
 ## You need the original game
 
