@@ -169,6 +169,7 @@ public sealed partial class PlayedLevel
         World.Tick(dt);
         Level.Update(dt, Game.InCutscene);
         scripts.Update(dt);
+        KeepUnarmed();
         foreach (var request in Level.Stage.TakeRequests())
         {
             if (request is ChangeSceneRequest change)
@@ -226,6 +227,21 @@ public sealed partial class PlayedLevel
         var fades = change.Transition != ScriptTransition.None && change.Time >= float.Epsilon;
         Level.Stage.Transition = fades ? new SceneTransition(change.Transition, change.Time, Out: false) : null;
         transitionInLeft = fades ? change.Time : 0;
+    }
+
+    /// <summary>
+    /// While a stretch without weapons lasts, a player's wizard made since (a checkpoint's fresh one, one revived) gives
+    /// up the weapons its template gave it, as the original's do when they are made.
+    /// </summary>
+    private void KeepUnarmed()
+    {
+        if (!Game.UnequipWeaponsSection)
+        {
+            return;
+        }
+        BeginUnequipWeaponsSectionAction.Disarm(Services.Assets, (World.Session?.Players ?? []).Select(p => p.Avatar).OfType<Character>()
+            .Where(a => a.ItemIn(Character.WeaponSlot)?.Template.Id.Equals(Path.GetFileName(BeginUnequipWeaponsSectionAction.Unarmed),
+                StringComparison.OrdinalIgnoreCase) != true));
     }
 
     /// <summary>A scene's model, nav mesh and scripts, made the first time it is gone to.</summary>

@@ -83,7 +83,12 @@ public sealed partial class LevelPlay : IDisposable
         Session = new GameSession();
         World = new GameWorld(session: Session);
         Player = Session.AddPlayer();
-        Player.Avatar = new Character(wizard.Template, World.Physics, new Numerics.Vector3(0, 50, 0), animations: wizard.Animations) { IsPlayer = true, Player = Player };
+        Player.Avatar = new Character(wizard.Template, World.Physics, new Numerics.Vector3(0, 50, 0), animations: wizard.Animations)
+        {
+            IsPlayer = true,
+            Player = Player,
+            UniqueId = ScriptScene.AvatarId(Player.Id),                       // the scripts' "player1" is this wizard, as the original's
+        };
         Level = new PlayedLevel(definition, content, World, services);
         Effects = new EffectDirector(World, Level, Channel, gibShapes ?? (_ => null));
         Spells = new SpellVisuals(World, Effects, spellModels, Looks);

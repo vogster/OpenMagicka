@@ -90,10 +90,36 @@ public sealed class BeginDefaultAvatarSectionAction() : DefaultAvatarSectionActi
 
 public sealed class EndDefaultAvatarSectionAction() : DefaultAvatarSectionAction(begins: false);
 
-/// <summary><c>beginUnequipWeaponsSection</c>: a stretch with no weapons in hand begins.</summary>
+/// <summary>
+/// <c>beginUnequipWeaponsSection</c>: a stretch with no weapons in hand begins (the castle's, till the cellar's weapon
+/// rack): every player's wizard, living or not, holds the "unarmed" item for its weapon and its staff.
+/// </summary>
 public sealed class BeginUnequipWeaponsSectionAction : ScriptAction
 {
-    protected override void Execute() => Scene.Game.UnequipWeaponsSection = true;
+    /// <summary>The item the wizards hold through the stretch.</summary>
+    public const string Unarmed = "data/items/wizard/weapon_unarmed";
+
+    protected override void Execute()
+    {
+        if (Scene.Game.UnequipWeaponsSection)
+        {
+            return;
+        }
+        Scene.Game.UnequipWeaponsSection = true;
+        Disarm(Scene.Assets, (Scene.World.Session?.Players ?? []).Select(p => p.Avatar).OfType<Character>());
+    }
+
+    /// <summary>The wizards given give up their weapons (none when the content lacks the unarmed item).</summary>
+    public static void Disarm(IScriptAssets? assets, IEnumerable<Character> wizards)
+    {
+        if (assets?.Item(Unarmed) is { } unarmed)
+        {
+            foreach (var wizard in wizards)
+            {
+                wizard.Disarm(unarmed);
+            }
+        }
+    }
 }
 
 /// <summary><c>endUnequipWeaponsSection animation=</c>: the stretch ends; every avatar (living or not) plays the attack clip given.</summary>
@@ -103,7 +129,14 @@ public sealed class EndUnequipWeaponsSectionAction : ScriptAction
 
     protected override void Execute()
     {
-        Scene.Game.UnequipWeaponsSection = false;
+        if (Scene.Game.UnequipWeaponsSection)
+        {
+            Scene.Game.UnequipWeaponsSection = false;
+            foreach (var avatar in (Scene.World.Session?.Players ?? []).Select(p => p.Avatar).OfType<Character>())
+            {
+                avatar.Rearm();
+            }
+        }
         if (Animation is "" or "none")
         {
             return;

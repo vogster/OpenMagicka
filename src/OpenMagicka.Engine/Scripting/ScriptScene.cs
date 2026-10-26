@@ -225,6 +225,12 @@ public sealed class ScriptScene
     /// <summary>The script hash of a name as scripts write it (lowered).</summary>
     public static int Hash(string name) => Content.LegacyStringHash.Lower(name);
 
+    /// <summary>
+    /// A player's wizard's name in the scripts ("player1" for the first … "player4"), as the original names its avatars:
+    /// every wizard of a player carries it as its unique id.
+    /// </summary>
+    public static int AvatarId(int player) => Hash("player" + (player + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+
     internal void Fired(ScriptTrigger trigger, int variant, Character? sender) => TriggerFired?.Invoke(trigger, variant, sender);
 
     internal void Executed(ScriptAction action)

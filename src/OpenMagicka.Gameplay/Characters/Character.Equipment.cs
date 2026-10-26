@@ -103,6 +103,39 @@ public sealed partial class Character
         return item;
     }
 
+    /// <summary>The weapon's and the staff's slots, which a stretch without weapons empties (the original's slots 0 and 1).</summary>
+    public const int WeaponSlot = 0, StaffSlot = 1;
+
+    /// <summary>
+    /// A stretch without weapons (the original's unarmed sections): the weapon and the staff give way to the "unarmed"
+    /// item, on the bones the template holds them on (or the slot's own).
+    /// </summary>
+    public void Disarm(ItemTemplate unarmed)
+    {
+        ArgumentNullException.ThrowIfNull(unarmed);
+        foreach (var slot in (int[])[WeaponSlot, StaffSlot])
+        {
+            var held = Template.Equipment?.LastOrDefault(e => e.Slot == slot);
+            (string? bone, Vector3 rotation) = held is not null ? (held.Bone, held.Rotation) : (equipment[slot].BoneName, equipment[slot].Rotation);
+            if (bone is not null)
+            {
+                Equip(slot, new Item(unarmed), bone, rotation);
+            }
+        }
+    }
+
+    /// <summary>The stretch without weapons ends: the template's weapon and staff come back (the last of a slot's, as on spawning).</summary>
+    public void Rearm()
+    {
+        foreach (var slot in (int[])[WeaponSlot, StaffSlot])
+        {
+            if (Template.Equipment?.LastOrDefault(e => e.Slot == slot) is { } held)
+            {
+                Equip(slot, new Item(held.Item), held.Bone, held.Rotation);
+            }
+        }
+    }
+
     /// <summary>Held guns shoot when their timers come due (at the end of the frame, after the items moved).</summary>
     private void FireGuns(float dt)
     {

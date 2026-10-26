@@ -31,6 +31,44 @@ public class EquipmentTests
     private static DamageEntry Earth(float amount) => new(AttackProperties.Damage, Elements.Earth, amount, 1);
 
     [Fact]
+    public void AStretchWithoutWeapons_PutsTheUnarmedItemInTheWeaponAndStaffSlots_AndEndingItGivesThemBack()
+    {
+        using var world = World();
+        var template = Goblin with
+        {
+            Equipment = [new EquipmentTemplate(0, "LeftHand", Vector3.Zero, Sword), new EquipmentTemplate(1, "RightHand", Vector3.Zero, Staff)],
+        };
+        var wizard = world.Spawn(template, new Vector3(0, 0.9f, 0));
+        wizard.IsPlayer = true;
+        var unarmed = new ItemTemplate("weapon_unarmed");
+        Assert.Equal(1, wizard.SpellSource);
+        Assert.NotNull(wizard.Defences.Staff);
+
+        wizard.Disarm(unarmed);
+        Assert.Equal(("weapon_unarmed", "weapon_unarmed"), (wizard.ItemIn(0)!.Template.Id, wizard.ItemIn(1)!.Template.Id));
+        Assert.Equal(("LeftHand", "RightHand"), (wizard.Equipment[0].BoneName, wizard.Equipment[1].BoneName));
+        Assert.Equal(-1, wizard.SpellSource);                                  // no staff: self casts only
+        Assert.Null(wizard.Defences.Staff);
+
+        wizard.Rearm();
+        Assert.Equal((Sword, Staff), (wizard.ItemIn(0)!.Template, wizard.ItemIn(1)!.Template));
+        Assert.Equal(1, wizard.SpellSource);
+        Assert.NotNull(wizard.Defences.Staff);
+    }
+
+    [Fact]
+    public void ATemplateWithoutAStaff_IsDisarmedOnlyInItsWeaponSlot()
+    {
+        using var world = World();
+        var wizard = world.Spawn(Goblin with { Equipment = [new EquipmentTemplate(0, "RightHand", Vector3.Zero, Sword)] }, new Vector3(0, 0.9f, 0));
+
+        wizard.Disarm(new ItemTemplate("weapon_unarmed"));
+
+        Assert.Equal("weapon_unarmed", wizard.ItemIn(0)!.Template.Id);
+        Assert.Null(wizard.ItemIn(1));                                         // nowhere to hold it
+    }
+
+    [Fact]
     public void ATemplatesItems_AreCopiedForEachCharacter()
     {
         using var world = World();
