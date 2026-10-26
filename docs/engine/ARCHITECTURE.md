@@ -1893,3 +1893,54 @@ alone). Checkpoints are not kept across runs yet: continuing a slot starts its c
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - checkpoints saved across runs; the original's `campaign.sav` read or written;
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.
+
+## 21. Ours: the tutorial's hints
+
+The castle's cellar (`wc_s3`, chapter 1) teaches the elements one at a time. Each step turns the input off and shows
+a **dialog hint** (`setDialogHint`); the player closes it, and its trigger gives the input back and unlocks the next
+element. Plain **hints** (`setHint`) tell what to do next. One state for all players (`ScriptTutorial`), stepped with
+the game's time, so it stands while the game is paused.
+
+**The dialog hint:**
+- **Showing.** A dialog hint replaces the one up (whose trigger then never goes off), darkens the screen and holds off
+  for a second: what would close it in that second is dropped.
+- **Closing** (`LevelPlay.Tutorial`), before the input's own limits, so it works while the scene has the input off:
+  - a left or right click;
+  - a pad's Attack, Special, Interact or Boost button;
+  - a key other than Escape, but not during a cutscene (there keys skip the cutscene). The original's filter lets
+    only a handful of keys through, evidently meant as "any key but Escape"; ours is that.
+  
+  The click or key still reaches the wizard. On closing, the box goes at once, the darkening fades, and the trigger
+  goes off on the current scene.
+- `removeDialogHint` closes it the same way (trigger included, nothing during the hold-off). `dialogHintDone` holds
+  while no dialog hint is up. A scene change and a checkpoint's restart drop it without its trigger (and the darkening),
+  before the new scene's actions run: a room's checkpoint is taken while its `setDialogHint` still waits, and the
+  restart runs it again. A restart drops the hint too.
+- **Drawn** (`GuiPass.Tutorial`) centred at (0.5, 0.4) of the screen, in the speech boxes' `Dialog_Say` frame, opaque,
+  fading in over a quarter of a second:
+  - the element's 50 px icon from `UI/HUD/hud` at the top left;
+  - the element's name (`#element_<name>`), an empty line, then the text, in Maiandra14 wrapped to 300 px, 56 px right
+    of the frame's edge with an icon.
+  
+  Each `#key;` in the text becomes its string in white (an element's `#TYPE;`, `#PROP;`, `#OPP;`, which carry their
+  own colours). A magick's dialog hint (the castle's checkpoint and its fairy) shows the magick's 400 × 250 picture
+  from `UI/Menu/Magicks` (the 38th on: `Magicks_2`) instead, the text 406 px in.
+
+**The hint:**
+- The hint's loc key takes `_key` or `_pad` by the first player's device, when the hint asks for it (`appendController`).
+  Ours follows the device as it changes; the original chooses once, when the level loads.
+- It fades in over a quarter of a second. Another hint waits for the shown one to fade out first; the last asked wins,
+  and asking for the one shown changes nothing. It stays until removed or replaced.
+- **Drawn** in a half-clear `Dialog_Say` frame, text as the dialog hint's. The right ones stand 5 % from the edge, the
+  top at a tenth of the height, the centre ones at 0.7, the bottom one with its bottom 5 % up. Ours: the left ones
+  5 % in (the original's centre-left is off the screen's side), and the corners the original leaves at the screen's
+  corner placed like the rest.
+- `removeHint` also lifts the darkening, as the original's.
+
+**The darkening:** a black quad, half opaque at most, under the HUD, fading over a quarter of a second. A dialog hint
+and `enableDark` turn it on; the close, `removeHint` and `disableDark` turn it off.
+
+**Not done:**
+- the hints' clips (keys, mouse buttons and pad pictures from `UI/HUD/Tutorial` beside the text);
+- `highlightAnim` (a level part's white glow);
+- the tips (`Tips`), which the cellar does not use.

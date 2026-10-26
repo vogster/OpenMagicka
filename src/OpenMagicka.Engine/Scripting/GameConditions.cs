@@ -25,7 +25,7 @@ public sealed class DialogActiveCondition : ScriptCondition
 /// <summary><c>dialogHintDone</c>: the tutorial's dialog hint has been closed.</summary>
 public sealed class DialogHintDoneCondition : ScriptCondition
 {
-    protected override bool Holds(Character? sender) => Scene.Game.DialogHintDone;
+    protected override bool Holds(Character? sender) => Scene.Game.Tutorial.DialogHint is null;
 }
 
 /// <summary>A condition on the boss fight: with none under way it does not hold, inverted or not (as the original).</summary>

@@ -34,6 +34,9 @@ public sealed class GuiPictures
     /// <summary>The interact prompt: its text, at the mouse (pixels) or over the avatar (a pad's, with its button), how much it shows.</summary>
     public PromptPicture? Prompt { get; set; }
 
+    /// <summary>The tutorial's darkening, hint and dialog hint (OM-53); none when nothing of it shows.</summary>
+    public TutorialPicture? Tutorial { get; set; }
+
     public void Clear()
     {
         Boxes.Clear();
@@ -45,8 +48,16 @@ public sealed class GuiPictures
         Wheel = null;
         Letterbox = null;
         Prompt = null;
+        Tutorial = null;
     }
 }
+
+/// <summary>
+/// The tutorial on the screen: how dark it is (0…1), the hint's text, place and alpha, the dialog hint's text, its
+/// element's icon or its magick's picture (none: neither), alpha, scale and size (none: its text's).
+/// </summary>
+public readonly record struct TutorialPicture(float Dark, string? Hint, Scripting.HintPosition Position, float HintAlpha, string? Dialog,
+    Gameplay.Spells.Elements Element, Gameplay.Spells.MagickType Magick, float DialogAlpha, float Scale, Vector2? Size);
 
 /// <summary>
 /// A speech box to draw: its text (wrapped) and how many of its glyphs show, its speaker's name, how far it is open,

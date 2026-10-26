@@ -49,10 +49,11 @@ public sealed partial class GuiPass : IDisposable
         ArgumentNullException.ThrowIfNull(loader);
         Texture2DContent Picture(string asset) => loader.LoadUncached(asset).Root as Texture2DContent ?? throw new InvalidDataException($"{asset} is not a picture");
         var (frame, pad, keyboard, hud, digits) = (Picture(Frame), Picture(PadPrompt), Picture(KeyboardPrompt), Picture(HudAtlas), Picture(DigitsAtlas));
+        var (magicks, magicks2) = (Picture(MagicksAtlas), Picture(MagicksAtlas2));
         var fonts = ReadFonts(loader, language);
         var effects = new[] { shaders.Load("GUIBasicEffect"), shaders.Load("TextBoxEffect"), shaders.Load("NotifierButtonEffect") };
         await Task.WhenAll(effects).ConfigureAwait(false);                     // the library's (the menu shares GUIBasicEffect): not ours to dispose
-        var pass = await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits], fonts)).ConfigureAwait(false);
+        var pass = await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits, magicks, magicks2], fonts)).ConfigureAwait(false);
         pass.Language = language;
         return pass;
     }
@@ -84,6 +85,7 @@ public sealed partial class GuiPass : IDisposable
             font.Dispose();
         }
         (Fonts, Language) = (made, language);
+        tutorialTexts.Clear();
     }
 
     private static Dictionary<string, GuiFont> MakeFonts(GraphicsDevice device, Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> fonts)
@@ -133,7 +135,7 @@ public sealed partial class GuiPass : IDisposable
             var slices = new IndexBuffer(device, IndexElementSize.SixteenBits, indices.Length, BufferUsage.WriteOnly);
             made.Add(slices);
             slices.SetData(indices);
-            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2])) { hud = textures[3], digits = textures[4] };
+            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2])) { hud = textures[3], digits = textures[4], magicks = (textures[5], textures[6]) };
         }
         catch
         {
@@ -170,8 +172,8 @@ public sealed partial class GuiPass : IDisposable
         return (vertices, [.. indices]);
     }
 
-    /// <summary>A box's frame: its inner size, scaled about its centre, the border round it.</summary>
-    public void DrawFrame(GraphicsDevice device, Vector2 centre, Point size, float scale, int width, int height)
+    /// <summary>A box's frame: its inner size, scaled about its centre, the border round it, tinted (opaque white by default).</summary>
+    public void DrawFrame(GraphicsDevice device, Vector2 centre, Point size, float scale, int width, int height, Vector4? colour = null)
     {
         var parameters = new FnaEffectParameters(box.Effect);
         parameters.SetValue("ScreenSize", new Vector2(width, height));
@@ -179,7 +181,7 @@ public sealed partial class GuiPass : IDisposable
         parameters.SetValue("Size", new Vector2(size.X, size.Y));
         parameters.SetValue("Scale", scale);
         parameters.SetValue("BorderSize", (float)Border);
-        parameters.SetValue("Color", Vector4.One);
+        parameters.SetValue("Color", colour ?? Vector4.One);
         parameters.SetValue("Texture", frame);
         device.SetVertexBuffer(grid);
         device.Indices = slices;
@@ -203,5 +205,7 @@ public sealed partial class GuiPass : IDisposable
         keyboardPrompt.Dispose();
         hud.Dispose();
         digits.Dispose();
+        magicks.First.Dispose();
+        magicks.Second.Dispose();
     }
 }

@@ -241,6 +241,8 @@ public class ScriptConditionsTests
         Assert.False(Holds(scene, """<HasDLC type="WizardHat"/>"""));
         game.InstalledDlc.Add(Dlc.WizardHat);
         Assert.True(Holds(scene, """<HasDLC type="wizardhat"/>"""));
+        Assert.True(Holds(scene, """<dialogHintDone/>"""));                                  // none up
+        game.Tutorial.Show(new TutorialDialogHint(Elements.Life, MagickType.None, "#hint", 0, null, null));
         Assert.False(Holds(scene, """<dialogHintDone/>"""));
 
         Assert.False(Holds(Scene(world, looped: true), """<isCampaignLooped/>"""));            // not a campaign: the original crashes

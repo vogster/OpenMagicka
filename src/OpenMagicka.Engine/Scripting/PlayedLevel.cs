@@ -219,6 +219,7 @@ public sealed partial class PlayedLevel
         {
             Leave(from, change.Keep);
         }
+        Game.Tutorial.Forget();                                               // the old scene's dialog hint goes, its trigger never set off
         Enter(to, change.Point);
         requests.Enqueue(new SceneChangedRequest(from?.Key ?? 0, to.Key, change.Keep));
         change.Entered?.Invoke(to.Scripts!);

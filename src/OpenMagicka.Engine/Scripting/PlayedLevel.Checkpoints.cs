@@ -50,6 +50,8 @@ public sealed partial class PlayedLevel
         Game.BossFight.Reset(Game);                                           // ours: the replay's spawns bring the bosses in anew
         Game.HealthBar.Reset();                                               // ours: the replay sets the bar up again
         Level.Stage.Reset();
+        Game.Tutorial.Forget();                                               // the hints are set again by what the replay runs, as the original's
+        Game.Tutorial.Hint = null;
         Game.Dialogs?.Restore(checkpoint.Dialogs);
         Game.Sounds?.Restore(checkpoint.Sounds);
         requests.Clear();

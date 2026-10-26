@@ -82,11 +82,25 @@ public sealed class EnableDarkAction() : TutorialSwitchAction(t => t.IsDark = tr
 
 public sealed class DisableDarkAction() : TutorialSwitchAction(t => t.IsDark = false);
 
-/// <summary><c>removeHint</c>: the tutorial's hint goes.</summary>
-public sealed class RemoveHintAction() : TutorialSwitchAction(t => t.Hint = null);
+/// <summary><c>removeHint</c>: the tutorial's hint goes, and the screen's darkening with it (as the original's).</summary>
+public sealed class RemoveHintAction() : TutorialSwitchAction(t => (t.Hint, t.IsDark) = (null, false));
 
-/// <summary><c>removeDialogHint</c>: the tutorial's dialog hint goes.</summary>
-public sealed class RemoveDialogHintAction() : TutorialSwitchAction(t => t.DialogHint = null);
+/// <summary>
+/// <c>removeDialogHint</c>: the tutorial's dialog hint is closed as a player would close it, its trigger set off
+/// (nothing while it holds off, as the original's).
+/// </summary>
+public sealed class RemoveDialogHintAction : ScriptAction
+{
+    public override void Replay() => Execute();
+
+    protected override void Execute()
+    {
+        if (Scene.Game.Tutorial.Close() is { } trigger and not 0)
+        {
+            Scene.ExecuteTrigger(trigger, null);
+        }
+    }
+}
 
 /// <summary>
 /// <c>setHint id= appendController= animation= position=</c>: the tutorial's hint shows the loc key's text
@@ -120,9 +134,8 @@ public sealed class SetDialogHintAction : ScriptAction
 
     protected override void Execute()
     {
-        Scene.Game.DialogHintDone = false;
-        Scene.Game.Tutorial.DialogHint = new TutorialDialogHint(Magick == MagickType.None ? Element : Elements.None, Magick, Id,
-            Trigger.Length > 0 ? Hash(Trigger) : 0, Scale > 0 ? Scale : null, Size.X > 0 && Size.Y > 0 ? Size : null);
+        Scene.Game.Tutorial.Show(new TutorialDialogHint(Magick == MagickType.None ? Element : Elements.None, Magick, Id,
+            Trigger.Length > 0 ? Hash(Trigger) : 0, Scale > 0 ? Scale : null, Size.X > 0 && Size.Y > 0 ? Size : null));
     }
 }
 

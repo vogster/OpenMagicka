@@ -38,8 +38,7 @@ public sealed record TutorialHint(string Key, bool ForController, HintAnimations
 
 /// <summary>
 /// A tutorial's dialog hint over an element or a magick: the text of a loc key, the trigger its closing
-/// sets off, and its scale and size when given. The HUD draws it, sets <see cref="ScriptGame.DialogHintDone"/>
-/// and sets the trigger off when it is closed (OM-49).
+/// sets off, and its scale and size when given. The HUD draws it; a player's click or key closes it (OM-53).
 /// </summary>
 public sealed record TutorialDialogHint(Elements Element, MagickType Magick, string Key, int Trigger, float? Scale, Vector2? Size);
 
@@ -65,7 +64,47 @@ public sealed class ScriptTutorial
 
     public TutorialHint? Hint { get; set; }
 
-    public TutorialDialogHint? DialogHint { get; set; }
+    public TutorialDialogHint? DialogHint { get; private set; }
+
+    /// <summary>How long a new dialog hint ignores what would close it (the original's second), in game time.</summary>
+    public const float HoldOff = 1;
+
+    /// <summary>The time left before the dialog hint can be closed.</summary>
+    public float Holding { get; private set; }
+
+    /// <summary>A dialog hint comes up (in place of one up, whose trigger then never goes off), darkening the screen.</summary>
+    public void Show(TutorialDialogHint hint)
+    {
+        DialogHint = hint ?? throw new ArgumentNullException(nameof(hint));
+        Holding = HoldOff;
+        IsDark = true;
+    }
+
+    /// <summary>The hold-off runs with the game's time (it stands while the game is paused).</summary>
+    public void Step(float dt) => Holding = Math.Max(0, Holding - (float.IsFinite(dt) ? Math.Max(0, dt) : 0));
+
+    /// <summary>
+    /// The dialog hint is closed (a player's input, or <c>removeDialogHint</c>): the trigger to set off (0: none), or
+    /// none when there is no hint or it is still holding off (the input is dropped, as the original's).
+    /// </summary>
+    public int? Close()
+    {
+        if (DialogHint is not { } hint || Holding > 0)
+        {
+            return null;
+        }
+        DialogHint = null;
+        IsDark = false;
+        return hint.Trigger;
+    }
+
+    /// <summary>The scene goes (or a checkpoint comes back): the dialog hint goes, its trigger never set off, and the darkening.</summary>
+    public void Forget()
+    {
+        DialogHint = null;
+        IsDark = false;
+        Holding = 0;
+    }
 
     public void Enable(Elements element) => DisabledElements &= ~element;
 

@@ -148,6 +148,7 @@ public sealed partial class LevelPlay : IDisposable
     /// </summary>
     public void Tick(float dt, ControlFrame? input = null, Xna.Point screen = default, PadFrame? pad = null)
     {
+        CloseDialogHint(input, pad);                                          // before the input's limits: the hint gives the input back
         var talking = Talk(input, pad);                                       // the player drives a dialog: its wizard stands
         if (talking)
         {
@@ -190,6 +191,7 @@ public sealed partial class LevelPlay : IDisposable
         StepDialogs(dt);
         StepPrompt(dt, input, pad is not null);
         StepHud(dt, pad is not null);
+        StepTutorial(dt);
         StepCamera(dt, snap: false);
         StepSound(dt);
         StepCover(dt);

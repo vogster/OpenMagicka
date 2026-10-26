@@ -152,6 +152,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escap
         play.Spells.Write(frame.Spells);
         frame.Gui.Clear();
         play.WriteHud(frame.Gui);
+        play.WriteTutorial(frame.Gui);
         play.Dialogs?.Write(frame.Gui);
         play.WriteCutscene(frame.Gui);
         frame.Gui.Prompt = play.Prompt;

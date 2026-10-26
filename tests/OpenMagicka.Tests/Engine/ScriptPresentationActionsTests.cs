@@ -153,7 +153,7 @@ public class ScriptPresentationActionsTests
               <setHint id="hint_move" appendController="true" animation="ConjureFire" position="top"/>
               <setDialogHint id="hint_heal" element="life" trigger="healed"/>
             </Then></Trigger>
-            <Trigger id="free" autorun="false"><Then><enablePush/><disableDark/><removeHint/><removeDialogHint/></Then></Trigger>
+            <Trigger id="free" autorun="false" repeat="true"><Then><enablePush/><disableDark/><removeHint/><removeDialogHint/></Then></Trigger>
             """);
         var tutorial = scene.Game.Tutorial;
 
@@ -164,6 +164,9 @@ public class ScriptPresentationActionsTests
         Assert.Equal(new TutorialHint("hint_move", true, HintAnimations.ConjureFire, HintPosition.Top), tutorial.Hint);
         Assert.Equal(new TutorialDialogHint(Elements.Life, MagickType.None, "hint_heal", ScriptScene.Hash("healed"), null, null), tutorial.DialogHint);
 
+        Fire(scene, "free");
+        Assert.NotNull(tutorial.DialogHint);                                                      // its first second: not closed
+        tutorial.Step(ScriptTutorial.HoldOff);
         Fire(scene, "free");
         Assert.False(tutorial.IsPushDisabled || tutorial.IsDark);
         Assert.Null(tutorial.Hint);

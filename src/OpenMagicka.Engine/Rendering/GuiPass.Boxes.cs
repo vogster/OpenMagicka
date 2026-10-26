@@ -73,6 +73,7 @@ public sealed partial class GuiPass
         device.BlendState = Blend;
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = RasterizerState.CullNone;
+        DrawDark(device, gui.Tutorial, width, height);
         DrawNumbers(device, gui.Numbers, viewProjection, width, height);
         DrawQueues(device, gui.Queues, viewProjection, width, height);
         DrawBars(device, gui.Bars, viewProjection, width, height);
@@ -93,6 +94,11 @@ public sealed partial class GuiPass
                 corner = centre - new Vector2(size.X / 2f - 20, size.Y / 2f - nameFont.Metrics.LineHeight) * box.Scale;
             }
             Text.Draw(device, textFont, box.Text, DialogColour, corner, box.Scale, box.Visible, width, height);
+        }
+        if (gui.Tutorial is { } tutorial)
+        {
+            DrawHint(device, tutorial, width, height);
+            DrawDialogHint(device, tutorial, width, height);
         }
         if (gui.Prompt is { } shown)
         {

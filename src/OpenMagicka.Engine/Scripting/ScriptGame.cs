@@ -62,9 +62,6 @@ public sealed class ScriptGame
     /// <summary>The dialogs; none, so none is up or done.</summary>
     public IScriptDialogs? Dialogs { get; set; }
 
-    /// <summary>The tutorial's dialog hint has been closed.</summary>
-    public bool DialogHintDone { get; set; }
-
     /// <summary>The achievements won, by name in any case.</summary>
     public ISet<string> Achievements { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
