@@ -1851,7 +1851,16 @@ Backspace or B go back; Delete deletes a slot. The original's book takes only th
   - Game: damage numbers, health bars (On, Players Only, Off), spell wheel, language (a box of the languages under
     `Content/Languages`, in their own names).
   - Sound: music and sounds, 0 to 10 (`misc_thud01` sounds each step of the sounds').
-  - Graphics: windowed, resolution (a box of the display's sizes from 800 × 600), V-Sync.
+  - Graphics: windowed, resolution (a box of the display's sizes from 800 × 600), V-Sync, and ours: the interface's
+    size (Auto, 75 … 300 %).
+- **The interface's size** (ours, OM-87). The original draws its HUD, speech boxes, hints and message boxes in raw
+  screen pixels, which a 4K screen makes tiny. A scale (`GameSettings.InterfaceScale`: the size chosen, else the
+  screen's height against 1080, never below 1) lays every screen-pixel piece out on a screen that much smaller
+  (`GuiPictures.Scale`, `MenuPicture.ScreenScale`) and draws it that much bigger. The world's points are projected
+  onto the smaller screen, so the pieces keep to their characters; the shell turns the mouse into the smaller
+  screen's pixels for its boxes and the pause menu. The menu's page keeps its square.
+- **Our own texts** (`OwnStrings`, keys `#om_…`) for options the original lacks: added under the game's strings, in the
+  language's words where we have them, else English's.
 - **Message boxes** (`MessageBox`): the parchment `pages (0, 464, 448, 560)` at its own size in the screen's middle,
   the text in MenuDefault wrapped to 403 px, the options one a line; long lists scroll ten at a time. Back closes
   one unchosen.

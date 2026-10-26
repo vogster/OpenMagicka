@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using OpenMagicka.Content.Localization;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine;
+using OpenMagicka.Engine.Rendering;
 using OpenMagicka.Engine.Threading;
 using OpenMagicka.Game.Install;
 using OpenMagicka.Game.Menu;
@@ -21,7 +22,13 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     private readonly TomeMenu menu;
     private readonly MenuInputReader reader = new();
     private ShellMode mode = ShellMode.Menu;
-    private Point screen;
+    private Point realScreen;
+
+    /// <summary>How much bigger the screen-pixel pieces are drawn (the settings' interface size, OM-87).</summary>
+    public float InterfaceScale => Settings.InterfaceScale(realScreen.Y);
+
+    /// <summary>The screen the screen's pieces (boxes, pause, loading) are laid out on: the real one made smaller by the interface's size.</summary>
+    private Point screen => MenuPicture.Scaled(realScreen, InterfaceScale);
     private StringTable strings;
 
     /// <param name="screen">The screen's size at the start (the settings' when they give none).</param>
@@ -36,7 +43,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         {
             Settings = Settings with { Width = screen.X, Height = screen.Y };
         }
-        this.screen = screen;
+        realScreen = screen;
         strings = StringsOf(Settings.Language);
         menu = new TomeMenu(this);
         menu.Open();
@@ -64,12 +71,12 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     {
         try
         {
-            return LanguagePack.Load(content.Files, language);
+            return LanguagePack.Load(content.Files, language).With(OwnStrings.For(language));
         }
         catch (Exception e) when (e is DirectoryNotFoundException or InvalidDataException or IOException)
         {
             Console.Error.WriteLine($"OpenMagicka: no strings for {language} ({e.Message})");
-            return StringTable.Empty;
+            return StringTable.Empty.With(OwnStrings.For(language));
         }
     }
 
@@ -109,9 +116,11 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         var input = host.Input.Value;
         if (input.Screen.X > 0 && input.Screen.Y > 0)
         {
-            screen = input.Screen;
+            realScreen = input.Screen;
         }
         var read = reader.Read(input, (float)dt);
+        var laid = screen;                                                    // the mouse over the screen's pieces, on their smaller screen
+        read = read with { Screen = new Point(read.Screen.X * laid.X / Math.Max(1, realScreen.X), read.Screen.Y * laid.Y / Math.Max(1, realScreen.Y)) };
         switch (mode)
         {
             case ShellMode.Menu:
@@ -134,6 +143,8 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         frame.Screen = new ScreenMode(Settings.Width, Settings.Height, Settings.Fullscreen, Settings.VSync);
         frame.Language = Settings.Language;
         frame.Menu.Clear();
+        frame.Menu.ScreenScale = InterfaceScale;
+        frame.Play.Gui.Scale = InterfaceScale;
         frame.Mode = mode;
         frame.Level = play is null ? 0 : level;
         frame.Channel = play?.Channel;

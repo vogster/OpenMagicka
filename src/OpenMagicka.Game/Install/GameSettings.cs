@@ -38,6 +38,24 @@ public sealed record GameSettings
 
     public bool SpellWheel { get; init; } = true;
 
+    /// <summary>The interface's sizes offered, in per cent of the original's (OM-87).</summary>
+    public static readonly int[] InterfaceSizes = [75, 100, 125, 150, 175, 200, 250, 300];
+
+    /// <summary>The interface's size in per cent (one of <see cref="InterfaceSizes"/>); none: by the screen (see <see cref="InterfaceScale"/>).</summary>
+    public int? InterfaceSize { get; init; }
+
+    /// <summary>
+    /// How much bigger the pieces drawn in screen pixels are (the HUD, the speech boxes, the hints, the message boxes):
+    /// the size chosen, else the screen's height against 1080 in quarter steps (the original's size up to a 1080-line
+    /// screen, twice it on a 4K one; whole quarters keep the bitmap text sharp). Never so big that the pieces' screen
+    /// is under 480 lines, where the original's 640-wide cutscene box and the hints would not fit.
+    /// </summary>
+    public float InterfaceScale(int screenHeight)
+    {
+        var scale = InterfaceSize is { } size ? size / 100f : Math.Max(1, MathF.Floor(screenHeight / 1080f * 4) / 4);
+        return Math.Min(scale, Math.Max(1, screenHeight / 480f));
+    }
+
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     /// <summary>OpenMagicka's settings file (the user's local application data).</summary>
@@ -75,5 +93,6 @@ public sealed record GameSettings
         Width = Width is > 0 and <= 16384 ? Width : null,
         Height = Height is > 0 and <= 16384 ? Height : null,
         HealthBars = Enum.IsDefined(HealthBars) ? HealthBars : HealthBarOption.On,
+        InterfaceSize = InterfaceSize is { } size && InterfaceSizes.Contains(size) ? size : null,
     };
 }

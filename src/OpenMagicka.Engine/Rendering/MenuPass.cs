@@ -125,7 +125,8 @@ public sealed class MenuPass : IDisposable
         {
             device.Clear(Color.Black);
         }
-        Draw(device, picture.ScreenSprites, picture.ScreenTexts, width, height);
+        var laid = MenuPicture.Scaled(new Point(width, height), picture.ScreenScale);
+        Draw(device, picture.ScreenSprites, picture.ScreenTexts, laid.X, laid.Y);
         if (picture.Cover > 0)
         {
             text.DrawSprites(device, atlases[MenuAtlas.White], [new GuiSprite(Vector2.Zero, new Vector2(width, height), Vector2.Zero, Vector2.One,

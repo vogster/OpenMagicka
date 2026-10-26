@@ -113,7 +113,17 @@ public sealed class SettingsPage : MenuPage
         new SettingRow("#menu_opt_gfx_01", s => page.OnOff(!s.Fullscreen), (s, _) => s with { Fullscreen = !s.Fullscreen }),
         new SettingRow("#menu_opt_gfx_02", s => s.Width is { } w && s.Height is { } h ? $"{w}x{h}" : "-", null, page.ChooseResolution),
         new SettingRow("#menu_vsync", s => page.OnOff(s.VSync), (s, _) => s with { VSync = !s.VSync }),
+        new SettingRow(OwnStrings.InterfaceSize, s => s.InterfaceSize is { } size ? size.ToString(CultureInfo.InvariantCulture) + " %" : page.Menu.Text(OwnStrings.Auto),
+            (s, way) => s with { InterfaceSize = NextSize(s.InterfaceSize, way) }),
     ]);
+
+    /// <summary>The interface's size a step on: Auto, then the sizes offered, round.</summary>
+    public static int? NextSize(int? size, int way)
+    {
+        int?[] steps = [null, .. GameSettings.InterfaceSizes.Select(s => (int?)s)];
+        var at = Array.IndexOf(steps, size);
+        return steps[((at < 0 ? 0 : at) + way % steps.Length + steps.Length) % steps.Length];
+    }
 
     /// <summary>The languages' own names, as the original's language box shows them.</summary>
     public static string LanguageName(string folder) => folder switch

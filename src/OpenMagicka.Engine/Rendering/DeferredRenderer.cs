@@ -272,7 +272,8 @@ public sealed partial class DeferredRenderer : IDisposable
         }
         if (frame.Gui is { } screen)
         {
-            gui?.Draw(device, screen, globals.ViewProjection, main!.Width, main.Height);
+            var laid = MenuPicture.Scaled(new Point(main!.Width, main.Height), screen.Scale);   // the interface's size (OM-87)
+            gui?.Draw(device, screen, globals.ViewProjection, laid.X, laid.Y);
         }
 
         UnbindTextures(device);

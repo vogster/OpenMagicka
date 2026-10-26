@@ -89,4 +89,27 @@ public class InstallTests
             dir.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void TheInterfaceSize_IsTheOneChosen_ElseTheScreensHeightAgainst1080_NeverBelowTheOriginals()
+    {
+        Assert.Equal(1f, new GameSettings().InterfaceScale(720));
+        Assert.Equal(1f, new GameSettings().InterfaceScale(1080));
+        Assert.Equal(2f, new GameSettings().InterfaceScale(2160));                    // a 4K screen
+        Assert.Equal(1.5f, new GameSettings { InterfaceSize = 150 }.InterfaceScale(2160));
+        Assert.Equal(1.25f, new GameSettings().InterfaceScale(1440));                   // whole quarters
+        Assert.Equal(1.5f, new GameSettings { InterfaceSize = 300 }.InterfaceScale(720));  // the pieces' screen stays 480 lines high
+        var path = Path.Combine(Path.GetTempPath(), $"om87-{Guid.NewGuid():N}.json");
+        try
+        {
+            new GameSettings { InterfaceSize = 150 }.Save(path);
+            Assert.Equal(150, GameSettings.Load(path).InterfaceSize);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+        Assert.Null(new GameSettings { InterfaceSize = 133 }.Clamped().InterfaceSize);     // not one offered: by the screen
+        Assert.Equal(125, new GameSettings { InterfaceSize = 125 }.Clamped().InterfaceSize);
+    }
 }

@@ -54,6 +54,19 @@ public sealed class MenuPicture
     /// <summary>How black the screen is over everything (a fade).</summary>
     public float Cover { get; set; }
 
+    /// <summary>
+    /// The interface's size (OM-87): the screen's own pieces are laid out on a screen this much smaller, and drawn this
+    /// much bigger (the page keeps its square). Kept from frame to frame (not cleared).
+    /// </summary>
+    public float ScreenScale { get; set; } = 1;
+
+    /// <summary>The screen the screen's pieces are laid out on: the real one made smaller by a scale.</summary>
+    public static Point Scaled(Point screen, float scale)
+    {
+        var s = float.IsFinite(scale) ? Math.Clamp(scale, 0.5f, 4) : 1;
+        return new Point(Math.Max(1, (int)(screen.X / s)), Math.Max(1, (int)(screen.Y / s)));
+    }
+
     public void Clear()
     {
         ShowsPage = false;

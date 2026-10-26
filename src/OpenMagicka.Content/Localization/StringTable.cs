@@ -42,6 +42,18 @@ public sealed class StringTable
 
     public static int Id(string key) => LegacyStringHash.Lower(key);
 
+    /// <summary>The same strings with others added under them: an entry whose key the table has already is left out.</summary>
+    public StringTable With(IEnumerable<LocEntry> extra)
+    {
+        ArgumentNullException.ThrowIfNull(extra);
+        var map = new Dictionary<int, string>(strings);
+        foreach (var entry in extra)
+        {
+            map.TryAdd(Id(entry.Key), entry.Text);
+        }
+        return new StringTable(map.ToFrozenDictionary(), players);
+    }
+
     /// <summary>A table of the given entries; a later entry replaces an earlier one with the same ID.</summary>
     public static StringTable Create(IEnumerable<LocEntry> entries)
     {

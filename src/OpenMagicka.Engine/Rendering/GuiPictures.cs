@@ -37,6 +37,12 @@ public sealed class GuiPictures
     /// <summary>The tutorial's darkening, hint and dialog hint (OM-53); none when nothing of it shows.</summary>
     public TutorialPicture? Tutorial { get; set; }
 
+    /// <summary>
+    /// The interface's size (OM-87): every piece in screen pixels drawn this much bigger, laid out on a screen this much
+    /// smaller (the world's points projected onto it). Kept from frame to frame (not cleared).
+    /// </summary>
+    public float Scale { get; set; } = 1;
+
     public void Clear()
     {
         Boxes.Clear();

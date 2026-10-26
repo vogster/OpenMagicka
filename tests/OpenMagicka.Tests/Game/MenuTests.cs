@@ -193,6 +193,35 @@ public class MenuTests
     }
 
     [Fact]
+    public void TheInterfaceSize_StepsFromAutoThroughTheSizesOffered_Round()
+    {
+        Assert.Equal(75, SettingsPage.NextSize(null, 1));
+        Assert.Equal(100, SettingsPage.NextSize(75, 1));
+        Assert.Null(SettingsPage.NextSize(75, -1));
+        Assert.Equal(300, SettingsPage.NextSize(null, -1));
+        Assert.Null(SettingsPage.NextSize(300, 1));
+
+        using var host = new FakeMenuHost();
+        var menu = new TomeMenu(host);
+        menu.Open(SettingsPage.Graphics);
+        menu.Page!.Selected = 3;
+        menu.Update(Keys(horizontal: 1), Screen);
+        menu.Update(Keys(horizontal: 1), Screen);
+        Assert.Equal(100, host.Settings.InterfaceSize);
+    }
+
+    [Fact]
+    public void OurOwnStrings_GoUnderTheGames_InTheirLanguageOrEnglish()
+    {
+        var game = StringTable.Create([new LocEntry(OwnStrings.Auto, "the game's")]);
+        var strings = game.With(OwnStrings.For("rus"));
+        Assert.Equal("the game's", strings.Get(OwnStrings.Auto));                // the game's own wins
+        Assert.Equal(17, strings.Get(OwnStrings.InterfaceSize).Length);          // "Размер интерфейса"
+        Assert.Equal("Interface Size", StringTable.Empty.With(OwnStrings.For("xyz")).Get(OwnStrings.InterfaceSize));
+        Assert.Equal(new Point(1920, 1080), MenuPicture.Scaled(new Point(3840, 2160), 2));
+    }
+
+    [Fact]
     public void TheLanguageAndResolutionBoxes_ApplyTheChoice()
     {
         using var host = new FakeMenuHost();
