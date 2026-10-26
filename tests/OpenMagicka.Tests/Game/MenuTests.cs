@@ -175,6 +175,24 @@ public class MenuTests
     }
 
     [Fact]
+    public void AVolume_GoesDownByAClickOnItsLeftArrow_UpOnItsRight_AndByTheWheel()
+    {
+        using var host = new FakeMenuHost();
+        var menu = new TomeMenu(host);
+        menu.Open(SettingsPage.Sound);
+        var music = SettingsPage.Top + SettingsPage.Step / 2;
+
+        menu.Update(ClickOnPage(new Vector2(SettingsPage.ValueX + 5, music)), Screen);
+        Assert.Equal(GameSettings.DefaultVolume - 1, host.Settings.MusicVolume);
+        menu.Update(ClickOnPage(new Vector2(SettingsPage.ValueX + 50, music)), Screen);
+        menu.Update(ClickOnPage(new Vector2(SettingsPage.ValueX + 50, music)), Screen);
+        Assert.Equal(GameSettings.DefaultVolume + 1, host.Settings.MusicVolume);
+        menu.Update(new MenuInput(null, default, false, false, 0, 0, false, false, false, -1), Screen);
+        Assert.Equal(GameSettings.DefaultVolume, host.Settings.MusicVolume);
+        Assert.Contains("ui_menu_decrease", host.Cues);
+    }
+
+    [Fact]
     public void TheLanguageAndResolutionBoxes_ApplyTheChoice()
     {
         using var host = new FakeMenuHost();

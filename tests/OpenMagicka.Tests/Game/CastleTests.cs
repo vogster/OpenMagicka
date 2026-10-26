@@ -118,4 +118,25 @@ public class CastleTests
         Assert.Contains("unarmed", Held(fresh, Character.WeaponSlot), StringComparison.OrdinalIgnoreCase);
         Assert.Same(fresh, play.World.Entities.FindByUniqueId(ScriptScene.AvatarId(0)));   // the name went with it
     }
+
+    [GameContentFact]
+    public void TheFallIntoTheCellar_ReachesIt_ButAFallOutOfTheLevel_Kills()
+    {
+        using var play = Castle();
+        play.Level.ChangeScene(new SpawnPoint(LegacyStringHash.Lower("wc_s2"), [LegacyStringHash.Compute("start")], true),
+            ScriptTransition.None, 0, keep: false);
+        Wait(play, 8);                                                         // the intro walks the wizard over the trap
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("Propp does bad party trick"), null, ignoreConditions: true);
+        for (var tick = 0; tick < 60 * 15 && play.Scene!.Definition.Name != "wc_s3"; tick++)
+        {
+            play.Tick(Tick, Press(), Screen);
+        }
+        Assert.Equal("wc_s3", play.Scene!.Definition.Name);                  // through the floor, alive
+        Assert.False(play.Player.Avatar!.IsDead);
+
+        var wizard = play.Player.Avatar!;
+        wizard.Body.Body.Position = new System.Numerics.Vector3(wizard.Position.X, -60, wizard.Position.Z);   // off the level
+        Wait(play, 0.1f);
+        Assert.True(wizard.IsDead);
+    }
 }

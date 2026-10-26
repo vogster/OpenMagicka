@@ -39,7 +39,11 @@ public sealed class OptionsPage : MenuPage
 
 /// <summary>A setting's row: its label's key, its value as shown, and how it steps (−1 or +1) or is chosen.</summary>
 public sealed record SettingRow(string Label, Func<GameSettings, string> Value, Func<GameSettings, int, GameSettings>? Turn, Action? Choose = null,
-    string ValueFont = MenuPage.ItemFont);
+    string ValueFont = MenuPage.ItemFont)
+{
+    /// <summary>A setting with a range (a volume): shown between arrows, a click on the left one stepping down.</summary>
+    public bool Ranged { get; init; }
+}
 
 /// <summary>
 /// A page of settings (docs/engine/ARCHITECTURE.md §20): labels right-aligned to the page's middle, values left of
@@ -48,6 +52,9 @@ public sealed record SettingRow(string Label, Func<GameSettings, string> Value, 
 public sealed class SettingsPage : MenuPage
 {
     public const float Top = 341, Step = 48, LabelX = 512, ValueX = 552;
+
+    /// <summary>A ranged value's middle right of its start (between "&lt; 10 &gt;"'s arrows): a click left of it steps down.</summary>
+    public const float RangeMiddle = 40;
 
     private readonly string title;
     private readonly IReadOnlyList<SettingRow> rows;
@@ -61,7 +68,10 @@ public sealed class SettingsPage : MenuPage
         {
             var setting = this.rows[row];
             Items.Add(new MenuItem(new Rectangle(128, (int)(Top + row * Step), 768, (int)Step), setting.Choose,
-                setting.Turn is { } turn ? way => Menu.Host.Apply(turn(Menu.Host.Settings, way)) : null));
+                setting.Turn is { } turn ? way => Menu.Host.Apply(turn(Menu.Host.Settings, way)) : null)
+            {
+                Middle = setting.Ranged ? ValueX + RangeMiddle : null,
+            });
         }
         Items.Add(new MenuItem(BackPlate, Back));
         Selected = 0;
@@ -69,7 +79,8 @@ public sealed class SettingsPage : MenuPage
 
     private string OnOff(bool on) => Menu.Text(on ? "#menu_opt_alt_01" : "#menu_opt_alt_02");
 
-    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+    /// <summary>A ranged value between its arrows ("&lt; 7 &gt;"), the number in the middle.</summary>
+    private static string Ranged(int value) => "<  " + value.ToString(CultureInfo.InvariantCulture).PadLeft(2) + "  >";
 
     private static int Stepped(int value, int way, int count) => ((value + way) % count + count) % count;
 
@@ -88,13 +99,13 @@ public sealed class SettingsPage : MenuPage
 
     public static SettingsPage Sound(TomeMenu menu) => new(menu, "#menu_opt_08", page =>
     [
-        new SettingRow("#menu_opt_sfx_01", s => Number(s.MusicVolume),
-            (s, way) => s with { MusicVolume = Math.Clamp(s.MusicVolume + way, 0, GameSettings.MaxVolume) }),
-        new SettingRow("#menu_opt_sfx_02", s => Number(s.SoundVolume), (s, way) =>
+        new SettingRow("#menu_opt_sfx_01", s => Ranged(s.MusicVolume),
+            (s, way) => s with { MusicVolume = Math.Clamp(s.MusicVolume + way, 0, GameSettings.MaxVolume) }) { Ranged = true },
+        new SettingRow("#menu_opt_sfx_02", s => Ranged(s.SoundVolume), (s, way) =>
         {
             page.Menu.Cue("misc_thud01");
             return s with { SoundVolume = Math.Clamp(s.SoundVolume + way, 0, GameSettings.MaxVolume) };
-        }),
+        }) { Ranged = true },
     ]);
 
     public static SettingsPage Graphics(TomeMenu menu) => new(menu, "#menu_opt_10", page =>

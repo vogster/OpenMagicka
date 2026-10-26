@@ -15,6 +15,12 @@ public sealed class MenuItem(Rectangle area, Action? choose = null, Action<int>?
 
     /// <summary>A setting's step left (−1) or right (+1); none for a plain item (choosing it then steps right, as the original).</summary>
     public Action<int>? Turn { get; } = turn;
+
+    /// <summary>
+    /// For a setting with a range (a volume): where a click divides down from up (page pixels across), as a slider's
+    /// two ends; none: a click steps right.
+    /// </summary>
+    public float? Middle { get; init; }
 }
 
 /// <summary>
@@ -69,8 +75,22 @@ public abstract class MenuPage
         if (input.Click && input.Page is { } at && Items.FindIndex(i => i.Enabled && i.Area.Contains(Pixel(at))) is var clicked and >= 0)
         {
             Selected = clicked;
-            Choose(Items[clicked]);
+            if (Items[clicked] is { Choose: null, Turn: { } stepped, Middle: { } middle })
+            {
+                var way = at.X < middle ? -1 : 1;
+                stepped(way);
+                Menu.Cue(way > 0 ? "ui_menu_increase" : "ui_menu_decrease");
+            }
+            else
+            {
+                Choose(Items[clicked]);
+            }
             return;
+        }
+        if (input.Wheel != 0 && Selected >= 0 && Items[Selected].Turn is { } wheeled)
+        {
+            wheeled(input.Wheel);                                             // the wheel turns the setting selected
+            Menu.Cue(input.Wheel > 0 ? "ui_menu_increase" : "ui_menu_decrease");
         }
         if (input.Vertical != 0)
         {

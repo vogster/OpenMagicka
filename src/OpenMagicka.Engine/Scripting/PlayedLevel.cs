@@ -167,6 +167,7 @@ public sealed partial class PlayedLevel
             return;
         }
         World.Tick(dt);
+        FallOut();
         Level.Update(dt, Game.InCutscene);
         scripts.Update(dt);
         KeepUnarmed();
@@ -227,6 +228,32 @@ public sealed partial class PlayedLevel
         var fades = change.Transition != ScriptTransition.None && change.Time >= float.Epsilon;
         Level.Stage.Transition = fades ? new SceneTransition(change.Transition, change.Time, Out: false) : null;
         transitionInLeft = fades ? change.Time : 0;
+    }
+
+    /// <summary>
+    /// The scene's kill plane (its <c>KillPlanePosition</c>, 50 below by default), as the original's: a character below
+    /// it falls out of the level (dead at once), anything else below it is killed.
+    /// </summary>
+    private void FallOut()
+    {
+        var floor = Current?.Definition.Settings?.KillPlanePosition ?? SceneSettings.Default.KillPlanePosition;
+        var entities = World.Entities.Entities;
+        for (var i = 0; i < entities.Count; i++)                              // by index: a death's trigger may add to the list
+        {
+            var entity = entities[i];
+            if (!(entity.Position.Y < floor))
+            {
+                continue;
+            }
+            if (entity is Character character)
+            {
+                character.Terminate();                                        // no corpse: gone, a dead one's too
+            }
+            else
+            {
+                KillAction.Kill(entity);
+            }
+        }
     }
 
     /// <summary>
