@@ -42,6 +42,7 @@ public static class Blasts
             }
         }
         Raise(manager, source ?? owner, new CameraShakeCue(at, BlastRules.FullShake(radius), BlastRules.FullShakeDuration));
+        FreezeLiquids(manager, at, new Vector3(0, 0, radius), MathF.Tau, damage, 1);
         return Damage(manager, world, owner, ignored, at, radius, damage, falloff: true, ground: false);
     }
 
@@ -56,6 +57,7 @@ public static class Blasts
             Raise(manager, source ?? owner, new BlastCue(entry.Element, at, radius, entry.Magnitude, Ground: true, Arcane: false, reach));
         }
         Raise(manager, source ?? owner, new CameraShakeCue(at, BlastRules.GroundShake, BlastRules.GroundShakeDuration));
+        FreezeLiquids(manager, at, new Vector3(0, 0, radius), MathF.Tau, damage, 1);
         return Damage(manager, world, owner, ignored, at, radius, damage, falloff: false, ground: true);
     }
 
@@ -73,6 +75,7 @@ public static class Blasts
         }
         var cos = MathF.Cos(MathF.Min(spread, MathF.PI));
         var result = DamageResult.None;
+        FreezeLiquids(manager, origin, direction * range, spread, damage, 1);
         foreach (var entity in manager.Query(origin, range, ignoreProtected: true))
         {
             if (ReferenceEquals(entity, ignored) || !entity.IsDamageable || entity is Character { IsEthereal: true })
@@ -92,6 +95,41 @@ public static class Blasts
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// The scene's water and lava frozen or melted by damage (OM-88), as the original's: in an arc on the ground plane (the
+    /// direction's length the range, the spread either side), each slice stopped by the first spell shield in its way, by
+    /// the damage's cold against its fire (lava: and water) times the multiplier.
+    /// </summary>
+    public static void FreezeLiquids(EntityManager manager, Vector3 origin, Vector3 direction, float spread, IEnumerable<DamageEntry> damage, float multiplier)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        ArgumentNullException.ThrowIfNull(damage);
+        if (manager.Liquids.Count == 0)
+        {
+            return;
+        }
+        var entries = damage as IReadOnlyList<DamageEntry> ?? [.. damage];
+        Func<Vector3, Vector3, float> reach = (from, ray) => Reach(manager, from, ray);
+        foreach (var liquid in manager.Liquids)
+        {
+            liquid.Freeze(origin, direction, spread, Liquids.Liquid.Amount(liquid.Kind, entries, multiplier), reach);
+        }
+    }
+
+    /// <summary>How far a ray goes before a spell shield stops it.</summary>
+    private static float Reach(EntityManager manager, Vector3 from, Vector3 ray)
+    {
+        var reach = ray.Length();
+        foreach (var shield in manager.Shields)
+        {
+            if (shield.Blocks(from, from + ray, 0, out var hit))
+            {
+                reach = MathF.Min(reach, Vector3.Distance(from, hit));
+            }
+        }
+        return reach;
     }
 
     /// <summary>How far, as a share of the radius, the blast reaches in each direction before the level (unless ignored) or a shield cuts it.</summary>

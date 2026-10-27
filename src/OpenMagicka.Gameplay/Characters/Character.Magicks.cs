@@ -268,7 +268,8 @@ public sealed partial class Character
 
     /// <summary>
     /// Holds the levitating body over the ground: a probe from halfway down the body to 0.75 under
-    /// its feet lifts it by what it is short of; with no ground it sinks, faster and faster.
+    /// its feet lifts it by what it is short of (a liquid's surface, water or ice, before the level: it hovers
+    /// over lakes, OM-88); with no ground it sinks, faster and faster.
     /// </summary>
     private void Hover(float dt)
     {
@@ -280,7 +281,12 @@ public sealed partial class Character
         var from = Position + Vector3.UnitY * half;
         var to = from + Vector3.UnitY * (-0.75f + half);
         var velocity = Body.Body.Velocity;
-        if (world.CastSegment(from, to, levelOnly: true) is { } ground)
+        if (LiquidUnder(from, to) is { } surface)
+        {
+            velocity.Y += (1 - surface) * 0.75f;
+            levitationFall = 0;
+        }
+        else if (world.CastSegment(from, to, levelOnly: true) is { } ground)
         {
             velocity.Y += (1 - ground.Fraction) * 0.75f;
             levitationFall = 0;
@@ -291,6 +297,19 @@ public sealed partial class Character
             levitationFall = MathF.Min(levitationFall + dt * 0.5f, 1);
         }
         Body.Body.Velocity = velocity;
+    }
+
+    /// <summary>Where along a segment the first liquid of the scene that has one meets it (water or ice); none.</summary>
+    private float? LiquidUnder(Vector3 from, Vector3 to)
+    {
+        foreach (var liquid in Manager?.Liquids ?? [])
+        {
+            if (liquid.Meets(from, to, false, false, out var point, out _))
+            {
+                return (from - point).Length() / MathF.Max((to - from).Length(), 1e-6f);
+            }
+        }
+        return null;
     }
 
     /// <summary>Rises from a revival with a share of its hit points, playing its revive clip.</summary>

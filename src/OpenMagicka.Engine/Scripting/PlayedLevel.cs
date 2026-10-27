@@ -30,6 +30,9 @@ public sealed class LevelScene
     /// <summary>Its nav mesh, made on its first entry (the minds' paths keep pointing into it).</summary>
     public Gameplay.Navigation.NavMesh? NavMesh { get; internal set; }
 
+    /// <summary>Its level's water and lava (OM-88), made with its model; kept with the scene, so a frozen lake stays frozen while it is left.</summary>
+    public IReadOnlyList<Gameplay.Liquids.Liquid> Liquids { get; internal set; } = [];
+
     /// <summary>It has not been entered yet: its model's props stand when it is.</summary>
     public bool IsFirstEntry { get; internal set; } = true;
 
@@ -280,6 +283,22 @@ public sealed partial class PlayedLevel
             scene.Scripts = new ScriptScene(scene.Definition, Level, registry, World, Services.Looped, Services.Seed, new ScriptPlaces(scene.Model), Game,
                 Services.Assets);
             scene.NavMesh = SceneSetup.Navigation(scene.Model, scene.Scripts.Places);
+            scene.Liquids = scene.Model is { } model ? [.. model.Liquids.Select(LiquidSheets.From).OfType<Gameplay.Liquids.Liquid>()] : [];
+            if (scene.NavMesh is { } nav)
+            {
+                var lakes = scene.Liquids;
+                nav.IceAlong = (from, to) =>
+                {
+                    foreach (var lake in lakes)
+                    {
+                        if (lake.Meets(from, to, skipLiquid: true, skipFrozen: false, out _, out _))
+                        {
+                            return true;                                      // the level's ice (not the parts')
+                        }
+                    }
+                    return false;
+                };
+            }
         }
     }
 
@@ -298,6 +317,7 @@ public sealed partial class PlayedLevel
             World.Physics.RemoveLevelMesh(mesh);
         }
         collision = [];
+        World.Liquids.Clear();
         (World.Entities.NavMesh, World.Entities.Bestiary) = (null, null);
     }
 
@@ -306,7 +326,10 @@ public sealed partial class PlayedLevel
         Current = scene;
         collision = scene.Model is { } model ? LevelCollision.Load(World.Physics, model) : [];
         scene.Scripts!.Places.UpdateParts(0);                                 // the parts where they stand, their collision placed there
-        collision = [.. collision, .. LevelCollision.LoadParts(World.Physics, scene.Scripts.Places)];
+        collision = [.. collision, .. scene.Liquids.Select(l => LevelCollision.AddLiquid(World.Physics, l)).OfType<StaticMesh>(),
+            .. LevelCollision.LoadParts(World.Physics, scene.Scripts.Places)];
+        World.Liquids.Clear();
+        World.Liquids.AddRange([.. scene.Liquids, .. scene.Scripts.Places.AllParts.SelectMany(p => p.Liquids)]);
         (World.Entities.Bestiary, World.Entities.NavMesh) = (Services.Bestiary, scene.NavMesh);
         if (scene.IsFirstEntry)
         {

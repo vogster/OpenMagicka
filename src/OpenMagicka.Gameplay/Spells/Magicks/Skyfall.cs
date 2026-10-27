@@ -216,9 +216,15 @@ public sealed class NapalmStrike : Entity, IMagickEffect
         Explode(manager, Caster, floor.Position);
     }
 
+    /// <summary>A bomb's melting of liquids, as the original's: within 3.75, its fire status (3) ten times over.</summary>
+    public const float MeltRadius = 3.75f, MeltMultiplier = 10;
+
+    private static readonly DamageEntry[] MeltingFire = [new(AttackProperties.Status, Elements.Fire, 0, 3)];
+
     /// <summary>Everything damageable within 5 that a shield does not hide, but the ethereal, takes the napalm, its caster too.</summary>
     public static void Explode(EntityManager manager, Entity? owner, Vector3 at)
     {
+        Blasts.FreezeLiquids(manager, at, new Vector3(0, 0, MeltRadius), MathF.Tau, MeltingFire, MeltMultiplier);   // it melts the ice it lands on (OM-88)
         foreach (var entity in manager.Query(at, BlastRadius, ignoreProtected: true))
         {
             if (entity.IsDamageable && entity is not Character { IsEthereal: true })

@@ -1,4 +1,5 @@
 using OpenMagicka.Content.Magicka;
+using OpenMagicka.Gameplay.Liquids;
 using OpenMagicka.Physics;
 using Numerics = System.Numerics;
 
@@ -34,6 +35,32 @@ public static class LevelCollision
         return meshes;
     }
 
+    /// <summary>The friction of a liquid's ice and rock, as the original's.</summary>
+    public const float LiquidFriction = 10;
+
+    /// <summary>
+    /// A liquid's sheet in the physics world (OM-88), when it has collision: its frozen triangles solid for all (ice reports
+    /// the Generic material), its liquid ones felt only by characters (<see cref="Liquid"/> is the mesh's surface). Ours: its
+    /// ice counts as the level for level-only segment tests (the original asked the liquids apart).
+    /// </summary>
+    public static StaticMesh? AddLiquid(PhysicsWorld world, Liquid liquid)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(liquid);
+        if (!liquid.HasCollision)
+        {
+            return null;
+        }
+        var triangles = new MeshTriangle[liquid.TriangleCount];
+        for (var t = 0; t < triangles.Length; t++)
+        {
+            triangles[t] = new MeshTriangle(liquid.Triangles[t * 3], liquid.Triangles[t * 3 + 1], liquid.Triangles[t * 3 + 2]);
+        }
+        var mesh = world.AddStaticMesh((int)CollisionMaterial.Generic, liquid.Vertices, triangles, LiquidFriction, surface: liquid);
+        mesh.Owner = liquid;
+        return mesh;
+    }
+
     /// <summary>
     /// Adds the scene's moving parts' collision meshes (each in its part's own space, placed where the part is)
     /// and gives each part its <see cref="PartCollision"/>; returns the meshes, to take out with the level's.
@@ -51,7 +78,9 @@ public static class LevelCollision
                 mesh = world.AddStaticMesh((int)collision.Material, Vertices(collision.Mesh), Triangles(collision.Mesh));
                 meshes.Add(mesh);
             }
-            part.Collision = new PartCollision(world, mesh, part.World);    // one without a mesh still carries what is attached
+            var liquids = part.Liquids.Select(l => (l, AddLiquid(world, l))).ToList();
+            meshes.AddRange(liquids.Select(l => l.Item2).OfType<StaticMesh>());
+            part.Collision = new PartCollision(world, mesh, part.World, liquids);   // one without a mesh still carries what is attached
             foreach (var body in part.Attached.Where(b => !b.IsRemoved))
             {
                 part.Collision.Attach(body);                                  // what rode on it before the scene was left

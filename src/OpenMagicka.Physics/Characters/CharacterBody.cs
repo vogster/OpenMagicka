@@ -47,6 +47,7 @@ public sealed partial class CharacterBody
         Body.AffectedByGravity = !shape.Flies;
         Body.Listener = new Contacts(this);
         Body.PassesPassableMeshes = true;
+        Body.FeelsLiquids = true;
         MaxSpeed = shape.Speed;
         LastPositionOnGround = position;
     }
@@ -152,8 +153,23 @@ public sealed partial class CharacterBody
 
     public bool IsMoving { get; private set; }
 
-    /// <summary>The material of the level under the feet; null until the first ground contact.</summary>
+    /// <summary>The material of the level under the feet (a liquid's while in it); null until the first ground contact.</summary>
     public int? GroundMaterial { get; private set; }
+
+    /// <summary>The body is in a liquid (it felt one in the last step; OM-88).</summary>
+    public bool IsInWater { get; private set; }
+
+    /// <summary>How deep its feet are in the liquid (its surface over them), as the last step in one found it: kept after it leaves, as the original's.</summary>
+    public float WaterDepth { get; private set; }
+
+    /// <summary>The material of the liquid it is in (water or lava), as the last step in one found it.</summary>
+    public int? LiquidMaterial { get; private set; }
+
+    /// <summary>It stands on ice (a liquid's frozen triangles that slip): it slides, as on grease.</summary>
+    public bool IsOnIce { get; private set; }
+
+    /// <summary>On the ground, and not on ice (the minds' sense of standing).</summary>
+    public bool IsTouchingSolidGround => IsTouchingGround && !IsOnIce;
 
     public Vector3 GroundNormal { get; private set; } = Vector3.UnitY;
 
@@ -270,12 +286,22 @@ public sealed partial class CharacterBody
             velocity = Walk(velocity, dt, out moving);
         }
         velocity = WithExtraForce(velocity);
+        if (IsInWater)
+        {
+            velocity *= MathF.Pow(MathF.Max(MathF.Pow(Math.Clamp(1 - WaterDepth, 0, 1), 100), WaterDamping), dt);   // the liquid holds it back, as the original's
+        }
         Slow = 1;
         IsMoving = moving;
         Body.Velocity = velocity;
     }
 
-    private bool Slippery => Conditions.IsOnGrease || Conditions.IsLevitating;
+    private bool Slippery => Conditions.IsOnGrease || Conditions.IsLevitating || IsOnIce;
+
+    /// <summary>The least share of its speed a liquid lets a body keep each second.</summary>
+    public const float WaterDamping = 0.1f;
+
+    /// <summary>Wading: a walk's wanted speed at a depth (1 − depth / 2, kept within a half and all), on the ground in a liquid.</summary>
+    public static float Wading(float depth) => Math.Clamp(1 - 0.5f * depth, 0.5f, 1);
 
     private Vector3 Pushed(Vector3 velocity, float dt)
     {
@@ -312,7 +338,7 @@ public sealed partial class CharacterBody
             velocity.Y *= 0.8f;
         }
         (IsJumping, IsPushed) = (false, false);
-        var change = Flat(movement * (MaxSpeed * speedMultiplier) - velocity);
+        var change = Flat(movement * (MaxSpeed * speedMultiplier * (IsInWater ? Wading(WaterDepth) : 1)) - velocity);
         if (Slippery)
         {
             change *= MathF.Min(dt, 1);

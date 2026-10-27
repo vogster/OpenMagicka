@@ -52,6 +52,10 @@ internal sealed class SegmentQuery
         }
         if (shape is J.TriangleShape triangle)
         {
+            if (shape.RigidBody.Tag is StaticMesh { Surface: not null } mesh && !mesh.IsSolid(triangle))
+            {
+                return false;                                                 // a liquid's liquid triangle: segments pass it
+            }
             triangle.GetWorldVertices(out var a, out var b, out var c);
             if (SegmentTriangle(start, direction, a.ToNumerics(), b.ToNumerics(), c.ToNumerics(), out var lambda) && lambda < TriangleLambda)
             {

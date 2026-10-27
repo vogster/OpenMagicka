@@ -138,6 +138,7 @@ public sealed partial class PlayedLevel
             World.Physics.RemoveLevelMesh(mesh);
         }
         collision = [];
+        World.Liquids.Clear();
         if (Current?.Scripts is { } scripts)
         {
             Physics.LevelCollision.UnloadParts(scripts.Places);
@@ -150,6 +151,10 @@ public sealed partial class PlayedLevel
     {
         scene.Pending.Clear();
         scene.Replay.Clear();
+        foreach (var liquid in scene.Liquids.Concat(scene.Scripts?.Places.AllParts.SelectMany(p => p.Liquids) ?? []))
+        {
+            liquid.Reset();                                                   // ours: the lakes as the scene started (the checkpoint keeps no ice)
+        }
         if (state?.Scripts is not { } scripts || scene.Scripts is null)
         {
             (scene.Scripts, scene.NavMesh, scene.IsFirstEntry) = (null, null, true);

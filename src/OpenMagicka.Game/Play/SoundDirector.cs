@@ -104,7 +104,7 @@ public sealed partial class SoundDirector : IDisposable
                 }
                 break;
             case FootstepCue step when step.Material >= 0 && step.Material < FootstepCues.Length && FootstepCues[step.Material] is { } footstep:
-                Sounds.Play(SoundBanks.Footsteps, footstep, SoundPlace.At(step.Feet, step.Facing), ("Weight", step.Mass), ("WaterDepth", 0));
+                Sounds.Play(SoundBanks.Footsteps, footstep, SoundPlace.At(step.Feet, step.Facing), ("Weight", step.Mass), ("WaterDepth", step.WaterDepth));
                 break;
             case ConjureCue { Taken: true } conjure when source is Character { IsPlayer: true } && ElementCue(conjure.Element) is { } element:
                 Sounds.Play(SoundBanks.UI, element);

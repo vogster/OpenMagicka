@@ -14,6 +14,9 @@ public readonly record struct RemovedEntity(Entity Entity, NetId Id);
 
 public sealed partial class EntityManager
 {
+    /// <summary>The scene's water and lava (OM-88): its level's, then its parts' (what spells freeze and characters hover over).</summary>
+    public List<Liquids.Liquid> Liquids { get; } = [];
+
     public const int Capacity = 512;
 
     /// <summary>The slack a shield gives a protected query's segment test.</summary>

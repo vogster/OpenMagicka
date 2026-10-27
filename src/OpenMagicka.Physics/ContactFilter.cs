@@ -11,7 +11,8 @@ namespace OpenMagicka.Physics;
 /// Hands every contact to the listeners of both bodies after the engine's own filter (which
 /// smooths triangle edges). A contact one side passes through is registered by hand with the
 /// solver turned off for that side; one either side ignores is registered with the solver off
-/// for both, so no stale contact points keep pushing.
+/// for both, so no stale contact points keep pushing. A liquid's liquid triangle (OM-88) never pushes: it is
+/// registered with the solver off, and only a body that feels liquids hears it (its point on the liquid's surface).
 /// </summary>
 internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INarrowPhaseFilter
 {
@@ -22,6 +23,20 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
             return false;
         }
         var (ownerA, ownerB) = (shapeA.RigidBody.Tag, shapeB.RigidBody.Tag);
+        if (IsLiquid(shapeA, ownerA) || IsLiquid(shapeB, ownerB))
+        {
+            var meshIsA = ownerA is StaticMesh;
+            var (mesh, feeler) = meshIsA ? (ownerA as StaticMesh, ownerB as PhysicsBody) : (ownerB as StaticMesh, ownerA as PhysicsBody);
+            if (feeler is { FeelsLiquids: true })
+            {
+                var away = meshIsA ? normal.ToNumerics() : -normal.ToNumerics();
+                var surface = (meshIsA ? pointA : pointB).ToNumerics();
+                Touch(mesh, feeler, away, surface, penetration);                  // a part's water carries who wades in it
+                Ask(feeler, mesh, away, surface, penetration, liquid: true);
+            }
+            world.RegisterContact(shapeA.ShapeId, shapeB.ShapeId, shapeA.RigidBody, shapeB.RigidBody, in pointA, in pointB, in normal, ContactData.SolveMode.Full);
+            return false;
+        }
         if ((ownerA is StaticMesh { Passable: true } && ownerB is PhysicsBody { PassesPassableMeshes: true })
             || (ownerB is StaticMesh { Passable: true } && ownerA is PhysicsBody { PassesPassableMeshes: true }))
         {
@@ -45,6 +60,10 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
         return false;
     }
 
+    /// <summary>A liquid triangle (not frozen) of a mesh with a surface.</summary>
+    private static bool IsLiquid(J.RigidBodyShape shape, object? owner) =>
+        owner is StaticMesh { Surface: not null } mesh && shape is J.TriangleShape triangle && !mesh.IsSolid(triangle);
+
     /// <summary>A mesh that listens hears the body touching it.</summary>
     private static void Touch(StaticMesh? mesh, PhysicsBody? body, Vector3 push, Vector3 point, float penetration)
     {
@@ -56,7 +75,7 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
     }
 
     /// <param name="push">The way the contact pushes <paramref name="body"/>.</param>
-    private static ContactResponse Ask(PhysicsBody? body, object? other, Vector3 push, Vector3 point, float penetration)
+    private static ContactResponse Ask(PhysicsBody? body, object? other, Vector3 push, Vector3 point, float penetration, bool liquid = false)
     {
         if (body?.Listener is not { } listener)
         {
@@ -64,6 +83,6 @@ internal sealed class ContactFilter(World world, INarrowPhaseFilter inner) : INa
         }
         var length = push.Length();
         var unit = length > 0 ? push / length : Vector3.UnitY;
-        return listener.OnContact(body, new Contact(unit, point, penetration, other as PhysicsBody, other as StaticMesh));
+        return listener.OnContact(body, new Contact(unit, point, penetration, other as PhysicsBody, other as StaticMesh, liquid));
     }
 }

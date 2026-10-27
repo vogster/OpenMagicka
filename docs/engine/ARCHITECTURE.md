@@ -969,6 +969,47 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
 
 ---
 
+### 7.5 Ours: water, ice and lava (OM-88)
+
+- **The sheet** (`Gameplay.Liquids.Liquid`, built by `Engine.Physics.LiquidSheets` from a level's or a part's
+  `LiquidContent`): the liquid's own drawn vertices and indices (the second and third index of each triangle swapped
+  so it faces up), one freeze value per vertex: 0 at the start, 1 for one that freezes by itself (`AutoFreeze`). A
+  triangle with any corner at 0.5 or more is ice (lava: cooled rock) and solid; one with all three below is liquid.
+  The scene keeps its liquids (a frozen lake stays frozen while it is left); a checkpoint's restart puts them back as
+  they started (ours). Of the 132 levels 56 have liquids (71 freezable waters, 5 frozen by themselves, 8 lavas, a few
+  without collision); none has level meshes of the Water or Lava material.
+- **Freezing**: `Liquid.Freeze` adds 3 · sign(N) · (1 − 0.75^(3|N|)) × a multiplier to the corners in an arc on the
+  ground plane (heights left out), N = the damage's cold − fire (lava: + water), an entry counting for each of its
+  elements. The arc is cut into 2n + 1 slices (n = spread / (π/4), whole) each as wide as the spread / (2n + 1)
+  either side, so between a quarter and a whole turn it covers less than asked (a weapon's ±90° covers ±54°); each
+  slice stops at the first spell shield. Water counts a corner once (but not the first of each later slice); lava
+  counts it in every slice and takes the arc in world space (both the original's slips, kept). The sources
+  (`Blasts.FreezeLiquids`): every full or ground blast (its radius, all round, × 1), an arc strike (× 1), a Force
+  spray each tick (its full range, ±π/10, × the tick), a blizzard (+0.25 to every lake every 0.25 s), a napalm bomb
+  (3.75, its fire status 3, × 10: melts at once). Each tick the values drift back by 0.1 a second: down, kept in
+  0…2; for one frozen by itself up, kept in −1…1. A liquid that does not freeze only drifts.
+- **Physics**: a liquid with collision is a static mesh (friction 10, its ice reporting the Generic material) whose
+  surface is the `Liquid` (`IMeshSurface`): the contact filter lets solid triangles collide with everything and
+  registers liquid ones with the solver off; only a body that `FeelsLiquids` (a character) hears them, the point on
+  the liquid's surface. The engine welds vertices at one place and numbers them anew, so the mesh keeps which given
+  vertex each of its own stands for, and a triangle's corners are read through that. Segments pass liquid triangles and meet ice. A part's liquids ride the part. Ours: ice counts
+  as the level for level-only segment tests.
+- **A character in it** (`CharacterBody`, `Character.Wade`): its depth is the surface over its feet (the deepest
+  contact of the step; kept after it leaves, as the original's). On the ground in a liquid its walk is
+  clamp(1 − depth/2, 0.5, 1) of its speed, and its whole velocity loses 90 % a second. On ice (a water sheet's
+  frozen triangles) it slides as on grease and is not on solid ground (the minds' `IsOnGround`); cooled rock holds.
+  From 0.2 deep, unless an elemental self-shield (not an armour) keeps it off: water wets it by its depth a second
+  (the status rules put fire out and wash grease off), lava burns it (100 a second, magnitude 20 × depth a second).
+  With the surface up to its middle it drowns at once, whatever guards it: its hit points go, it comes up to the
+  surface and floats there, `water_drown` or `lava_drown` plays, it never rises, and its death clip is one of
+  `die_drown`, `die_drown1`, `die_drown2` as it has them. Its steps splash: the footstep is on the surface and its
+  sound gets the depth. A levitating character hovers over a liquid (water or ice) before the level.
+- **Navigation**: a nav triangle over water is walkable only where a segment from 1 above its middle to 3 below
+  meets the level's ice (`NavMesh.IceAlong`; the parts' liquids are not asked), so paths open as lakes freeze.
+- **Not yet**: the drawn ice follows the freeze values (the render keeps their starting values); the wading splash
+  effect; a body drowned in a part's liquid riding the part for good (those wading in it do ride it); the elemental egg (missiles never hit it: only blasts, arcs, sprays, beams and lightning reach it, as
+  MAGICKS.md §7.2 says).
+
 ## 8. Audio (XACT)
 
 - `AudioEngine("content/Audio/magicka.xgs")`. On failure, an

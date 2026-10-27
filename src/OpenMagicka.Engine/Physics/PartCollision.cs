@@ -2,6 +2,7 @@ using System.Numerics;
 using OpenMagicka.Gameplay.Characters;
 using OpenMagicka.Gameplay.Entities;
 using OpenMagicka.Gameplay.Items;
+using OpenMagicka.Gameplay.Liquids;
 using OpenMagicka.Physics;
 
 namespace OpenMagicka.Engine.Physics;
@@ -27,16 +28,29 @@ public sealed class PartCollision
     private Matrix4x4 last;
     private bool playing;
 
+    private readonly IReadOnlyList<(Liquid Liquid, StaticMesh? Mesh)> liquids;
+
     /// <param name="mesh">Its mesh in the world, or none for a part without one (it still carries what is attached).</param>
-    public PartCollision(PhysicsWorld world, StaticMesh? mesh, Matrix4x4 at)
+    /// <param name="liquids">Its water and lava, each with its mesh (none without collision): they ride it (OM-88).</param>
+    public PartCollision(PhysicsWorld world, StaticMesh? mesh, Matrix4x4 at, IReadOnlyList<(Liquid, StaticMesh?)>? liquids = null)
     {
         this.world = world ?? throw new ArgumentNullException(nameof(world));
         Mesh = mesh;
         last = at;
+        this.liquids = liquids ?? [];
         if (mesh is not null)
         {
             world.PlaceStaticMesh(mesh, at);
             mesh.Touched = Touched;
+        }
+        foreach (var (liquid, liquidMesh) in this.liquids)
+        {
+            liquid.World = at;
+            if (liquidMesh is not null)
+            {
+                world.PlaceStaticMesh(liquidMesh, at);
+                liquidMesh.Touched = Touched;                                 // what stands on its ice, or wades in it, rides it too
+            }
         }
     }
 
@@ -81,9 +95,20 @@ public sealed class PartCollision
         {
             return;
         }
-        if (moved && Mesh is not null && Matrix4x4.Decompose(at, out _, out _, out _))
+        if (moved && Matrix4x4.Decompose(at, out _, out _, out _))
         {
-            world.PlaceStaticMesh(Mesh, at);                                  // a transform it cannot take (sheared) leaves it where it was
+            if (Mesh is not null)
+            {
+                world.PlaceStaticMesh(Mesh, at);                              // a transform it cannot take (sheared) leaves it where it was
+            }
+            foreach (var (liquid, liquidMesh) in liquids)
+            {
+                liquid.World = at;
+                if (liquidMesh is not null)
+                {
+                    world.PlaceStaticMesh(liquidMesh, at);
+                }
+            }
         }
         var delta = moved && Matrix4x4.Invert(last, out var inverse) ? inverse * at : Matrix4x4.Identity;
         foreach (var body in carried.Keys.ToList())

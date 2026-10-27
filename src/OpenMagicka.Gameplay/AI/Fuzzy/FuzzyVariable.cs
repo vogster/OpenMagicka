@@ -170,7 +170,7 @@ public sealed class FuzzyVariable : FuzzyExpression
             FuzzyVariableKind.IsShield => Flag(Scope == FuzzyScope.Target && args.Target is SpellShield),
             FuzzyVariableKind.IsBarrier => Flag(Scope == FuzzyScope.Target && args.Target is Barrier),
             FuzzyVariableKind.GripDamageAccumulation or FuzzyVariableKind.GripDamageAccumulationNormalized => 0,
-            FuzzyVariableKind.IsOnGround => Flag(subject?.Body.IsTouchingGround == true),
+            FuzzyVariableKind.IsOnGround => Flag(subject?.Body.IsTouchingSolidGround == true),   // not on ice (OM-88)
             FuzzyVariableKind.Angle => Facing(args),
             _ => 0,
         };

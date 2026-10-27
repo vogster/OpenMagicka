@@ -23,11 +23,21 @@ public sealed partial class CharacterBody
     private bool knockedDownSelf;
     private readonly List<CharacterBody> knockedDown = [];
     private readonly List<CharacterBody> touched = [];
+    private float? liquidDepth;
+    private int liquidMaterial;
+    private bool iceThisStep;
 
     /// <summary>What happened during the last step; clears it for the next one.</summary>
     public CharacterReport AfterStep()
     {
         TakeStagedPushes();
+        IsInWater = liquidDepth is not null;
+        if (liquidDepth is { } depth)
+        {
+            (WaterDepth, LiquidMaterial, GroundMaterial) = (depth, liquidMaterial, liquidMaterial);
+        }
+        IsOnIce = iceThisStep;
+        (liquidDepth, iceThisStep) = (null, false);
         if (conditions.IsOnGrease)
         {
             conditions = conditions with { IsOnGrease = false };            // grease lasts only for the step it was reported for
@@ -45,6 +55,15 @@ public sealed partial class CharacterBody
 
     private ContactResponse OnContact(in Contact contact)
     {
+        if (contact.Liquid)
+        {
+            var depth = contact.Point.Y - (Body.Position.Y + HeightOffset);   // the liquid's surface over the feet
+            if (liquidDepth is not { } deepest || depth > deepest)
+            {
+                (liquidDepth, liquidMaterial) = (depth, contact.OtherMesh?.Surface?.LiquidMaterial ?? 0);
+            }
+            return ContactResponse.Ignore;                                    // felt, never pushing
+        }
         var other = contact.OtherBody?.Listener is Contacts { Owner: var character } ? character : null;
         if (contact.OtherMesh is null && (Conditions.IsIntangible || other is { Conditions.IsIntangible: true }))
         {
@@ -77,6 +96,7 @@ public sealed partial class CharacterBody
             }
             if (contact.Normal.Y > GroundSlope)
             {
+                iceThisStep |= contact.OtherMesh!.Surface is { Slippery: true };   // a frozen lake's ice
                 OnGround(contact.Normal, contact.OtherMesh!.Material);
             }
         }

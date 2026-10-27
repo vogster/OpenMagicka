@@ -59,6 +59,9 @@ public sealed class PhysicsBody
     /// <summary>Goes through a <see cref="StaticMesh.Passable"/> mesh (a character through a shield going down).</summary>
     public bool PassesPassableMeshes { get; set; }
 
+    /// <summary>Its listener hears a liquid's liquid triangles (a character wades); other bodies pass them unheard (OM-88).</summary>
+    public bool FeelsLiquids { get; set; }
+
     public Vector3 Position
     {
         get => Body.Position.ToNumerics();

@@ -111,6 +111,10 @@ public sealed class SprayEffect : SpellEffect
             if (timeLeft > 0)
             {
                 Spray(caster, range * buildUp);
+                if (caster.Manager is { } manager)
+                {
+                    Blasts.FreezeLiquids(manager, caster.CastSource, caster.Body.Facing * range, SprayRules.HalfAngle, damage, dt);   // its full range, as the original's
+                }
             }
         }
         if (timeLeft <= 0 || MaxTime <= 0)

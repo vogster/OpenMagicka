@@ -48,7 +48,7 @@ public class LevelPartsDataTests(ITestOutputHelper output)
             Assert.All(places.AllParts.Where(p => p.Collision is not null), p => Assert.Empty(p.Collision!.Carried));
         }
         output.WriteLine($"{levels} levels: {parts} parts, {solid} with a collision, {shields} that move shields; {lights} lights on parts, {riding} found, {suns} directional");
-        Assert.Equal((132, 1060, 265, 1060), (levels, parts, solid, shields));                  // every part would carry shields; ours stay put (§9.7)
+        Assert.Equal((132, 1060, 270, 1060), (levels, parts, solid, shields));                  // 265 meshes and 5 liquids with collision (OM-88); every part would carry shields, ours stay put (§9.7)
         Assert.Equal((14, 14, 1), (lights, riding, suns));                                        // hl_s2's land carries the sun
     }
 }

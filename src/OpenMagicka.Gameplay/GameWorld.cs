@@ -23,6 +23,9 @@ public sealed class GameWorld : IDisposable
 
     public EntityManager Entities { get; } = new();
 
+    /// <summary>The scene's water and lava (OM-88): its level's, then its parts'; each drifts back a step a tick.</summary>
+    public List<Liquids.Liquid> Liquids => Entities.Liquids;
+
     /// <summary>
     /// Makes a character and adds it to the level (the server's id); if the level cannot take it, its
     /// body leaves the physics world again.
@@ -69,10 +72,15 @@ public sealed class GameWorld : IDisposable
         foreach (var character in characters)
         {
             character.ApplyPhysics(character.Body.AfterStep());
+            character.Wade(dt);                                               // its liquid, as the original's contacts (OM-88)
         }
         Entities.Minds.Update(dt);                                            // as the original: after physics, before the grid and the entities
         Entities.RebuildGrid();
         Entities.Update(dt);
+        foreach (var liquid in Liquids)
+        {
+            liquid.Step(dt);
+        }
         Session?.Tick(dt);
         return Entities.RemoveDead();
     }

@@ -132,6 +132,13 @@ public sealed class Weather : Entity, IMagickEffect
         {
             tick = Tick;
             Soak(manager);
+            if (Element == Elements.Cold)
+            {
+                foreach (var liquid in manager.Liquids)
+                {
+                    liquid.FreezeAll(Magnitude);                              // a blizzard freezes every lake (OM-88)
+                }
+            }
         }
         if (IsStorm && ttl > 0)
         {

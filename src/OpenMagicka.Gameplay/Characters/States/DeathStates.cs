@@ -11,8 +11,21 @@ internal sealed class DeadState : CharacterState
             character.ReleaseAll();                                           // the dead drop what they held
         }
         (character.Body.AllowMove, character.Body.AllowRotate) = (false, false);
-        var second = character.HasAnimation("die1") && character.NextRandom() > 0.5;
-        character.GoToAnimation(second ? "die1" : "die0", 0.05f);
+        character.GoToAnimation(Clip(character), 0.05f);
+    }
+
+    /// <summary>
+    /// The death clip: die0 or die1 (an even chance with both); a drowned one's die_drown, or one of die_drown, die_drown1
+    /// and die_drown2 as the template has them, evenly (OM-88).
+    /// </summary>
+    internal static string Clip(Character character)
+    {
+        if (character.IsDrowning && character.HasAnimation("die_drown"))
+        {
+            string[] drowns = ["die_drown", .. new[] { "die_drown1", "die_drown2" }.Where(character.HasAnimation)];
+            return drowns[Math.Min((int)(character.NextRandom() * drowns.Length), drowns.Length - 1)];
+        }
+        return character.HasAnimation("die1") && character.NextRandom() > 0.5 ? "die1" : "die0";
     }
 
     protected internal override CharacterState? Update(Character character, float dt)

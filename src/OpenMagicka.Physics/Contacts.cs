@@ -30,7 +30,10 @@ public enum BodyOptions
 /// <param name="Penetration">Signed depth: positive while the shapes overlap.</param>
 /// <param name="OtherBody">The other body, or null when it is a static mesh.</param>
 /// <param name="OtherMesh">The static mesh touched, or null when it is a body.</param>
-public readonly record struct Contact(Vector3 Normal, Vector3 Point, float Penetration, PhysicsBody? OtherBody, StaticMesh? OtherMesh);
+/// <param name="Liquid">
+/// A liquid triangle of the mesh (OM-88): felt, never pushing; its point is then on the liquid's surface, not on the body.
+/// </param>
+public readonly record struct Contact(Vector3 Normal, Vector3 Point, float Penetration, PhysicsBody? OtherBody, StaticMesh? OtherMesh, bool Liquid = false);
 
 /// <summary>What a body's listener decides about one contact.</summary>
 public enum ContactResponse

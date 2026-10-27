@@ -59,7 +59,9 @@ public sealed class PhysicsWorld : IDisposable
     /// </summary>
     /// <param name="friction">The level's own surfaces use 1 (docs/engine/ARCHITECTURE.md §7.3).</param>
     /// <param name="isLevel">False for a solid thing that is not the level (level-only tests pass it); it can then be removed.</param>
-    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles, float friction = 1, bool isLevel = true)
+    /// <param name="surface">What its triangles are one by one (a liquid's, OM-88); none: all solid.</param>
+    public StaticMesh AddStaticMesh(int material, IReadOnlyList<Vector3> vertices, IReadOnlyList<MeshTriangle> triangles, float friction = 1, bool isLevel = true,
+        IMeshSurface? surface = null)
     {
         ThrowIfStepping();
         NonNegative(friction, nameof(friction));
@@ -78,7 +80,22 @@ public sealed class PhysicsWorld : IDisposable
             (indices[3 * i], indices[3 * i + 1], indices[3 * i + 2]) = (t.A, t.B, t.C);
         }
         var shapes = NonDegenerate(points, indices);
-        var mesh = new StaticMesh(material, shapes.Count, friction, isLevel);
+        var mesh = new StaticMesh(material, shapes.Count, friction, isLevel) { Surface = surface };
+        if (surface is not null && shapes.Count > 0)
+        {
+            var first = new Dictionary<JVector, int>();
+            for (var i = 0; i < points.Length; i++)
+            {
+                first.TryAdd(points[i], i);
+            }
+            var welded = shapes[0].Mesh.Vertices;
+            var sources = new int[welded.Length];
+            for (var i = 0; i < welded.Length; i++)
+            {
+                sources[i] = first[welded[i]];
+            }
+            mesh.SourceVertices = sources;
+        }
         if (shapes.Count > 0)
         {
             var body = world.CreateRigidBody();

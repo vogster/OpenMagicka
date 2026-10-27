@@ -53,7 +53,8 @@ public sealed class Footstep(float start, float end) : AnimationAction(start, en
         if (first && body.IsTouchingGround && !body.Conditions.IsLevitating)
         {
             var feet = owner.Position with { Y = owner.Position.Y + body.HeightOffset };
-            owner.RaiseCue(new FootstepCue(body.GroundMaterial ?? 0, body.Body.Mass, feet, body.Facing));
+            var depth = body.IsInWater ? body.WaterDepth : 0;
+            owner.RaiseCue(new FootstepCue(body.GroundMaterial ?? 0, body.Body.Mass, feet with { Y = feet.Y + depth }, body.Facing, depth));   // a splash on the surface
         }
     }
 }

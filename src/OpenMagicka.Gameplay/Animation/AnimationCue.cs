@@ -40,8 +40,8 @@ public sealed record EffectEndCue(AnimationAction Source) : AnimationCue;
 /// </summary>
 public sealed record ConjureCue(Spells.Elements Element, IReadOnlyList<Spells.QueueChange> Changes, bool Taken = true) : AnimationCue;
 
-/// <summary>A step on the ground: the sound and dust come from the material.</summary>
-public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3 Facing) : AnimationCue;
+/// <summary>A step on the ground: the sound and dust come from the material; in a liquid, its depth over the feet (OM-88).</summary>
+public sealed record FootstepCue(int Material, float Mass, Vector3 Feet, Vector3 Facing, float WaterDepth = 0) : AnimationCue;
 
 public sealed record CameraShakeCue(Vector3 Position, float Magnitude, float Duration) : AnimationCue;
 

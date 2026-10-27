@@ -39,7 +39,7 @@ public sealed partial class Character
         {
             return;
         }
-        undieTimer = undying && !IsOverkilled
+        undieTimer = undying && !IsOverkilled && !IsDrowning                     // the drowned never rise (OM-88)
             ? (Template.UndieTime < float.Epsilon ? 0.5f : Template.UndieTime)       // as the original: 0.5 s only when none is given
             : float.NaN;
         RaiseScriptTrigger(OnDeathTrigger);                                   // as the original: before it is marked dead
