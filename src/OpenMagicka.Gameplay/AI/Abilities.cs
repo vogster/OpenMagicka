@@ -11,6 +11,9 @@ public sealed class MeleeBehaviour(MeleeAbility template, int index) : NpcAbilit
 
     protected override float OwnDesirability(Agent agent, in FuzzyArguments args) => FuzzyMath.DistanceExponential(args.Distance, Melee.MinRange, Melee.MaxRange);
 
+    /// <summary>Not while it holds someone (OM-89).</summary>
+    public override bool IsUseful(Agent agent) => !agent.Owner.IsGripping;
+
     public override float MinRange(Agent agent) => Melee.MinRange;
 
     public override float MaxRange(Agent agent) => Melee.MaxRange;
@@ -128,6 +131,9 @@ public sealed class DashBehaviour(DashAbility template, int index) : NpcAbility(
     private DashAbility Dash => (DashAbility)Template;
 
     protected override float OwnDesirability(Agent agent, in FuzzyArguments args) => FuzzyMath.DistanceExponential(args.Distance, Dash.MinRange, Dash.MaxRange);
+
+    /// <summary>Not while it holds someone (OM-89).</summary>
+    public override bool IsUseful(Agent agent) => !agent.Owner.IsGripping;
 
     public override float MinRange(Agent agent) => Dash.MinRange;
 

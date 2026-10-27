@@ -110,7 +110,7 @@ public class GripTests
         new DamageGrip(0, 1, false, [new DamageEntry(AttackProperties.Damage, Elements.Earth, 20, 1)]).Run(gripper, first: true);
         Assert.True(victim.HitPoints < victim.MaxHitPoints);
 
-        gripper.GripThrow = new Vector3(0, 5, 10);
+        gripper.GripThrow = new GripThrowAim(4, 6, 0.6f);
         new ThrowGrip(0, 1).Run(gripper, first: true);
         Assert.False(gripper.IsGripping);
         Assert.True(victim.Body.Body.Velocity.Z > 5 || victim.Body.IsPushed);
@@ -189,5 +189,42 @@ public class GripTests
 
         Assert.Same(CharacterStates.Drop, gripper.State);
         Assert.False(gripper.IsGripping);
+    }
+
+    [Fact]
+    public void AThrow_ReachesTheMiddleOfItsRange_ByTheBallisticSpeed()
+    {
+        var velocity = OpenMagicka.Gameplay.AI.ThrowGripBehaviour.Velocity(Vector3.Zero, Vector3.UnitZ, Vector3.Zero, 4, 4, MathF.PI / 4, 19.64f);
+
+        Assert.Equal(MathF.Sqrt(4 * 19.64f), velocity.Length(), 2);          // at 45°, a range of v² / g = 4
+        Assert.Equal(velocity.Y, velocity.Z, 3);
+        Assert.Equal(new Vector3(0, MathF.Sin(1.6f), MathF.Cos(1.6f)),
+            OpenMagicka.Gameplay.AI.ThrowGripBehaviour.Velocity(Vector3.Zero, Vector3.UnitZ, Vector3.Zero, 4, 4, 1.6f, 19.64f), new VectorNear());   // no speed gets there: the direction
+    }
+
+    [Fact]
+    public void TheGripAbilities_AreMade_AndAGripAttackIsQueuedOnce()
+    {
+        OpenMagicka.Gameplay.AI.AbilityTemplate[] grips =
+        [
+            new OpenMagicka.Gameplay.AI.GripAbility(1, OpenMagicka.Gameplay.AI.AbilityTarget.Enemy, null, ["a"], 1, 2, 1, 100, null, FromBehind: true, Zombie: false),
+            new OpenMagicka.Gameplay.AI.GripAbility(1, OpenMagicka.Gameplay.AI.AbilityTarget.Enemy, null, ["a", "b"], 1, 2, 1, 100, "drop", FromBehind: false, Zombie: false),
+            new OpenMagicka.Gameplay.AI.ThrowGripAbility(1, OpenMagicka.Gameplay.AI.AbilityTarget.Enemy, null, ["a"], 1, 2, 0.5f, []),
+            new OpenMagicka.Gameplay.AI.GripActionAbility(1, OpenMagicka.Gameplay.AI.AbilityTarget.Enemy, null, ["a"], Confuse: false),
+        ];
+        Assert.All(grips, g => Assert.NotEqual("PendingAbility", OpenMagicka.Gameplay.AI.NpcAbility.For(g, 0).GetType().Name));
+
+        var (world, gripper, victim) = Pair();
+        using var _ = world;
+        gripper.DamageGripped("first");
+        gripper.DamageGripped("second");
+        Assert.Equal(("first", true), (gripper.NextGripAttackAnimation, gripper.GripAttacking));   // one queued at a time
+    }
+
+    private sealed class VectorNear : IEqualityComparer<Vector3>
+    {
+        public bool Equals(Vector3 a, Vector3 b) => Vector3.Distance(a, b) < 1e-3f;
+
+        public int GetHashCode(Vector3 v) => 0;
     }
 }

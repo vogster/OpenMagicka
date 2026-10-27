@@ -89,8 +89,12 @@ public sealed class ThrowGrip(float start, float end) : AnimationAction(start, e
         {
             return;
         }
-        var velocity = owner.IsPlayer ? owner.Body.Facing with { Y = 0.1f } : owner.GripThrow;
+        var aim = owner.GripThrow;
         owner.GripThrow = null;                                               // one aim, one throw
+        var velocity = owner.IsPlayer ? owner.Body.Facing with { Y = 0.1f }
+            : aim is { } a ? AI.ThrowGripBehaviour.Velocity(owner.Position, owner.Body.Facing, victim.Position, a.MinRange, a.MaxRange, a.Elevation,
+                -owner.World.Settings.Gravity.Y)
+            : (Vector3?)null;
         if (velocity is not { } push)
         {
             return;

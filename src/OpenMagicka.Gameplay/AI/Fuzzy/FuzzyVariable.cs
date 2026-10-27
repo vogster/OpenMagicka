@@ -155,7 +155,8 @@ public sealed class FuzzyVariable : FuzzyExpression
             FuzzyVariableKind.Danger => FuzzyMath.Danger(self, args.AlertRadius, Element),
             FuzzyVariableKind.Threat => other is null ? 0 : FuzzyMath.Threat(self, other, Element),
             FuzzyVariableKind.HasStatus => Flag(subject is not null && (subject.Statuses.Active & Status) == Status),   // all of them, as the original
-            FuzzyVariableKind.Gripped or FuzzyVariableKind.Gripping => 0,                                       // grips come with OM-33
+            FuzzyVariableKind.Gripped => Flag(subject?.IsGripped == true),
+            FuzzyVariableKind.Gripping => Flag(subject?.IsGripping == true),
             FuzzyVariableKind.Entangled => Flag(subject?.IsEntangled == true),
             FuzzyVariableKind.Speed => subject?.Body.Movement.Length() ?? 0,
             FuzzyVariableKind.Health => Scope == FuzzyScope.Self ? self.HitPoints / self.MaxHitPoints : Health(args.Target),
@@ -169,7 +170,8 @@ public sealed class FuzzyVariable : FuzzyExpression
             FuzzyVariableKind.Shielded => Flag(subject?.SelfShield is not null),
             FuzzyVariableKind.IsShield => Flag(Scope == FuzzyScope.Target && args.Target is SpellShield),
             FuzzyVariableKind.IsBarrier => Flag(Scope == FuzzyScope.Target && args.Target is Barrier),
-            FuzzyVariableKind.GripDamageAccumulation or FuzzyVariableKind.GripDamageAccumulationNormalized => 0,
+            FuzzyVariableKind.GripDamageAccumulation => self.IsGripping ? self.GripDamageAccumulation : 0,
+            FuzzyVariableKind.GripDamageAccumulationNormalized => self.IsGripping ? self.GripDamageAccumulation / MathF.Max(self.Template.HitTolerance, 1) : 0,
             FuzzyVariableKind.IsOnGround => Flag(subject?.Body.IsTouchingSolidGround == true),   // not on ice (OM-88)
             FuzzyVariableKind.Angle => Facing(args),
             _ => 0,

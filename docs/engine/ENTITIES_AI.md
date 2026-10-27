@@ -718,7 +718,7 @@ without animations has no state machine and dies on the frame its hit points rea
   frame of its window, the damages hit the NPC itself or its victim); `ReleaseGrip`; `ThrowGrip` (at its start, the
   victim let go, put down, then pushed by the throwing ability's aim; a player's along its facing tipped up a tenth);
   `OverkillGrip`. A thrown victim takes its throw's damages once when it next meets the level or a liquid.
-- **Not yet**: the NPC grip abilities and the Gripped/Gripping fuzzy values; the frog's tongue; the scripts' and
+- **Not yet**: the frog's tongue; the scripts' and
   magicks' releases; the HUD's "Grabbed" and the struggle prompt; `SetItemAttach` (no game file uses it).
 
 ---
@@ -891,7 +891,8 @@ Common expressions in real data: `distExp(3)`, `distExp(6)`, `(distexp(0,15)*0.7
   - The densities with no scope count around the target, not the thinker.
   - Scopes the original throws at when weighing (Threat other than the target's; a status, grip, vines or speed with
     no scope) are refused when read. The game's data has none.
-  - Grips (`Gripped`, `Gripping`, the grip damage) answer 0 until grips exist (OM-33).
+  - Grips (OM-89): `Gripped` and `Gripping` are 1 when someone holds it or it holds someone; the grip damage is the
+    gripper's tally of its victim's blows (normalised: over its hit tolerance), 0 when it holds no one.
   - Our line of sight skips our running magicks, which are entities only here. Death, an entity there too, is
     kept.
   - `distExp(0,0)` (one slime's) is infinite, as the original's.
@@ -1029,7 +1030,21 @@ on a half-circle around the target at the ability's middle distance, the first o
   loses its queue.
 - **RemoveStatus:** a clip, no use while one of its clips plays. **SpecialAbility:** when the item's special is ready, by a clip (or
   straight away with none).
-- **Grips** (`GripCharacterFromBehind`, `PickUpCharacter`, `ZombieGrip`, `ThrowGrip`, `DamageGrip`, `ConfuseGrip`) wait for grips (OM-33).
+- **Grips** (OM-89, §5.5), as the original's:
+  - `GripCharacterFromBehind`: only at a player's wizard not held; wanted (2b² + distance exponential) / 3, b how far
+    the target faces away; in range only while it faces away (more than 0.5), the spot behind it; it leaps (the
+    distance × 1.2 within its reach, at π/4) and its clip's grip takes hold as it lands.
+  - `PickUpCharacter`: a character no heavier than its limit (and not under a solid self-shield); wanted by the
+    distance exponential plus how still the target is; always in range and facing while it holds; its first clip
+    takes hold, its second is queued as the grip attack; its drop clip is the ability's. `ZombieGrip` (no game file):
+    wanted above all, plays its second clip.
+  - `ThrowGrip`: while holding, wanted by the victim's tally over its hit tolerance; a random direction; the victim
+    takes the ability's damages when it lands, thrown to a spot ahead at the middle of the reach by the ballistic
+    speed for the elevation, reckoned as the clip's action throws (its random direction picked once a throw).
+  - Ours: a hit tolerance of 0 counts as 1 in these shares (the original would divide by nothing).
+  - `DamageGrip`: while holding and its tally is under half its hit tolerance, wanted (1 − 2 × tally / tolerance) × 2,
+    queued as a grip attack; `ConfuseGrip`: while holding, wanted 1, a plain attack.
+  - A melee or a dash is of no use while it holds someone.
 - **Under way** ends when the character's attack or cast state ends, or it goes idle.
 - On the game's data (309 templates with abilities, each against a foe 3 m ahead for 4 s): 305 take a target and 301 act.
 

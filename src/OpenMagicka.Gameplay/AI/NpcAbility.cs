@@ -28,7 +28,11 @@ public abstract class NpcAbility
         ElementStealAbility steal => new ElementStealBehaviour(steal, index),
         RemoveStatusAbility remove => new RemoveStatusBehaviour(remove, index),
         SpecialAbilityAbility special => new SpecialAbilityBehaviour(special, index),
-        _ => new PendingAbility(template, index),                             // the grips, with OM-33's
+        GripAbility { FromBehind: true } grip => new GripFromBehindBehaviour(grip, index),
+        GripAbility grip => new PickUpBehaviour(grip, index),
+        ThrowGripAbility toss => new ThrowGripBehaviour(toss, index),
+        GripActionAbility action => new GripActionBehaviour(action, index),
+        _ => new PendingAbility(template, index),
     };
 
     /// <summary>One of its clips at random.</summary>
@@ -108,7 +112,8 @@ public abstract class NpcAbility
     /// <summary>Does it; true when it went (it is then under way). One with no clip to play does nothing.</summary>
     public bool Execute(Agent agent)
     {
-        var done = (Template.Animations.Count > 0 || this is SpecialAbilityBehaviour || this is BlockBehaviour || this is JumpBehaviour) && Act(agent);
+        var done = (Template.Animations.Count > 0 || this is SpecialAbilityBehaviour || this is BlockBehaviour || this is JumpBehaviour
+            || this is GripFromBehindBehaviour) && Act(agent);
         if (done)
         {
             agent.BusyAbility = this;

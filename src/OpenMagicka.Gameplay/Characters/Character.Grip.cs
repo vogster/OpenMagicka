@@ -6,6 +6,9 @@ namespace OpenMagicka.Gameplay.Characters;
 /// <summary>How a gripper holds its victim (OM-89): up on a bone, glued in front of it, or riding it.</summary>
 public enum GripType : byte { Pickup, Ride, Hold }
 
+/// <summary>A throw's aim: the reach whose middle it goes to, and the elevation (radians).</summary>
+public readonly record struct GripThrowAim(float MinRange, float MaxRange, float Elevation);
+
 /// <summary>
 /// Grips (OM-89, docs/engine/ENTITIES_AI.md §5.6), as the original's: an NPC takes hold of a character (its mind's
 /// target) and holds it every frame after the state machine: a picked-up victim hangs at the gripper's bone, a held
@@ -54,11 +57,25 @@ public sealed partial class Character
     /// <summary>The grip attack's clip, queued.</summary>
     public string? NextGripAttackAnimation { get; internal set; }
 
+    /// <summary>
+    /// A grip attack queued (its clip), as the original's: taken when none is under way or queued, or while in one; the
+    /// attack does not turn it.
+    /// </summary>
+    public void DamageGripped(string clip)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        if (GripAttacking && NextGripAttackAnimation is not null && State is not States.GripAttackState)
+        {
+            return;
+        }
+        (NextGripAttackAnimation, GripAttacking, AllowAttackRotate) = (clip, true, false);
+    }
+
     /// <summary>The gripper's clip for letting a picked-up victim drop (its ability's); none: <c>hit</c>.</summary>
     public string? DropAnimation { get; set; }
 
-    /// <summary>Where its throwing ability means to throw its victim (a velocity); none: it does not throw.</summary>
-    public Vector3? GripThrow { get; set; }
+    /// <summary>How its throwing ability means to throw its victim (reckoned as the throw goes); none: it does not throw.</summary>
+    public GripThrowAim? GripThrow { get; set; }
 
     /// <summary>What a thrown victim takes when it next meets the level (the throw's damages), once.</summary>
     public IReadOnlyList<DamageEntry> CollisionDamages { get; set; } = [];
@@ -106,7 +123,7 @@ public sealed partial class Character
     /// </summary>
     public void ReleaseAttachedCharacter()
     {
-        GripDamageAccumulation = 0;
+        (GripDamageAccumulation, GripThrow) = (0, null);
         if (GrippedCharacter is not { } victim)
         {
             return;
