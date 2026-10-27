@@ -37,6 +37,9 @@ public sealed class PlayFrame
     /// <summary>Where the level's animated parts are, as its batches number them (LevelParts.Order).</summary>
     public List<System.Numerics.Matrix4x4> Parts { get; } = [];
 
+    /// <summary>Which of them glow this frame (a script's highlightAnim), lined up with <see cref="Parts"/>.</summary>
+    public List<bool> Highlighted { get; } = [];
+
     /// <summary>Why the level stopped (it no longer runs), or null.</summary>
     public string? Error { get; set; }
 }
@@ -159,10 +162,12 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escap
         if (scene?.Scripts is { } scripts)
         {
             scripts.Places.Placements(frame.Parts);
+            scripts.Places.Highlights(frame.Highlighted);
         }
         else
         {
             frame.Parts.Clear();
+            frame.Highlighted.Clear();
         }
         frame.Error = error;
     }

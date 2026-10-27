@@ -157,9 +157,11 @@ public sealed class PlayView : IDisposable
         var beholder = eye + GameCamera.Direction * GameCamera.EyeOfTheBeholderDistance;
         var globals = new GlobalEffectValues(view, projection, eye, beholder, time);
         var ground = Vector3.Lerp(frame.Previous.Ground, frame.Current.Ground, alpha);
+        var placed = Parts(frame);
         return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(frame.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, ground,
             (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models.Instances(frame.Models),
-            CharacterRimLight.For(frame.Settings), Parts(frame), frame.Spells, models.Get, frame.Gui);
+            CharacterRimLight.For(frame.Settings), placed, frame.Spells, models.Get, frame.Gui,
+            placed is not null && frame.Highlighted.Count == frame.Parts.Count ? frame.Highlighted : null);   // the glow only with the parts it lines up with
     }
 
     /// <summary>The level's parts where the frame has them, when the frame is of the level shown (none: at rest).</summary>

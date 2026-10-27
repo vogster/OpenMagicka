@@ -19,6 +19,9 @@ public static class RenderDeferredMaterial
     public const int Depth = 4;
     public const int Shadow = 5;
 
+    /// <summary>A highlighted part's glow (OM-86): no textures, a white rim where the surface turns from the eye.</summary>
+    public const int AdditiveFresnel = 6;
+
     /// <summary>The G-buffer technique: with a reflection map the reflection variants; a second diffuse texture makes it dual.</summary>
     public static int Technique(RenderDeferredEffectContent material, bool hasReflectionMap)
     {

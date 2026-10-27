@@ -15,7 +15,7 @@ namespace OpenMagicka.Engine.Rendering;
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
     CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null,
-    GuiPictures? Gui = null);
+    GuiPictures? Gui = null, IReadOnlyList<bool>? Highlighted = null);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -258,6 +258,7 @@ public sealed partial class DeferredRenderer : IDisposable
         quad.Draw(device, shading, BlendState.Opaque);
         DrawSky(device, level);
         DrawAdditive(device, level, level.TextureFor, frame.Models);
+        DrawHighlights(device, level, frame);
         if (frame.Spells is { } pictures)
         {
             spells?.Draw(device, pictures, globals, frame.ModelOf);

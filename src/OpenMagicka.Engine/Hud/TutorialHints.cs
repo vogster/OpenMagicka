@@ -11,7 +11,8 @@ namespace OpenMagicka.Engine.Hud;
 /// <list type="bullet">
 /// <item>the darkening, half black at most, fading in and out over a quarter of a second;</item>
 /// <item>the hint, fading in over a quarter of a second; another one waits for it to fade out first (the last asked
-/// wins), and asking again for the one shown changes nothing;</item>
+/// wins), and asking again for the one shown (by its key, as the original compares) changes nothing but its clip (the
+/// tutorial's), not its place;</item>
 /// <item>the dialog hint, fading in over a quarter of a second, gone at once when closed.</item>
 /// </list>
 /// </summary>
@@ -39,11 +40,11 @@ public sealed class TutorialHints
         ArgumentNullException.ThrowIfNull(tutorial);
         var fade = FadeRate * (float.IsFinite(dt) ? Math.Max(0, dt) : 0);
         Dark = Math.Clamp(Dark + (tutorial.IsDark ? fade : -fade), 0, 1);
-        if (!Equals(tutorial.Hint, Shown) && HintAlpha <= 0)
+        if (!Same(tutorial.Hint, Shown) && HintAlpha <= 0)
         {
             Shown = tutorial.Hint;                                            // nothing left to fade out: the one asked, at once
         }
-        if (!Equals(tutorial.Hint, Shown))
+        if (!Same(tutorial.Hint, Shown))
         {
             HintAlpha = Math.Max(0, HintAlpha - fade);
         }
@@ -61,6 +62,9 @@ public sealed class TutorialHints
         }
     }
 
+    /// <summary>Two hints are one when they say the same (their key, and whether it has a pad and a keyboard form).</summary>
+    private static bool Same(TutorialHint? a, TutorialHint? b) => a?.Key == b?.Key && a?.ForController == b?.ForController;
+
     /// <summary>A hint's text key: its keyboard or pad form when it has them, by the first player's device.</summary>
     public static string HintKey(TutorialHint hint, bool pad)
     {
@@ -72,8 +76,11 @@ public sealed class TutorialHints
     public static string? ElementKey(Elements element) => element is Elements.None or Elements.All || (element & (element - 1)) != 0
         ? null : "#element_" + element.ToString().ToLowerInvariant();
 
-    /// <summary>What the screen shows of the tutorial, its texts looked up; none when nothing shows.</summary>
-    public TutorialPicture? Picture(Func<string, string> text, bool pad)
+    /// <summary>
+    /// What the screen shows of the tutorial, its texts looked up, with the clip beside the hint (the tutorial's, at its
+    /// time, the keys' letters in <see cref="HintClips.LetterOrder"/>); none when nothing shows.
+    /// </summary>
+    public TutorialPicture? Picture(Func<string, string> text, bool pad, ScriptTutorial? tutorial = null, string letters = "")
     {
         ArgumentNullException.ThrowIfNull(text);
         if (Dark <= 0 && (Shown is null || HintAlpha <= 0) && dialog is null)
@@ -91,6 +98,12 @@ public sealed class TutorialHints
             }
         }
         return new TutorialPicture(Dark, hint, Shown?.Position ?? HintPosition.BottomRight, HintAlpha, words, dialog?.Element ?? Elements.None, dialog?.Magick ?? MagickType.None,
-            DialogAlpha, dialog?.Scale ?? 1, dialog?.Size is { } size ? new Xna.Vector2(size.X, size.Y) : null);
+            DialogAlpha, dialog?.Scale ?? 1, dialog?.Size is { } size ? new Xna.Vector2(size.X, size.Y) : null)
+        {
+            Clip = tutorial?.HintAnimation ?? HintAnimations.None,
+            ClipTime = tutorial?.HintClock ?? 0,
+            Pad = pad,
+            Letters = letters,
+        };
     }
 }

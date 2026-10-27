@@ -2002,17 +2002,42 @@ the game's time, so it stands while the game is paused.
 - The hint's loc key takes `_key` or `_pad` by the first player's device, when the hint asks for it (`appendController`).
   Ours follows the device as it changes; the original chooses once, when the level loads.
 - It fades in over a quarter of a second. Another hint waits for the shown one to fade out first; the last asked wins,
-  and asking for the one shown changes nothing. It stays until removed or replaced.
+  and asking for the one shown (by its key, as the original compares them) changes nothing but its clip, not its
+  place. It stays until removed or replaced.
 - **Drawn** in a half-clear `Dialog_Say` frame, text as the dialog hint's. The right ones stand 5 % from the edge, the
   top at a tenth of the height, the centre ones at 0.7, the bottom one with its bottom 5 % up. Ours: the left ones
   5 % in (the original's centre-left is off the screen's side), and the corners the original leaves at the screen's
   corner placed like the rest.
 - `removeHint` also lifts the darkening, as the original's.
 
+**The hint's clip** (OM-86, `HintClips`, drawn by `GuiPass.DrawClip`): pictures of `UI/HUD/Tutorial` (512 × 256) in a
+128 px strip right of the text (the box widens by it), each centred on the strip's middle at the box's height plus its
+offset; frame, pictures, letters, text, all fading with the hint.
+- Every `setHint` starts the clip from its beginning (even for the hint shown) and takes its flags at once;
+  `removeHint` keeps them, so the clip plays on while the hint fades out. It runs on the game's time.
+- The flags play one after the other in their bit order (Interact, NavMagick, Conjure, the eight elements, CastForce,
+  CastArea, CastSelf, CastMagick, Block, Attack), not the script's, the whole looping.
+- Two sets, by the first player's device each frame. The keyboard's: the mouse with its left, middle or right button
+  lighting, the wheel, Shift, the space bar, key caps (an element's lights at a third of its 2 s; Conjure shows the
+  Haste combo's three) with the bound keys' letters in black Maiandra14. The pad's: the face buttons, the d-pad, the
+  triggers over the bumpers, and for an element the right stick over its well: centred a second, out 18 px toward the
+  element's first way, held, round a quarter turn to its second, held (the spell wheel's ways), 5 s.
+- A key's letter: a space for none, a mouse button its name's first letter (`#mouse_right`…), a letter, digit,
+  number pad or punctuation key what it types, any other key its name's first letter (Space "S"). Ours: the
+  punctuation as on a US layout (the original asks the system's layout); the letters fade with the hint (the
+  original's are opaque); the Block key's cell 64 wide, not the original's 72 that takes in a sliver of the mouse.
+
+**`highlightAnim name= time=`** (OM-86): the named animated part (a path of names; only that part, not its children)
+glows for its time and a frame, as the original's samples it before its step (so a highlight of 0 shows one frame).
+Its deferred meshes are drawn again with the additives, in `RenderDeferredEffect`'s technique 6 (AdditiveFresnel:
+white, power 1, no bloat): a soft white rim where the surface turns from the eye, half at the silhouette, constant
+while it lasts; blended InverseDestColor/One, depth read and not written, the faces turned away culled. The castle's
+cellar blinks the weapon rack, the ropes, the torches and the lever by firing it for 2 s every 3 s.
+
 **The darkening:** a black quad, half opaque at most, under the HUD, fading over a quarter of a second. A dialog hint
 and `enableDark` turn it on; the close, `removeHint` and `disableDark` turn it off.
 
 **Not done:**
-- the hints' clips (keys, mouse buttons and pad pictures from `UI/HUD/Tutorial` beside the text);
-- `highlightAnim` (a level part's white glow);
+- the glow of what a player aims at (`OnInteract animhighlight=`, `physhighlight=`, `highlightPhys`), whose sampling
+  this allows;
 - the tips (`Tips`), which the cellar does not use.

@@ -23,6 +23,12 @@ public sealed partial class GuiPass
     /// <summary>The magicks' pictures, five a row: the first 37, then the rest.</summary>
     private (Texture2D First, Texture2D Second) magicks;
 
+    /// <summary>The hints' clips' pictures (<c>UI/HUD/Tutorial</c>).</summary>
+    private Texture2D? clips;
+
+    private readonly List<Hud.ClipPiece> clipPieces = [];
+    private readonly List<GuiSprite> clipSprites = [];
+
     /// <summary>A magick's picture: its sheet (the second from the 38th) and its 400 × 250 cell there; none for none.</summary>
     public static (bool Second, Rectangle Cell)? MagickCell(Gameplay.Spells.MagickType magick)
     {
@@ -92,11 +98,51 @@ public sealed partial class GuiPass
         }
         var font = Fonts[TutorialFont];
         var (wrapped, w, h) = Laid(font, text);
-        var size = new Point(w, h);
+        var clip = tutorial.Clip != HintAnimations.None;
+        var size = new Point(w + (clip ? Hud.HintClips.Strip : 0), h);       // the clip's strip right of the text
         var centre = HintCentre(tutorial.Position, size, width, height);
         DrawFrame(device, centre, size, 1, width, height, new Vector4(1, 1, 1, 0.5f * tutorial.HintAlpha));
         var faded = new Vector4(1, 1, 1, tutorial.HintAlpha);
-        Text.Draw(device, font, wrapped, Vector4.One, centre - new Vector2(w, h) / 2, 1, int.MaxValue, width, height, tint: faded);
+        if (clip)
+        {
+            DrawClip(device, font, tutorial, new Vector2(MathF.Floor(centre.X + size.X / 2f) - Hud.HintClips.Strip / 2, centre.Y), width, height);
+        }
+        Text.Draw(device, font, wrapped, Vector4.One, centre - new Vector2(size.X, size.Y) / 2, 1, int.MaxValue, width, height, tint: faded);
+    }
+
+    private static readonly string[] Ascii = [.. Enumerable.Range(0, 128).Select(c => ((char)c).ToString())];
+
+    /// <summary>A letter as text, the plain ones made once.</summary>
+    private static string LetterText(char letter) => letter < Ascii.Length ? Ascii[letter] : letter.ToString();
+
+    /// <summary>A hint's clip at its anchor: its pictures, then the letters on its key caps (black, fading with the hint; the original's do not fade).</summary>
+    private void DrawClip(GraphicsDevice device, GuiFont font, TutorialPicture tutorial, Vector2 anchor, int width, int height)
+    {
+        if (clips is not { } atlas)
+        {
+            return;
+        }
+        clipPieces.Clear();
+        Hud.HintClips.Pieces(tutorial.Clip, tutorial.ClipTime, tutorial.Pad, tutorial.Letters, clipPieces);
+        var faded = new Vector4(1, 1, 1, tutorial.HintAlpha);
+        var size = new Vector2(atlas.Width, atlas.Height);
+        clipSprites.Clear();
+        foreach (var p in clipPieces)
+        {
+            var half = new Vector2(p.Source.Width, p.Source.Height) / 2;
+            var at = anchor + p.Offset;
+            clipSprites.Add(new GuiSprite(at - half, at + half, new Vector2(p.Source.Left, p.Source.Top) / size, new Vector2(p.Source.Right, p.Source.Bottom) / size,
+                faded));
+        }
+        Text.DrawSprites(device, atlas, clipSprites, width, height);
+        foreach (var piece in clipPieces)
+        {
+            if (piece.Letter is not '\0' and not ' ')
+            {
+                Text.Draw(device, font, LetterText(piece.Letter), new Vector4(0, 0, 0, tutorial.HintAlpha),
+                    anchor + piece.Offset - new Vector2(0, font.Metrics.LineHeight / 2), 1, int.MaxValue, width, height, Engine.Text.TextAlignment.Center);
+            }
+        }
     }
 
     /// <summary>The dialog hint's inner size: as given, else its text's beside its picture (at least the picture high, an icon's when none).</summary>

@@ -50,10 +50,11 @@ public sealed partial class GuiPass : IDisposable
         Texture2DContent Picture(string asset) => loader.LoadUncached(asset).Root as Texture2DContent ?? throw new InvalidDataException($"{asset} is not a picture");
         var (frame, pad, keyboard, hud, digits) = (Picture(Frame), Picture(PadPrompt), Picture(KeyboardPrompt), Picture(HudAtlas), Picture(DigitsAtlas));
         var (magicks, magicks2) = (Picture(MagicksAtlas), Picture(MagicksAtlas2));
+        var clips = loader.Files.Exists(Hud.HintClips.Atlas + ".xnb") ? Picture(Hud.HintClips.Atlas) : null;   // without it the hints show no clips
         var fonts = ReadFonts(loader, language);
         var effects = new[] { shaders.Load("GUIBasicEffect"), shaders.Load("TextBoxEffect"), shaders.Load("NotifierButtonEffect") };
         await Task.WhenAll(effects).ConfigureAwait(false);                     // the library's (the menu shares GUIBasicEffect): not ours to dispose
-        var pass = await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits, magicks, magicks2], fonts)).ConfigureAwait(false);
+        var pass = await gpu.Enqueue(device => Build(device, [.. effects.Select(e => e.Result)], [frame, pad, keyboard, hud, digits, magicks, magicks2], fonts, clips)).ConfigureAwait(false);
         pass.Language = language;
         return pass;
     }
@@ -111,7 +112,7 @@ public sealed partial class GuiPass : IDisposable
 
     /// <summary>Builds the pass from its effects (basic, box, prompt) and pictures (frame, pad prompt, keyboard prompt).</summary>
     private static GuiPass Build(GraphicsDevice device, GameEffect[] effects, Texture2DContent[] pictures,
-        Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> fonts)
+        Dictionary<string, (BitmapFontContent Font, Texture2DContent Atlas)> fonts, Texture2DContent? clipPictures)
     {
         var (basic, box, prompt) = (effects[0], effects[1], effects[2]);
         EffectChecks.Require(box, ["ScreenSize", "Position", "Size", "Scale", "BorderSize", "Color", "Texture"]);
@@ -126,6 +127,11 @@ public sealed partial class GuiPass : IDisposable
                 made.Add(textures[i] = GpuLevel.CreateTexture2D(device, pictures[i]));
             }
             var frameTexture = textures[0];
+            Texture2D? clipTexture = null;
+            if (clipPictures is not null)
+            {
+                made.Add(clipTexture = GpuLevel.CreateTexture2D(device, clipPictures));
+            }
             var gpuFonts = MakeFonts(device, fonts);
             made.AddRange(gpuFonts.Values);
             var (vertices, indices) = Grid();
@@ -135,7 +141,7 @@ public sealed partial class GuiPass : IDisposable
             var slices = new IndexBuffer(device, IndexElementSize.SixteenBits, indices.Length, BufferUsage.WriteOnly);
             made.Add(slices);
             slices.SetData(indices);
-            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2])) { hud = textures[3], digits = textures[4], magicks = (textures[5], textures[6]) };
+            return new GuiPass(text, box, frameTexture, gpuFonts, grid, slices, (prompt, textures[1], textures[2])) { hud = textures[3], digits = textures[4], magicks = (textures[5], textures[6]), clips = clipTexture };
         }
         catch
         {
@@ -207,5 +213,6 @@ public sealed partial class GuiPass : IDisposable
         digits.Dispose();
         magicks.First.Dispose();
         magicks.Second.Dispose();
+        clips?.Dispose();
     }
 }

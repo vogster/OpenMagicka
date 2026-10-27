@@ -86,6 +86,42 @@ public class PartDrawingTests
     }
 
     [Fact]
+    public void AHighlightedPart_GlowsForItsTime_AHighlightOfNoTimeForOneFrame_InTheBatchesOrder()
+    {
+        var places = new ScriptPlaces([], [], Parts());
+        var glowing = new List<bool>();
+        places.Part("door/handle")!.Highlight(0.5f);
+        places.UpdateParts(0.25f);
+        places.Highlights(glowing);
+        Assert.Equal([false, true, false], glowing);                             // only the handle, not its parent
+        places.UpdateParts(0.25f);
+        places.UpdateParts(0.25f);
+        places.Highlights(glowing);
+        Assert.True(glowing[1]);                                                 // its time, and the frame it ran out in
+        places.UpdateParts(0.25f);
+        places.Highlights(glowing);
+        Assert.Equal([false, false, false], glowing);
+
+        places.Part("lift")!.Highlight(0);
+        places.UpdateParts(1 / 60f);
+        places.Highlights(glowing);
+        Assert.True(glowing[2]);                                                 // sampled before its step, as the original's
+        places.UpdateParts(1 / 60f);
+        places.Highlights(glowing);
+        Assert.False(glowing[2]);
+    }
+
+    [Fact]
+    public void TheHighlight_RedrawsOnlyTheGlowingPartsDeferredMeshes()
+    {
+        GpuBatch Batch(int part, bool deferred) => new(null!, null!, 0, 0, 0, default, Matrix.Identity, null,
+            deferred ? new OpenMagicka.Content.PolygonHead.RenderDeferredEffectContent(1, 0, false, false, null, new(false, false, default, 0, 0, 0, 0, 0, null, null, null), null) : null, null, Vector3.One, false, true, part);
+        GpuBatch[] batches = [Batch(-1, true), Batch(0, true), Batch(0, false), Batch(1, true), Batch(5, true)];
+
+        Assert.Equal([batches[1]], DeferredRenderer.Highlighted(batches, [true, false]));
+    }
+
+    [Fact]
     public void APartANamesakeReplaced_StaysAtItsRest()
     {
         var places = new ScriptPlaces([], [], [Part("door", new Vector3(10, 0, 0)), Part("Door", new Vector3(-3, 0, 0))]);

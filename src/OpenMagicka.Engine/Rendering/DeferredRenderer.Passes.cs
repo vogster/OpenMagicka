@@ -226,6 +226,50 @@ public sealed partial class DeferredRenderer
         }
     }
 
+    /// <summary>The level's batches a frame's highlights light: the deferred meshes of the parts that glow (not their additive or liquid ones).</summary>
+    internal static IEnumerable<GpuBatch> Highlighted(IEnumerable<GpuBatch> batches, IReadOnlyList<bool> glowing) =>
+        batches.Where(b => b.Deferred is not null && b.Part >= 0 && b.Part < glowing.Count && glowing[b.Part]);
+
+    /// <summary>
+    /// The parts a script highlights (highlightAnim, OM-86) drawn again as the original's, with the additives: their
+    /// deferred meshes in the effect's additive fresnel (white, power 1, no bloat), a soft rim brightening what lies
+    /// behind, constant while it lasts; the faces turned away culled, depth read and not written.
+    /// </summary>
+    private void DrawHighlights(GraphicsDevice device, GpuLevel level, DeferredFrame frame)
+    {
+        var effect = deferred.Effect;
+        highlightable ??= effect.Techniques.Count > RenderDeferredMaterial.AdditiveFresnel && HighlightParameters.All(n => effect.Parameters[n] is not null);
+        if (frame.Highlighted is not { } glowing || !glowing.Contains(true) || highlightable is not true)
+        {
+            return;                                                           // an effect without the glow: none drawn
+        }
+        device.BlendState = AdditiveBlend;
+        device.DepthStencilState = DepthStencilState.DepthRead;
+        var (cull, technique) = (device.RasterizerState, effect.CurrentTechnique);
+        device.RasterizerState = RasterizerState.CullCounterClockwise;
+        effect.CurrentTechnique = effect.Techniques[RenderDeferredMaterial.AdditiveFresnel];
+        var parameters = new FnaEffectParameters(effect);
+        parameters.SetValue("DiffuseColor0", Vector3.One);
+        parameters.SetValue("FresnelPower", 1f);
+        parameters.SetValue("Bloat", 0f);
+        foreach (var batch in Highlighted(level.Batches, glowing))
+        {
+            var move = Move(batch);
+            if (frustum.Intersects(Transformed(batch.Bounds, move)))
+            {
+                parameters.SetValue("World", batch.World * move);
+                Draw(device, effect, batch);
+            }
+        }
+        effect.CurrentTechnique = technique;
+        device.RasterizerState = cull;
+    }
+
+    private bool? highlightable;
+
+    /// <summary>The parameters the highlight sets on the deferred effect (checked once: an effect without them draws no glow).</summary>
+    internal static readonly string[] HighlightParameters = ["World", "DiffuseColor0", "FresnelPower", "Bloat"];
+
     private static void Draw(GraphicsDevice device, Effect effect, GpuBatch batch)
     {
         device.SetVertexBuffer(batch.Vertices);

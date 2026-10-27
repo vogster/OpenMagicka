@@ -172,4 +172,15 @@ public class LiquidParametersGameTests
 
         Assert.DoesNotContain(names.Set, n => !declared.Contains(n));
     }
+
+    [OpenMagicka.Tests.Content.GameContentFact]
+    public void TheHighlightsTechniqueAndParameters_AreInTheGamesDeferredEffect()
+    {
+        var source = new ShaderSource(new OpenMagicka.Content.ContentLoader(new OpenMagicka.Content.ContentFileSystem(OpenMagicka.Tests.Content.GameContent.ContentDirectory!),
+            OpenMagicka.Content.Xnb.XnbReaderRegistry.Magicka));
+        var effect = Fx2Effect.Parse(source.Bytecode("RenderDeferredEffectWOVT"));
+
+        Assert.Contains(effect.Passes, p => p.Technique == RenderDeferredMaterial.AdditiveFresnel);
+        Assert.All(DeferredRenderer.HighlightParameters, n => Assert.Contains(effect.Parameters, p => p.Name == n));
+    }
 }

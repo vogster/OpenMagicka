@@ -60,10 +60,20 @@ public sealed class GuiPictures
 
 /// <summary>
 /// The tutorial on the screen: how dark it is (0…1), the hint's text, place and alpha, the dialog hint's text, its
-/// element's icon or its magick's picture (none: neither), alpha, scale and size (none: its text's).
+/// element's icon or its magick's picture (none: neither), alpha, scale and size (none: its text's); the hint's clip,
+/// its time, its set (the pad's or the keyboard's) and the elements' keys' letters (OM-86).
 /// </summary>
 public readonly record struct TutorialPicture(float Dark, string? Hint, Scripting.HintPosition Position, float HintAlpha, string? Dialog,
-    Gameplay.Spells.Elements Element, Gameplay.Spells.MagickType Magick, float DialogAlpha, float Scale, Vector2? Size);
+    Gameplay.Spells.Elements Element, Gameplay.Spells.MagickType Magick, float DialogAlpha, float Scale, Vector2? Size)
+{
+    public Scripting.HintAnimations Clip { get; init; }
+
+    public float ClipTime { get; init; }
+
+    public bool Pad { get; init; }
+
+    public string Letters { get; init; } = "";
+}
 
 /// <summary>
 /// A speech box to draw: its text (wrapped) and how many of its glyphs show, its speaker's name, how far it is open,

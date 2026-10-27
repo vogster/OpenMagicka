@@ -18,6 +18,7 @@ public sealed partial class LevelPlay
 
     private readonly TutorialHints hints = new();
     private readonly Dictionary<string, string> tutorialTexts = [];
+    private (ControlBindings? Bindings, string Letters) keyLetters;
 
     /// <summary>What the screen shows of the tutorial.</summary>
     public TutorialHints Hints => hints;
@@ -66,7 +67,12 @@ public sealed partial class LevelPlay
     public void WriteTutorial(Engine.Rendering.GuiPictures into)
     {
         ArgumentNullException.ThrowIfNull(into);
-        into.Tutorial = hints.Picture(TutorialText, padUsed);
+        var bindings = Controls.Bindings;
+        if (!ReferenceEquals(keyLetters.Bindings, bindings))
+        {
+            keyLetters = (bindings, HintClips.Letters(bindings, TutorialText));   // the bindings are the player's, set at the level's start
+        }
+        into.Tutorial = hints.Picture(TutorialText, padUsed, Level.Game.Tutorial, keyLetters.Letters);
     }
 
     /// <summary>A key's text, each <c>#key;</c> in it replaced, looked up once.</summary>

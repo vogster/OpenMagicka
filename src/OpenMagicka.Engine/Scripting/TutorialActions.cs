@@ -114,7 +114,7 @@ public sealed class SetHintAction : ScriptAction
     public HintAnimations Animation { get; set; }
     public HintPosition Position { get; set; } = HintPosition.BottomRight;
 
-    protected override void Execute() => Scene.Game.Tutorial.Hint = new TutorialHint(Id, AppendController, Animation, Position);
+    protected override void Execute() => Scene.Game.Tutorial.SetHint(new TutorialHint(Id, AppendController, Animation, Position));
 }
 
 /// <summary>

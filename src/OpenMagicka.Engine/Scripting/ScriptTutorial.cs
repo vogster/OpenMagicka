@@ -64,6 +64,19 @@ public sealed class ScriptTutorial
 
     public TutorialHint? Hint { get; set; }
 
+    /// <summary>The clip beside the hint (OM-86): the last <c>setHint</c>'s, kept while its hint fades out.</summary>
+    public HintAnimations HintAnimation { get; private set; }
+
+    /// <summary>The clip's time since the last <c>setHint</c>, in game time.</summary>
+    public float HintClock { get; private set; }
+
+    /// <summary>A hint asked for (<c>setHint</c>): its clip from its start, even for the hint shown, as the original's.</summary>
+    public void SetHint(TutorialHint hint)
+    {
+        Hint = hint ?? throw new ArgumentNullException(nameof(hint));
+        (HintAnimation, HintClock) = (hint.Animation, 0);
+    }
+
     public TutorialDialogHint? DialogHint { get; private set; }
 
     /// <summary>How long a new dialog hint ignores what would close it (the original's second), in game time.</summary>
@@ -80,8 +93,13 @@ public sealed class ScriptTutorial
         IsDark = true;
     }
 
-    /// <summary>The hold-off runs with the game's time (it stands while the game is paused).</summary>
-    public void Step(float dt) => Holding = Math.Max(0, Holding - (float.IsFinite(dt) ? Math.Max(0, dt) : 0));
+    /// <summary>The hold-off and the clip run with the game's time (they stand while the game is paused).</summary>
+    public void Step(float dt)
+    {
+        var step = float.IsFinite(dt) ? Math.Max(0, dt) : 0;
+        Holding = Math.Max(0, Holding - step);
+        HintClock += step;
+    }
 
     /// <summary>
     /// The dialog hint is closed (a player's input, or <c>removeDialogHint</c>): the trigger to set off (0: none), or

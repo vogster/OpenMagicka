@@ -228,6 +228,17 @@ public sealed class ScriptPlaces : IAiPlaces
         }
     }
 
+    /// <summary>Which parts glow this frame (a script's highlightAnim), lined up with <see cref="Placements"/> (cleared first).</summary>
+    public void Highlights(List<bool> into)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+        into.Clear();
+        for (var i = 0; i < drawn.Length; i++)
+        {
+            into.Add(drawn[i]?.IsHighlighted ?? false);
+        }
+    }
+
     /// <summary>A part by its path of names ("parent/child", any case); null when one of them is missing.</summary>
     public ScenePart? Part(string path)
     {

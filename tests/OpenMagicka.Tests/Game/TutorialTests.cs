@@ -79,6 +79,47 @@ public class TutorialTests
     }
 
     [Fact]
+    public void AHintsClip_StartsWithEverySetHint_SwapsWithoutAFadeForTheSameKey_AndPlaysOnAsItFadesOut()
+    {
+        var tutorial = new ScriptTutorial();
+        tutorial.SetHint(new TutorialHint("#a", false, HintAnimations.Interact, HintPosition.BottomRight));
+        var hints = new TutorialHints();
+        hints.Step(0.5f, tutorial);
+        tutorial.Step(1.5f);
+        Assert.Equal(1.5f, tutorial.HintClock);
+
+        tutorial.SetHint(new TutorialHint("#a", false, HintAnimations.CastSelf, HintPosition.BottomRight));
+        hints.Step(0.1f, tutorial);
+        Assert.Equal((0f, 1f), (tutorial.HintClock, hints.HintAlpha));                                            // the same hint: no fade
+        Assert.Equal(HintAnimations.CastSelf, hints.Picture(k => k, pad: false, tutorial)!.Value.Clip);
+
+        tutorial.Hint = null;                                                    // removeHint
+        hints.Step(0.1f, tutorial);
+        var picture = hints.Picture(k => k, pad: false, tutorial, "QWERASDF")!.Value;
+        Assert.Equal((HintAnimations.CastSelf, "QWERASDF"), (picture.Clip, picture.Letters));   // still playing as it fades
+        Assert.True(picture.HintAlpha is > 0 and < 1);
+    }
+
+    [Fact]
+    public void AnotherHintsClip_PlaysBesideTheOldTextAsItFadesOut_AndTheSameHintKeepsItsPlace()
+    {
+        var tutorial = new ScriptTutorial();
+        var hints = new TutorialHints();
+        tutorial.SetHint(new TutorialHint("#a", false, HintAnimations.Interact, HintPosition.Top));
+        hints.Step(1, tutorial);
+        tutorial.SetHint(new TutorialHint("#b", false, HintAnimations.CastSelf, HintPosition.Top));
+        hints.Step(0.1f, tutorial);
+
+        var picture = hints.Picture(k => k, pad: false, tutorial)!.Value;
+        Assert.Equal(("#a", HintAnimations.CastSelf), (picture.Hint, picture.Clip));                  // as the original's: the new clip at once
+        Assert.True(picture.HintAlpha is > 0 and < 1);
+
+        tutorial.SetHint(new TutorialHint("#a", false, HintAnimations.Interact, HintPosition.BottomLeft));
+        hints.Step(0.1f, tutorial);
+        Assert.Equal(HintPosition.Top, hints.Picture(k => k, pad: false, tutorial)!.Value.Position);   // asked again: it fades back where it was
+    }
+
+    [Fact]
     public void ADialogHintsPicture_HasItsElementsNameOverItsText()
     {
         var tutorial = new ScriptTutorial();

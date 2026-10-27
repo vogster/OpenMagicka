@@ -118,8 +118,14 @@ public sealed class ScenePart
         IsPlaying = true;
     }
 
-    /// <summary>How long it still shows highlighted (a script's highlightAnim); not above 0, not.</summary>
+    /// <summary>How long it still shows highlighted (a script's highlightAnim); below 0, not.</summary>
     public float Highlighted { get; private set; } = -1;
+
+    /// <summary>
+    /// It glows this frame: its time was not below 0 when the frame began, as the original's samples it before the step,
+    /// so a highlight of 0 shows for one frame.
+    /// </summary>
+    public bool IsHighlighted { get; private set; }
 
     public void Highlight(float time) => Highlighted = time;
 
@@ -143,6 +149,7 @@ public sealed class ScenePart
     /// </summary>
     public void Update(float dt, Numerics.Matrix4x4 parent)
     {
+        IsHighlighted = Highlighted >= 0;
         Highlighted = MathF.Max(-1, Highlighted - dt);
         if (IsPlaying)
         {
