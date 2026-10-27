@@ -27,6 +27,8 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
     private PlayView? view;
     private MenuPass? pass;
     private Task<MenuPass>? passLoading;
+    private BookPass? book;
+    private Task<BookPass>? bookLoading;
     private string? passLanguage;
     private readonly HashSet<string> failed = [];
     private int levelShown;
@@ -77,12 +79,19 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
         base.LoadContent();
         deviceMade = true;
         view = new PlayView(GraphicsDevice, content.Loader, GpuWork);
+        var (shaders, loader, gpu) = (view.Shaders, content.Loader, GpuWork);
+        bookLoading = Task.Run(() => BookPass.Load(shaders, gpu, loader));
     }
 
     protected override void UnloadContent()
     {
         view?.Dispose();
         pass?.Dispose();
+        book?.Dispose();
+        if (bookLoading is { IsCompletedSuccessfully: true } loaded && !ReferenceEquals(loaded.Result, book))
+        {
+            loaded.Result.Dispose();
+        }
         if (passLoading is { IsCompletedSuccessfully: true } made)
         {
             made.Result.Dispose();
@@ -106,7 +115,13 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
         view.Language = frame.Language;
         Follow(frame);
         var (w, h) = (GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight);
-        if (frame.Mode == ShellMode.Menu || frame.Level == 0)
+        var shown = Book();
+        if (frame.Mode == ShellMode.Menu && frame.Menu.Book.Shown && frame.Menu.ShowsPage && shown is not null && menu is not null)
+        {
+            shown.Draw(GraphicsDevice, frame.Menu.Book, menu.DrawAtlas(GraphicsDevice, frame.Menu), w, h);
+            menu.DrawScreen(GraphicsDevice, frame.Menu, w, h);
+        }
+        else if (frame.Mode == ShellMode.Menu || frame.Level == 0)
         {
             GraphicsDevice.Clear(Color.Black);
             menu?.Draw(GraphicsDevice, frame.Menu, w, h);
@@ -126,6 +141,25 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
             ExitCode = Screenshots.Save(GraphicsDevice, screenshot) ? 0 : 1;
             RequestExit();
         }
+    }
+
+    /// <summary>The book's pass once made (the logic is told, so the page goes into it); none while it loads or when it failed (the page lies flat).</summary>
+    private BookPass? Book()
+    {
+        if (bookLoading is { IsCompleted: true } done)
+        {
+            bookLoading = null;
+            if (done.IsCompletedSuccessfully)
+            {
+                book = done.Result;
+                signals.Book = true;
+            }
+            else
+            {
+                Console.Error.WriteLine($"OpenMagicka: the Tome's book is not drawn ({done.Exception?.GetBaseException().Message}); the page lies flat");
+            }
+        }
+        return book;
     }
 
     /// <summary>The view follows the frame's level: begun for a new one, ended when it goes.</summary>

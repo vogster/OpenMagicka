@@ -35,6 +35,14 @@ public sealed class ShellFrame
 public sealed class ShellSignals
 {
     private int shown;
+    private volatile bool book;
+
+    /// <summary>The book's pass is made (OM-83): the menu's page may lie in it.</summary>
+    public bool Book
+    {
+        get => book;
+        set => book = value;
+    }
 
     public int Shown
     {

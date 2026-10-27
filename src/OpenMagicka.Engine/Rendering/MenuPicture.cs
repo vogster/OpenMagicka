@@ -67,6 +67,9 @@ public sealed class MenuPicture
     /// <summary>Whether the book's page is shown (the main menu); not over a level.</summary>
     public bool ShowsPage { get; set; }
 
+    /// <summary>The book the page lies in (OM-83); not shown: the page lies flat on the screen.</summary>
+    public BookPicture Book { get; } = new();
+
     /// <summary>Painted into the paper first, under the page's sprites and texts.</summary>
     public List<MenuPainting> PagePaintings { get; } = [];
 
@@ -97,6 +100,7 @@ public sealed class MenuPicture
     public void Clear()
     {
         ShowsPage = false;
+        Book.Shown = false;
         PagePaintings.Clear();
         PageSprites.Clear();
         PageTexts.Clear();
@@ -122,4 +126,41 @@ public sealed class MenuPicture
         }
         return new Vector2(screen.X - page.X, screen.Y - page.Y) * PageSize / page.Width;
     }
+}
+
+/// <summary>
+/// The Tome's book as a frame shows it (OM-83, docs/engine/ARCHITECTURE.md §20, "The book"), filled on the logic thread: the
+/// camera, the candle (where it is and its three colours), and the bones of the book, of its two stacks of pages and of
+/// the room (one, the room never moves). The arrays are kept from frame to frame, filled anew.
+/// </summary>
+public sealed class BookPicture
+{
+    /// <summary>The bones of the book (its covers and clasp) and of a stack or sheet of pages.</summary>
+    public const int BookBones = 6, PageBones = 18;
+
+    public bool Shown { get; set; }
+
+    public Matrix View { get; set; } = Matrix.Identity;
+
+    public Matrix Projection { get; set; } = Matrix.Identity;
+
+    public Vector3 Camera { get; set; }
+
+    public Vector3 Light { get; set; }
+
+    public Vector3 Ambient { get; set; }
+
+    public Vector3 Diffuse { get; set; }
+
+    public Vector3 Specular { get; set; }
+
+    /// <summary>Whether the room (desk, wall, the things on the desk) is drawn behind the book.</summary>
+    public bool Room { get; set; } = true;
+
+    public Matrix[] Book { get; } = new Matrix[BookBones];
+
+    /// <summary>The stack of pages on the left, then on the right.</summary>
+    public Matrix[] Left { get; } = new Matrix[PageBones];
+
+    public Matrix[] Right { get; } = new Matrix[PageBones];
 }

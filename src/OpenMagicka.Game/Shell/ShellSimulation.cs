@@ -22,6 +22,8 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     private readonly ShellContent content;
     private readonly ShellSignals signals;
     private readonly TomeMenu menu;
+    private readonly TomeBook? book;
+    private readonly Func<Point, Point, Vector2?>? bookPicking;
     private readonly MenuInputReader reader = new();
     private ShellMode mode = ShellMode.Menu;
     private Point realScreen;
@@ -47,8 +49,10 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         }
         realScreen = screen;
         strings = StringsOf(Settings.Language);
-        menu = new TomeMenu(this);
+        menu = new TomeMenu(this) { Version = GameShell.Version };
         menu.Open();
+        book = TomeBook.Load(content.Loader);
+        bookPicking = book is null ? null : book.ToPage;
         pause = new PauseMenu(this, new PauseActions(Resume, RestartLevel, QuitLevel));
         content.Sounds?.PlayMusic(SoundBanks.Music, MenuMusic);
     }
@@ -117,6 +121,12 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     public void Cue(string name) =>
         content.Sounds?.Play(name.StartsWith("misc_", StringComparison.Ordinal) ? SoundBanks.Misc : SoundBanks.UI, name);
 
+    public void Cue(string name, (string Name, float Value) variable) =>
+        content.Sounds?.Play(name.StartsWith("misc_", StringComparison.Ordinal) ? SoundBanks.Misc : SoundBanks.UI, name, null, variable);
+
+    /// <summary>The book is drawn: the game has its models and the render thread made its pass.</summary>
+    private TomeBook? Book => signals.Book ? book : null;
+
     public void Quit() => host.RequestExit();
 
     public void Tick(double dt)
@@ -126,6 +136,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         {
             realScreen = input.Screen;
         }
+        reader.Picking = mode == ShellMode.Menu && signals.Book ? bookPicking : null;
         var read = reader.Read(input, (float)dt);
         var laid = screen;                                                    // the mouse over the screen's pieces, on their smaller screen
         read = read with { Screen = new Point(read.Screen.X * laid.X / Math.Max(1, realScreen.X), read.Screen.Y * laid.Y / Math.Max(1, realScreen.Y)) };
@@ -133,6 +144,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         {
             case ShellMode.Menu:
                 menu.Update(read, screen, (float)dt);
+                book?.Update((float)dt);
                 content.Sounds?.Update((float)dt, []);
                 break;
             case ShellMode.Loading:
@@ -159,6 +171,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         switch (mode)
         {
             case ShellMode.Menu:
+                Book?.Write(frame.Menu.Book, realScreen.X / (float)Math.Max(1, realScreen.Y));
                 menu.Draw(frame.Menu, screen);
                 break;
             case ShellMode.Loading:

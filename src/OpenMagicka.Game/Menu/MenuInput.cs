@@ -23,6 +23,9 @@ public sealed class MenuInputReader
 {
     public const float Repeat = 0.25f, StickDead = 0.5f;
 
+    /// <summary>The mouse onto the page from the screen's size (none: the flat page's square); the book's when it is shown.</summary>
+    public Func<Point, Point, Vector2?>? Picking { get; set; }
+
     private InputState last;
     private (int Vertical, int Horizontal) held;
     private float wait;
@@ -58,7 +61,8 @@ public sealed class MenuInputReader
             }
         }
         var mouse = new Point(input.Mouse.X, input.Mouse.Y);
-        var page = input.Screen.X > 0 && input.Screen.Y > 0 ? MenuPicture.ToPage(mouse, input.Screen.X, input.Screen.Y) : null;
+        var page = input.Screen.X <= 0 || input.Screen.Y <= 0 ? null
+            : Picking is { } pick ? pick(mouse, input.Screen) : MenuPicture.ToPage(mouse, input.Screen.X, input.Screen.Y);
         return new MenuInput(page, mouse, mouse != new Point(before.Mouse.X, before.Mouse.Y),
             input.Mouse.LeftButton == ButtonState.Released && before.Mouse.LeftButton == ButtonState.Pressed, moveV, moveH,
             Pressed(Keys.Enter) || Pressed(Keys.Space) || Pad(Buttons.A), Pressed(Keys.Escape) || Pressed(Keys.Back) || Pad(Buttons.B), Pressed(Keys.Delete),

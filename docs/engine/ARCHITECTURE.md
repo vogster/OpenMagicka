@@ -564,6 +564,8 @@ Many effects contain **preshaders** (`FXLC`) and state blocks in passes.
   MojoShader (GLSL, SPIR-V, Metal, DXBC via SDL_GPU). fx_2_0, SM1–3,
   preshaders and pass state blocks are supported. **So the original shaders can be taken directly
   from the user's `Content/Shaders`**, without extracting them from the DLL and without copying them into the repository.
+  One effect is in no `.xnb`: XNAnimation's skinned model effect, whose forward technique draws the menu's book. It is
+  read at run time from the player's own `XNAnimation.dll` (§20, "The book"), and likewise never copied.
 - Obstacles and how to work around them:
   1. **`EffectPool` and `shared` parameters do not exist in XNA 4.0/FNA.** Global
      parameters (`View`, `Projection`, `ViewProjection`, `InverseViewProjection`,
@@ -1834,10 +1836,10 @@ All pieces come from the atlas `UI/HUD/hud` (512 × 512) or `UI/HUD/Digits`, thr
 
 ## 20. Ours: the game around the levels (OM-53)
 
-The original's menu is a 3D book (the Tome) on a desk, lit by a candle, its pages turning between menus. OpenMagicka's
-first version keeps the book's pages and their layout but shows the right page flat, as a square of the screen's
-height in its middle. The book, the desk and the page turning come later; so do the logos, the intro and the map
-cutscenes between chapters.
+The original's menu is a 3D book (the Tome) on a desk, lit by a candle, its pages turning between menus. OpenMagicka
+draws the book, the desk and the candle (OM-83, "The book" below) with the page on the book's right; where the game's
+files lack what it needs, the right page shows flat, as a square of the screen's height in its middle. The page
+turning, the book's opening and the logos come later.
 
 **One window, three modes** (`GameShell` on the render thread, `ShellSimulation` on the logic thread):
 - **Menu.** The Tome's pages, with the menu music (`music_menu`).
@@ -1860,8 +1862,44 @@ cutscenes between chapters.
   Fonts: the language's `MenuTitle`, `MenuOption`, `MenuDefault`, Maiandra 14/16/18 and `Stonecross50` (English's
   where a language lacks one), and `UI/Font/LanguageFont` for the languages' own names.
 - Drawn straight to the screen with `GUIBasicEffect`, without the scene's encoding (`GuiText.ScaleToHdr` off).
-- Ink is (0.1, 0.05, 0, 0.7), a selected item (1.5, 1.5, 1.5, 1), a disabled one (0, 0, 0, 0.4). Ours: a selected
-  text has an ink shadow, since the flat page lacks the candle light that sets it off.
+- Ink is (0.1, 0.05, 0, 0.7), a selected item (1.5, 1.5, 1.5, 1), a disabled one (0, 0, 0, 0.4). Ours: on the flat
+  page a selected text has an ink shadow, since it lacks the candle light that sets it off.
+
+**The book** (OM-83; `TomeBook` on the logic thread, `BookPass` and `MenuPass.DrawAtlas` on the render thread):
+- The effect: the original draws the book with XNAnimation's skinned model effect (technique
+  `AnimatedModelNonDeffered`), which is not among the content's shaders. `XnAnimationEffect` reads it from the
+  player's `XNAnimation.dll` next to `Content`: the one field with initial data (System.Reflection.Metadata) that is
+  an fx_2_0 effect, as long as its value type is laid out (76 320 bytes in 1.10.4.2). Nothing of it is kept in the
+  repository. If the DLL, the effect or a model is missing, or the effect does not build, the log says why and the
+  page lies flat.
+- The models (`UI/ToM/`): `background_mesh` (the desk, the wall, the things on the desk; never moves), `tome` (covers
+  and clasp, at the end of its `open` clip), and `page` twice, the two stacks, posed by `page_flip`'s `open_left` and
+  `open_right` at their ends. The room lacks the tangent frame the effect reads: it gets one of zeros, which leaves its
+  normals as they are (ours: what Direct3D 9 is taken to have read). `background` is the unseen camera rig.
+- The camera: the rig's `camera` bone in `idle` at its start, turned half round its own up (it looks along the bone's
+  +Z); 0.75 rad upright field of view, the screen's aspect (no letterbox), near 2, far 200. At 16:9 the right page
+  spans 0.23–0.69 of the screen's width and 7–93 % of its height.
+- The candle: a point light at the `Light` bone's bind place (−1.438, 8.539, 3.036), its colours (0.3, 0.2, 0.2),
+  (0.7, 0.75, 0.75), (1.3, 1, 1) times its strength × 100 (the effect divides by the squared distance). The strength
+  eases to 1 at a speed (24 easing to 6), with a random walk of ±1 on it whose size eases from 1 to 0.2 (`Candle`),
+  so the room flickers as it lights at the start.
+- Drawn into a screen-sized, 4× multisampled target with depth, cleared black: the room (alpha-blended: the quill's
+  feather), the book (opaque), the right stack, the left one (alpha-blended: the torn edges); default culling. Then the
+  colour filter (as it is) and the bloom onto the screen, which decode its light; then the screen's pieces as before.
+  No shadow map yet: every pixel is lit.
+- The page atlas (2048², with mip levels): the whole `tome_pages_0` written, encoded (`ScaleToHdr` on), then the page
+  drawn into the top-right sheet's 1024² viewport, encoded too, each draw blending by its alpha and keeping the paper's
+  (its torn edges stay); paintings put the paper's own alpha back. The stacks' top faces show the left sheet (bare
+  paper), their bottom faces the right; the effect decodes the texels, so a lit text (1.5) stays brighter than white.
+- The mouse (`BookPicking`): a ray from the camera through it, met (either side) with the fixed quad where the right
+  page lies (outer edge x −5.3 at y 0.5, spine x 0 at y 0.4, z ±2.75); the hit (x, z) is page pixel
+  ((0.03 − x / 5.3) · 0.97 · 1024, (2.75 − z) / 5.5 · 1024), as the original's. Off it, no page point.
+- The logic thread draws the book only once the render thread says its pass is made (`ShellSignals.Book`), so the
+  picking and the picture agree. The game's version is shown at the screen's bottom left (Maiandra14, white over a
+  black shadow), not over a cutscene. The page riffle's sound gets the pages turned (`Pages`); the menu's first page
+  is put down without it.
+- Ours, for now: the book is open from the start (no fly-in, no opening), the pages change at once, and the candle does
+  not dim for the intro.
 
 **Input** (`MenuInputReader`): the mouse hovers and clicks (a left press released, hit-tested in page pixels); the
 arrows, the d-pad and the left stick move (repeating every 0.25 s while held); Enter, Space or A choose; Esc,
@@ -1980,7 +2018,8 @@ or B too) and nothing remembers it was seen:
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the 3D book, its light and its page turning; the logos; the end page between a chapter and the next one's map;
+- the book's page turning, its fly-in and opening, its shadow map; the logos; the end page between a chapter and the
+  next one's map;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - the original's `campaign.sav` read or written (OM-55);
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.

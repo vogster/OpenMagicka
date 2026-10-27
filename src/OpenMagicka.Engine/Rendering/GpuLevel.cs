@@ -106,7 +106,9 @@ public sealed class GpuLevel : IDisposable
             : null;
 
     /// <param name="sky">The scene's sky map, loaded with the level's textures.</param>
-    public static async Task<GpuLevel> Load(ContentLoader loader, string modelAsset, RenderQueue<GraphicsDevice> gpu, SkyMapSettings? sky = null)
+    /// <param name="prepare">What is done to each batch before it is made (by default: the inputs of its effect completed).</param>
+    public static async Task<GpuLevel> Load(ContentLoader loader, string modelAsset, RenderQueue<GraphicsDevice> gpu, SkyMapSettings? sky = null,
+        Func<LevelBatch, LevelBatch>? prepare = null)
     {
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(gpu);
@@ -122,7 +124,7 @@ public sealed class GpuLevel : IDisposable
             : file.Root is PhysicsEntityTemplateContent { Model: { } prop } ? ModelMeshes.ForModel(prop, file.SharedResources)
             : throw new InvalidDataException($"{modelAsset} is neither a level model nor a model");
         // Every vertex gets the elements its effect reads (OM-63).
-        var content = read.Select(b => VertexPadding.Complete(b, EffectInputs.For(b))).ToArray();
+        var content = read.Select(prepare ?? (b => VertexPadding.Complete(b, EffectInputs.For(b)))).ToArray();
 
         var warnings = new List<string>();
         Cameras.CameraMesh? cameraMesh = null;

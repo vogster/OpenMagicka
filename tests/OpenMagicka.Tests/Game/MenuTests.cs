@@ -38,6 +38,15 @@ internal sealed class FakeMenuHost : IMenuHost, IDisposable
 
     public void Cue(string name) => Cues.Add(name);
 
+    /// <summary>The variables cues were played with.</summary>
+    public List<(string Name, float Value)> CueVariables { get; } = [];
+
+    public void Cue(string name, (string Name, float Value) variable)
+    {
+        Cues.Add(name);
+        CueVariables.Add(variable);
+    }
+
     public void Play(int slot, int chapter, bool resume = false, Narration? narration = null) =>
         (Played, Resumed, Narrated) = ((slot, chapter), resume, narration);
 
@@ -91,6 +100,7 @@ public class MenuTests
 
         Assert.IsType<SlotsPage>(menu.Page);
         Assert.Contains("ui_menu_tomepage", host.Cues);
+        Assert.Equal([("Pages", 1f)], host.CueVariables);                   // the riffle's sound is told how many pages it turns
     }
 
     [Fact]

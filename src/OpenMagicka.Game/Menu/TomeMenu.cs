@@ -28,6 +28,9 @@ public interface IMenuHost
 
     void Cue(string name);
 
+    /// <summary>A menu's sound with a variable of its cue (the riffle's number of pages); by default without it.</summary>
+    void Cue(string name, (string Name, float Value) variable) => Cue(name);
+
     /// <summary>The world map's cutscenes by chapter (OM-84); none without the game's file.</summary>
     IReadOnlyDictionary<int, MapCutscene> Cutscenes { get; }
 
@@ -47,8 +50,8 @@ public interface IMenuHost
 
 /// <summary>
 /// The Tome's menu (OM-53, docs/engine/ARCHITECTURE.md §20), on the logic thread: a stack of pages (the main page at the
-/// bottom), a message box over them while one is up, and what the book shows (its right page) for each frame. Ours
-/// shows the page flat in the screen's middle; the book's desk and its riffling pages come later.
+/// bottom), a message box over them while one is up, and what the book shows (its right page) for each frame. The page
+/// lies in the 3D book (OM-83, §20, "The book") where the game has it, else flat in the screen's middle; the riffle comes later.
 /// </summary>
 public sealed class TomeMenu(IMenuHost host)
 {
@@ -74,12 +77,14 @@ public sealed class TomeMenu(IMenuHost host)
     /// <summary>What backing out of the bottom page does; none: the quit box (the main menu's).</summary>
     public Action? Leave { get; init; }
 
-    /// <summary>The menu opens at a page (none: the main page), the pages before it gone.</summary>
+    /// <summary>The menu opens at a page (none: the main page), the pages before it gone; put there, not turned to (no riffle's sound), as the original's.</summary>
     public void Open(Func<TomeMenu, MenuPage>? root = null)
     {
         pages.Clear();
         box = null;
-        Push(root?.Invoke(this) ?? new MainPage(this));
+        var page = root?.Invoke(this) ?? new MainPage(this);
+        pages.Push(page);
+        page.Enter();
     }
 
     /// <summary>The pages back down to the bottom one (none when the menu is closed).</summary>
@@ -94,8 +99,11 @@ public sealed class TomeMenu(IMenuHost host)
         ArgumentNullException.ThrowIfNull(page);
         pages.Push(page);
         page.Enter();
-        Cue("ui_menu_tomepage");
+        Turn(page);
     }
+
+    /// <summary>The riffle's sound with the pages it turns (the original's count as it is, not the sheets drawn).</summary>
+    private void Turn(MenuPage page) => Host.Cue("ui_menu_tomepage", ("Pages", page.Pages));
 
     /// <summary>Back a page; at the main page, the quit box.</summary>
     public void Pop()
@@ -112,9 +120,9 @@ public sealed class TomeMenu(IMenuHost host)
             }
             return;
         }
-        pages.Pop();
+        var gone = pages.Pop();
         pages.Peek().Enter();
-        Cue("ui_menu_tomepage");
+        Turn(gone);
     }
 
     /// <summary>Back a page without its sound (a cutscene's end); never the bottom page.</summary>
@@ -161,12 +169,20 @@ public sealed class TomeMenu(IMenuHost host)
         }
     }
 
+    /// <summary>The game's version, shown at the screen's bottom left under the book (none: not shown).</summary>
+    public string Version { get; init; } = "";
+
     public void Draw(MenuPicture picture, Point screen)
     {
         ArgumentNullException.ThrowIfNull(picture);
         Screen = screen;
         picture.ShowsPage = Page is not null;
         Page?.Draw(picture);
+        if (picture.Book.Shown && Version.Length > 0 && Page is not CutscenePage)
+        {
+            picture.ScreenTexts.Add(new MenuText("Maiandra14", Version, new Vector2(16, screen.Y - 16), Engine.Text.TextAlignment.Left, Vector4.One,
+                Shadow: true, FromBottom: true));
+        }
         box?.Draw(picture, screen.X, screen.Y, BoxRow);
     }
 }

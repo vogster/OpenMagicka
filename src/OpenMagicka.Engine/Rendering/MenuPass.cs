@@ -10,8 +10,9 @@ namespace OpenMagicka.Engine.Rendering;
 
 /// <summary>
 /// The menu drawn (OM-53, docs/engine/ARCHITECTURE.md §20): the page laid out on the Tome's paper (the right page of
-/// <c>UI/ToM/tome_pages_0</c>) in a 1024² target, shown as a square centred on the black screen (the book's 3D desk
-/// comes later), then the screen's own pieces over it, straight to the screen (no scene encoding). Render thread.
+/// <c>UI/ToM/tome_pages_0</c>), then the screen's own pieces over it, straight to the screen (no scene encoding). The
+/// page goes into the book's atlas when the book is drawn (<see cref="DrawAtlas"/>, OM-83), else into a 1024² target
+/// shown as a square centred on the black screen (<see cref="Draw"/>). Render thread.
 /// </summary>
 public sealed class MenuPass : IDisposable
 {
@@ -49,6 +50,25 @@ public sealed class MenuPass : IDisposable
         AlphaSourceBlend = Blend.SourceAlpha, AlphaDestinationBlend = Blend.Zero,
     };
 
+    /// <summary>The atlas's paper alpha back: the paper's own (it was written, not blended, there).</summary>
+    private static readonly BlendState AtlasPaperAlpha = new()
+    {
+        ColorWriteChannels = ColorWriteChannels.Alpha, ColorSourceBlend = Blend.One, ColorDestinationBlend = Blend.Zero,
+        AlphaSourceBlend = Blend.One, AlphaDestinationBlend = Blend.Zero,
+    };
+
+    /// <summary>What is drawn on the atlas's paper blends by its alpha and keeps the paper's (its torn edges stay).</summary>
+    private static readonly BlendState KeepPaper = new()
+    {
+        ColorSourceBlend = Blend.SourceAlpha, ColorDestinationBlend = Blend.InverseSourceAlpha,
+        AlphaSourceBlend = Blend.Zero, AlphaDestinationBlend = Blend.One,
+    };
+
+    /// <summary>The book's page atlas (OM-83): the paper's four sheets, 1024² each; the open spread's right page top right.</summary>
+    public const int AtlasSize = 2 * MenuPicture.PageSize;
+
+    private static readonly Viewport RightPage = new(MenuPicture.PageSize, 0, MenuPicture.PageSize, MenuPicture.PageSize);
+
     public const string Paper = "UI/ToM/tome_pages_0";
 
     /// <summary>The cutscenes' pictures, which the menu does without.</summary>
@@ -56,13 +76,16 @@ public sealed class MenuPass : IDisposable
         MenuAtlas.Intro3, MenuAtlas.Intro4, MenuAtlas.Intro5, MenuAtlas.Intro6];
 
     private readonly GuiText text;
+    private readonly GuiText encoded;
     private readonly Texture2D paper;
     private readonly Dictionary<MenuAtlas, Texture2D> atlases;
     private readonly RenderTarget2D page;
     private readonly List<GuiSprite> batch = [];
+    private RenderTarget2D? atlas;
 
-    private MenuPass(GuiText text, Texture2D paper, Dictionary<MenuAtlas, Texture2D> atlases, IReadOnlyDictionary<string, GuiFont> fonts, RenderTarget2D page) =>
-        (this.text, this.paper, this.atlases, Fonts, this.page) = (text, paper, atlases, fonts, page);
+    private MenuPass(GuiText text, GuiText encoded, Texture2D paper, Dictionary<MenuAtlas, Texture2D> atlases, IReadOnlyDictionary<string, GuiFont> fonts,
+        RenderTarget2D page) =>
+        (this.text, this.encoded, this.paper, this.atlases, Fonts, this.page) = (text, encoded, paper, atlases, fonts, page);
 
     /// <summary>The menu's fonts by the original's names.</summary>
     public IReadOnlyDictionary<string, GuiFont> Fonts { get; }
@@ -107,6 +130,7 @@ public sealed class MenuPass : IDisposable
         try
         {
             var text = new GuiText(effect) { ScaleToHdr = false };
+            var encoded = new GuiText(effect);
             var paperTexture = GpuLevel.CreateTexture2D(device, paper);
             made.Add(paperTexture);
             var atlases = new Dictionary<MenuAtlas, Texture2D>();
@@ -126,7 +150,7 @@ public sealed class MenuPass : IDisposable
             }
             var page = new RenderTarget2D(device, MenuPicture.PageSize, MenuPicture.PageSize, false, SurfaceFormat.Color, DepthFormat.None);
             made.Add(page);
-            return new MenuPass(text, paperTexture, atlases, gpuFonts, page);
+            return new MenuPass(text, encoded, paperTexture, atlases, gpuFonts, page);
         }
         catch
         {
@@ -140,10 +164,7 @@ public sealed class MenuPass : IDisposable
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(picture);
-        device.BlendState = BlendState.NonPremultiplied;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = RasterizerState.CullNone;
-        device.SamplerStates[0] = SamplerState.LinearClamp;
+        States(device);
         if (picture.ShowsPage)
         {
             device.SetRenderTarget(page);
@@ -151,9 +172,9 @@ public sealed class MenuPass : IDisposable
             text.DrawSprites(device, paper, [PaperSprite], MenuPicture.PageSize, MenuPicture.PageSize);
             foreach (var painting in picture.PagePaintings)
             {
-                Paint(device, painting);
+                Paint(device, painting, text, PaperAlpha, BlendState.NonPremultiplied);
             }
-            Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize);
+            Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize, text);
             device.SetRenderTarget(null);
             if (clear)
             {
@@ -166,8 +187,51 @@ public sealed class MenuPass : IDisposable
         {
             device.Clear(Color.Black);
         }
+        DrawScreen(device, picture, width, height);
+    }
+
+    private static void States(GraphicsDevice device)
+    {
+        device.BlendState = BlendState.NonPremultiplied;
+        device.DepthStencilState = DepthStencilState.None;
+        device.RasterizerState = RasterizerState.CullNone;
+        device.SamplerStates[0] = SamplerState.LinearClamp;
+    }
+
+    /// <summary>
+    /// The book's page atlas (OM-83, ARCHITECTURE.md §20, "The book"), as the original's: the paper written whole (its four sheets,
+    /// in the scene's encoded light), then the page drawn on its open spread's right sheet, encoded too, blending by its
+    /// alpha and keeping the paper's. The book's effect decodes it; its mip levels are made as it is let go.
+    /// </summary>
+    public Texture2D DrawAtlas(GraphicsDevice device, MenuPicture picture)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(picture);
+        States(device);
+        atlas ??= new RenderTarget2D(device, AtlasSize, AtlasSize, true, SurfaceFormat.Color, DepthFormat.None);
+        device.SetRenderTarget(atlas);
+        device.BlendState = BlendState.Opaque;
+        encoded.DrawSprites(device, paper, WholePaper, AtlasSize, AtlasSize);
+        device.Viewport = RightPage;
+        device.BlendState = KeepPaper;
+        foreach (var painting in picture.PagePaintings)
+        {
+            Paint(device, painting, encoded, AtlasPaperAlpha, KeepPaper);
+        }
+        Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize, encoded);
+        device.SetRenderTarget(null);
+        device.BlendState = BlendState.NonPremultiplied;
+        return atlas;
+    }
+
+    /// <summary>The screen's pieces (boxes, the pause menu, the loading screen) straight onto the screen, then the cover.</summary>
+    public void DrawScreen(GraphicsDevice device, MenuPicture picture, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(picture);
+        States(device);
         var laid = MenuPicture.Scaled(new Point(width, height), picture.ScreenScale);
-        Draw(device, picture.ScreenSprites, picture.ScreenTexts, laid.X, laid.Y);
+        Draw(device, picture.ScreenSprites, picture.ScreenTexts, laid.X, laid.Y, text);
         if (picture.Cover > 0)
         {
             text.DrawSprites(device, atlases[MenuAtlas.White], [new GuiSprite(Vector2.Zero, new Vector2(width, height), Vector2.Zero, Vector2.One,
@@ -175,10 +239,15 @@ public sealed class MenuPass : IDisposable
         }
     }
 
+    private static readonly GuiSprite[] WholePaper = [new(Vector2.Zero, new Vector2(AtlasSize), Vector2.Zero, Vector2.One, Vector4.One)];
+
     private static readonly GuiSprite PaperSprite = new(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0), new Vector2(1, 0.5f), Vector4.One);
 
-    /// <summary>A picture painted into the paper through its mask (the original's three draws), in the page's target; none without its pictures.</summary>
-    private void Paint(GraphicsDevice device, MenuPainting painting)
+    /// <summary>
+    /// A picture painted into the paper through its mask (the original's three draws), in the page's target; none without
+    /// its pictures. The paper's alpha comes back by <paramref name="paperAlpha"/>, then the blending is <paramref name="after"/>.
+    /// </summary>
+    private void Paint(GraphicsDevice device, MenuPainting painting, GuiText gui, BlendState paperAlpha, BlendState after)
     {
         if (!atlases.TryGetValue(painting.Mask, out var mask) || !atlases.TryGetValue(painting.Picture.Atlas, out var shown))
         {
@@ -187,26 +256,26 @@ public sealed class MenuPass : IDisposable
         var size = MenuPicture.PageSize;
         var area = painting.Area;
         device.BlendState = MaskIn;
-        text.DrawSprites(device, mask, [new GuiSprite(new Vector2(area.X, area.Y), new Vector2(area.Right, area.Bottom), Vector2.Zero,
+        gui.DrawSprites(device, mask, [new GuiSprite(new Vector2(area.X, area.Y), new Vector2(area.Right, area.Bottom), Vector2.Zero,
             Vector2.One, Vector4.One)], size, size);
         device.BlendState = ByMask;
         var p = painting.Picture;
         if (painting.Texels is { } t)
         {
-            text.DrawSprites(device, shown, [new GuiSprite(p.At, p.At + p.Size, new Vector2(t.X / shown.Width, t.Y / shown.Height),
+            gui.DrawSprites(device, shown, [new GuiSprite(p.At, p.At + p.Size, new Vector2(t.X / shown.Width, t.Y / shown.Height),
                 new Vector2((t.X + t.Z) / shown.Width, (t.Y + t.W) / shown.Height), p.Colour)], size, size);
         }
         else
         {
-            Draw(device, [p], [], size, size);
+            Draw(device, [p], [], size, size, gui);
         }
-        device.BlendState = PaperAlpha;
-        text.DrawSprites(device, paper, [PaperSprite], size, size);
-        device.BlendState = BlendState.NonPremultiplied;
+        device.BlendState = paperAlpha;
+        gui.DrawSprites(device, paper, [PaperSprite], size, size);
+        device.BlendState = after;
     }
 
     /// <summary>The sprites (in batches of one atlas and saturation, in order), then the texts.</summary>
-    private void Draw(GraphicsDevice device, List<MenuSprite> sprites, List<MenuText> texts, int width, int height)
+    private void Draw(GraphicsDevice device, List<MenuSprite> sprites, List<MenuText> texts, int width, int height, GuiText gui)
     {
         for (var i = 0; i < sprites.Count;)
         {
@@ -220,7 +289,7 @@ public sealed class MenuPass : IDisposable
                 batch.Add(new GuiSprite(s.At, s.At + s.Size, new Vector2(s.Mirrored ? u1 : u0, s.Source.Top / (float)texture.Height),
                     new Vector2(s.Mirrored ? u0 : u1, s.Source.Bottom / (float)texture.Height), s.Colour));
             }
-            text.DrawSprites(device, texture, batch, width, height, saturation);
+            gui.DrawSprites(device, texture, batch, width, height, saturation);
         }
         foreach (var line in texts)
         {
@@ -232,10 +301,10 @@ public sealed class MenuPass : IDisposable
             var at = line.FromBottom ? line.At - new Vector2(0, (shown.Count(c => c == '\n') + 1) * font.Metrics.LineHeight * line.Scale) : line.At;
             if (line.Shadow)
             {
-                text.Draw(device, font, shown, new Vector4(0, 0, 0, 0.8f * line.Colour.W), at + Vector2.One, line.Scale, int.MaxValue, width, height,
+                gui.Draw(device, font, shown, new Vector4(0, 0, 0, 0.8f * line.Colour.W), at + Vector2.One, line.Scale, int.MaxValue, width, height,
                     line.Alignment);
             }
-            text.Draw(device, font, shown, line.Colour, at, line.Scale, int.MaxValue, width, height, line.Alignment);
+            gui.Draw(device, font, shown, line.Colour, at, line.Scale, int.MaxValue, width, height, line.Alignment);
         }
     }
 
@@ -251,5 +320,6 @@ public sealed class MenuPass : IDisposable
             font.Dispose();
         }
         page.Dispose();
+        atlas?.Dispose();
     }
 }

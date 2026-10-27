@@ -159,11 +159,11 @@ public abstract class MenuPage
     protected Vector4 ColourOf(int item) =>
         item >= 0 && item < Items.Count && !Items[item].Enabled ? Disabled : item == Selected ? Lit : Ink;
 
-    /// <summary>A text on the page; a lit one over an ink shadow (ours: the flat page lacks the book's candle light that sets it off).</summary>
+    /// <summary>A text on the page; on the flat page, a lit one over an ink shadow (ours: it lacks the book's candle light that sets it off).</summary>
     protected static void Text(MenuPicture picture, string font, string text, Vector2 at, Vector4 colour, TextAlignment alignment = TextAlignment.Center,
         float scale = 1, int wrap = 0)
     {
-        if (colour.X > 1)
+        if (colour.X > 1 && !picture.Book.Shown)
         {
             picture.PageTexts.Add(new MenuText(font, text, at + new Vector2(2, 2), alignment, Ink, scale, wrap));
         }
