@@ -39,10 +39,11 @@ once with `--content` and its folder, or delete `settings.json` (see below).
 - The intro before the first chapter and the world map's cutscene before the others, with their narration and
   subtitles. A click, Enter, Space or Esc skips them.
 
-- The menu lies in the 3D book on the desk, lit by a flickering candle, its pages riffling between menus. It needs
+- The menu lies in the 3D book on the desk, lit by a flickering candle, its pages riffling between menus. The book
+  starts shut, the camera flying in; a click, A, Enter or Space opens it. It needs
   the game's `XNAnimation.dll` next to its `Content` folder; without it the page shows flat, and the log says why.
 
-What is not in it yet: the book's opening, the end page with the level's last frame, multiplayer,
+What is not in it yet: the end page with the level's last frame, multiplayer,
 challenges, versus, DLC, and the magick book.
 
 ## Controls

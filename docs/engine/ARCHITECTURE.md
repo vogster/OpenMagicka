@@ -1838,8 +1838,8 @@ All pieces come from the atlas `UI/HUD/hud` (512 × 512) or `UI/HUD/Digits`, thr
 
 The original's menu is a 3D book (the Tome) on a desk, lit by a candle, its pages turning between menus. OpenMagicka
 draws the book, the desk and the candle (OM-83, "The book" below) with the page on the book's right; where the game's
-files lack what it needs, the right page shows flat, as a square of the screen's height in its middle. The book's
-opening and the logos come later.
+files lack what it needs, the right page shows flat, as a square of the screen's height in its middle. The logos
+come later.
 
 **One window, three modes** (`GameShell` on the render thread, `ShellSimulation` on the logic thread):
 - **Menu.** The Tome's pages, with the menu music (`music_menu`).
@@ -1873,12 +1873,22 @@ opening and the logos come later.
   repository. If the DLL, the effect or a model is missing, or the effect does not build, the log says why and the
   page lies flat.
 - The models (`UI/ToM/`): `background_mesh` (the desk, the wall, the things on the desk; never moves), `tome` (covers
-  and clasp, at the end of its `open` clip), and `page` twice, the two stacks, posed by `page_flip`'s `open_left` and
-  `open_right` at their ends. The room lacks the tangent frame the effect reads: it gets one of zeros, which leaves its
+  and clasp: its `open` and `close` clips), and `page` twice, the two stacks, posed by `page_flip`'s `open_left`,
+  `open_right`, `close_left` and `close_right`. The room lacks the tangent frame the effect reads: it gets one of zeros, which leaves its
   normals as they are (ours: what Direct3D 9 is taken to have read). `background` is the unseen camera rig.
-- The camera: the rig's `camera` bone in `idle` at its start, turned half round its own up (it looks along the bone's
-  +Z); 0.75 rad upright field of view, the screen's aspect (no letterbox), near 2, far 200. At 16:9 the right page
-  spans 0.23–0.69 of the screen's width and 7–93 % of its height.
+- The camera: the rig's `camera` bone, turned half round its own up (it looks along the bone's +Z); 0.75 rad upright
+  field of view, the screen's aspect (no letterbox), near 2, far 200. Its pose is taken before its clock steps (a
+  frame behind, as the original's). At rest (`idle`) the right page spans 0.23–0.69 of a 16:9 screen's width and
+  7–93 % of its height.
+- Shut, flying in, opening (`TomeBookState`): the book starts shut (`close`, `close_left`, `close_right` at their
+  ends), the camera far off at `wakeup`'s start and the candle out. The menu's first step with the book drawn starts
+  `wakeup` (8.3 s, from high and far to the shut book); the candle lights after 1.5 s. A click, A, Enter or Space
+  (the last two ours) after the book's first second asks it to open, once: the camera goes six times faster, and stays
+  so for every later move (the original never sets it back). When `wakeup` is over the book opens (`open`,
+  `open_left`, `open_right`, 1.33 s, `ui_menu_bookopen`) as the camera blends to `idle` (0.75 s of the clip, so
+  0.125 s). Shut, the page is bare paper and takes no mouse; opening, it shows and still takes no mouse; while the book
+  moves the menu takes no choice nor going back. Ours: the menu's bottom page is there from the start (the original
+  puts it on as the book opens), and the closing (only reached by backing out of the bottom page) is left out.
 - The candle: a point light at the `Light` bone's bind place (−1.438, 8.539, 3.036), its colours (0.3, 0.2, 0.2),
   (0.7, 0.75, 0.75), (1.3, 1, 1) times its strength × 100 (the effect divides by the squared distance). The strength
   eases to 1 at a speed (24 easing to 6), with a random walk of ±1 on it whose size eases from 1 to 0.2 (`Candle`),
@@ -1910,7 +1920,8 @@ opening and the logos come later.
   going stays on the right page and the one coming back rides in on them. A cutscene riffles a page of its own (no
   page put on): the map's title page turns away over the map, an intro picture (as it ended) over the next one. What
   a page puts over the screen while drawn on the sheets is left out. Without the book the pages change at once.
-- Ours, for now: the book is open from the start (no fly-in, no opening), and the candle does not dim for the intro.
+- The intro dims the room: entered, the candle goes out over about a second (target 0, no wobble, speed 1.5); with
+  the title page (8 s on) it comes back slowly (1, 0.2, speed 0.5); left, it burns as in the menu (1, 0.2, 6).
 
 **Input** (`MenuInputReader`): the mouse hovers and clicks (a left press released, hit-tested in page pixels); the
 arrows, the d-pad and the left stick move (repeating every 0.25 s while held); Enter, Space or A choose; Esc,
@@ -2014,7 +2025,7 @@ or B too) and nothing remembers it was seen:
   (288, 288, 448, 448) (ours: centred; the original's lobby has it at the left, by the players).
 - A painting (`MenuPainting`) is the original's three draws into the page's target: the mask's alpha in, the picture
   blended by the target's alpha (the alpha kept), the paper's alpha back.
-- Ours, not the original's: the room's candle does not dim; the subtitles follow the interface size.
+- Ours, not the original's: the subtitles follow the interface size.
 
 **Starting** (the launcher, without `--level`, `--viewer`, `--check-effects` or `--placeholder`):
 - Magicka is found where the player said (`--content`, `MAGICKA_DIR`), else where the settings remember, else in
@@ -2028,7 +2039,7 @@ or B too) and nothing remembers it was seen:
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the book's fly-in and opening, its shadow map; the logos; the end page between a chapter and the next one's map;
+- the book's shadow map; the logos; the end page between a chapter and the next one's map;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - the original's `campaign.sav` read or written (OM-55);
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.

@@ -70,7 +70,7 @@ public sealed class TomeMenu(IMenuHost host)
     /// </summary>
     public TomeBook? Book { get; set; }
 
-    /// <summary>The book riffles.</summary>
+    /// <summary>The book riffles or moves: the menu takes no choice nor going back.</summary>
     public bool IsTurning => Book is { IsLocked: true };
 
     public IMenuHost Host { get; } = host ?? throw new ArgumentNullException(nameof(host));
@@ -201,6 +201,14 @@ public sealed class TomeMenu(IMenuHost host)
     public void Update(MenuInput input, Point screen, float dt = 0)
     {
         Screen = screen;
+        if (Book is { IsShut: true } shut)
+        {
+            if (shut.State == TomeBookState.Closed && (input.Accept || input.Click))
+            {
+                shut.AskToOpen();                                             // a click or A opens the shut book (Enter and Space: ours)
+            }
+            return;
+        }
         if (IsTurning)
         {
             input = input with { Accept = false, Back = false, Delete = false };   // the book's lock: not the moves, nor the mouse
@@ -250,7 +258,11 @@ public sealed class TomeMenu(IMenuHost host)
         Screen = screen;
         picture.ShowsPage = Page is not null;
         var riffling = picture.Book.Shown && IsTurning;
-        (riffling && leaving is not null ? leaving : Page)?.Draw(picture);
+        var front = riffling && leaving is not null ? leaving : Page;
+        if (Book is not { State: TomeBookState.Closed })                      // the shut book's page is bare paper
+        {
+            front?.Draw(picture);
+        }
         if (riffling && turning is { } sheets)
         {
             OnSheets(picture, sheets);

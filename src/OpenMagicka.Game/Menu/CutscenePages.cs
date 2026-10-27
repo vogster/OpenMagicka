@@ -109,6 +109,7 @@ public abstract class CutscenePage(TomeMenu menu, int slot, int chapter, bool re
         if (fade >= 1)
         {
             gone = true;
+            Leave();
             Menu.PopSilently();
             Menu.Host.Play(slot, chapter, resume, StartNarration());
         }
@@ -122,6 +123,11 @@ public abstract class CutscenePage(TomeMenu menu, int slot, int chapter, bool re
 
     /// <summary>The fade to black begins.</summary>
     protected void End() => fade = Math.Max(fade, 0);
+
+    /// <summary>The page goes, before the chapter loads.</summary>
+    protected virtual void Leave()
+    {
+    }
 
     /// <summary>What the loading screen narrates, its cue started (none but the intro's, played through).</summary>
     protected virtual Narration? StartNarration() => null;
@@ -202,7 +208,7 @@ public sealed class MapCutscenePage : CutscenePage
 }
 
 /// <summary>
-/// The intro before the first chapter, as the original's: the room dark and <c>music_intro</c> for 8 s, the narration
+/// The intro before the first chapter, as the original's: the room dark (the book's candle out) and <c>music_intro</c> for 8 s, the narration
 /// starting at 3 s under the title page (its words as subtitles), the title page till 25 s, then six pictures painted
 /// into the paper, each with its words and its narration, the third to fifth moving. After the last a fade of 2 s, and
 /// the loading screen narrates the last words, the level waiting for them; skipped, it fades and loads plainly.
@@ -235,7 +241,15 @@ public sealed class IntroPage : CutscenePage
     /// <summary>The picture shown (1…6), 0 the title page, −1 the lead-in.</summary>
     public int Slide => slide;
 
-    public override void Enter() => Menu.Host.PlayMusic("music_intro");
+    /// <summary>The music, and the room going dark over about a second (the book's candle out, still).</summary>
+    public override void Enter()
+    {
+        Menu.Host.PlayMusic("music_intro");
+        Menu.Book?.Candle.Aim(0, 0, 1.5f);
+    }
+
+    /// <summary>The candle back as it burns in the menu.</summary>
+    protected override void Leave() => Menu.Book?.Candle.Aim(1, 0.2f, 6);
 
     protected override void Play(float dt)
     {
@@ -257,6 +271,7 @@ public sealed class IntroPage : CutscenePage
         if (slide < 0)
         {
             (slide, left) = (0, TitleTime);
+            Menu.Book?.Candle.Aim(1, 0.2f, 0.5f);                             // the room comes back, slowly
         }
         else if (slide < SlideTimes.Length)
         {

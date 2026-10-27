@@ -147,15 +147,20 @@ public class TomeRiffleTests
         return picture;
     }
 
-    /// <summary>A book of bones and clips alone (no game files): a rig with its camera and light, the book, a page.</summary>
-    internal static TomeBook Book()
+    /// <summary>A book of bones and clips alone (no game files), open or shut: a rig with its camera and light, the book, a page; each clip a second long.</summary>
+    internal static TomeBook Book(bool open = true)
     {
         static SkeletonBone Bone(string name, int parent, Vector3 at = default) =>
             new(name, parent, BonePose.Identity with { Translation = at }, Matrix4x4.Identity);
         static AnimatedModel Model(SkeletonBone[] bones, params string[] clips) =>
             new(new Skeleton(bones), clips.ToDictionary(c => c, c => new AnimationClip(c, 1)));
-        var rig = Model([Bone("root", -1), Bone("camera", 0, new Vector3(0, 9, 0)), Bone("Light", 0, new Vector3(-1, 8, 3))], "idle");
-        var page = Model([Bone("root", -1)], "open_left", "open_right", "flip_left", "flip_right");
-        return new TomeBook(rig, Model([Bone("root", -1)], "open"), page, page, new Candle(() => 0));
+        var rig = Model([Bone("root", -1), Bone("camera", 0, new Vector3(0, 9, 0)), Bone("Light", 0, new Vector3(-1, 8, 3))], "wakeup", "idle");
+        var page = Model([Bone("root", -1)], "open_left", "open_right", "close_left", "close_right", "flip_left", "flip_right");
+        var book = new TomeBook(rig, Model([Bone("root", -1)], "open", "close"), page, page, new Candle(() => 0));
+        if (open)
+        {
+            book.Settle();
+        }
+        return book;
     }
 }

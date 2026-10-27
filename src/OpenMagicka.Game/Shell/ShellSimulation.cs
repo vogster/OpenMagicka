@@ -24,6 +24,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     private readonly TomeMenu menu;
     private readonly TomeBook? book;
     private readonly Func<Point, Point, Vector2?>? bookPicking;
+    private bool bookSeen;
     private readonly MenuInputReader reader = new();
     private ShellMode mode = ShellMode.Menu;
     private Point realScreen;
@@ -141,7 +142,19 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         var read = reader.Read(input, (float)dt);
         var laid = screen;                                                    // the mouse over the screen's pieces, on their smaller screen
         read = read with { Screen = new Point(read.Screen.X * laid.X / Math.Max(1, realScreen.X), read.Screen.Y * laid.Y / Math.Max(1, realScreen.Y)) };
-        book?.Update((float)dt);                                              // in every mode: a riffle a chapter began in lands
+        if (!bookSeen && Book is { } arrived)
+        {
+            bookSeen = true;
+            if (mode != ShellMode.Menu || menu.Page is not MainPage || menu.HasBox)
+            {
+                arrived.Settle();                                             // ready only once the player went on: open, no fly-in
+            }
+        }
+        // In every mode: a riffle a chapter began in lands, the fly-in goes on.
+        if (Book?.Update((float)dt) is { } events && events.HasFlag(TomeBookEvents.Opening))
+        {
+            Cue("ui_menu_bookopen");
+        }
         switch (mode)
         {
             case ShellMode.Menu:

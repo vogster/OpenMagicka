@@ -153,7 +153,9 @@ public class TomeBookTests
     private static TomeBook Book()
     {
         var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
-        return TomeBook.Load(loader) ?? throw new InvalidOperationException("the book did not load");
+        var book = TomeBook.Load(loader) ?? throw new InvalidOperationException("the book did not load");
+        book.Settle();
+        return book;
     }
 
     private static void AssertNear(Vector2 expected, Vector2 actual)

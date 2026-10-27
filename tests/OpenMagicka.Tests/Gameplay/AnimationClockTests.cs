@@ -8,6 +8,25 @@ public class AnimationClockTests
     private static readonly AnimationClip Swing = new("swing", 0.5f);
 
     [Fact]
+    public void Stopped_AClipStaysWhereItIs_NotFinished_ItsBlendDropped()
+    {
+        var clock = new AnimationClock();
+        clock.Start(Walk, loop: false);
+        clock.Update(0.3f);
+        clock.CrossFade(Swing, 1, loop: false);
+        clock.Stop();
+        clock.Update(0.5f);
+
+        Assert.Equal((0.3f, false, false, false), (clock.Time, clock.IsPlaying, clock.HasFinished, clock.IsCrossFading));
+        Assert.Same(Walk, clock.Clip);
+        clock.Update(2);
+        clock.Start(Walk, loop: false);
+        clock.Update(2);
+        clock.Stop();
+        Assert.False(clock.HasFinished);
+    }
+
+    [Fact]
     public void AClip_RunsAtTheCharactersAndItsOwnSpeed_AndFinishesAtItsEnd()
     {
         var clock = new AnimationClock { Speed = 2, ClipSpeed = 0.5f };
