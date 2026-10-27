@@ -84,7 +84,17 @@ public sealed partial class DeferredRenderer
     {
         try
         {
-            return (await Task.WhenAll(shaders.Load("FilterEffect"), shaders.Load("BloomEffect")).ConfigureAwait(false), null);
+            var effects = await Task.WhenAll(shaders.Load("FilterEffect"), shaders.Load("BloomEffect")).ConfigureAwait(false);
+            GameEffect? fade;
+            try
+            {
+                fade = await shaders.Load("FadeTransitionEffect").ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                fade = null;                                                  // without it the screen's cover is drawn plainly
+            }
+            return ([.. effects, fade!], null);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

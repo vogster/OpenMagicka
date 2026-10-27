@@ -25,6 +25,9 @@ public sealed class PlayFrame
 
     public ScreenCover Cover { get; set; }
 
+    /// <summary>The screen's transition, drawn before the bloom where the renderer can (the cover is its plain form).</summary>
+    public Engine.Screen.TransitionPicture Transition { get; set; }
+
     /// <summary>The models to draw (the characters, their items, the props, the lying items and books).</summary>
     public List<DrawnModel> Models { get; } = [];
 
@@ -149,6 +152,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escap
         frame.SceneName = scene?.Definition.Name;
         frame.Settings = scene?.Definition.Settings;
         frame.Cover = play.Cover;
+        frame.Transition = play.Transitions.Picture;
         play.Requests.Clear();                                                // nothing takes them yet (OM-49, OM-51)
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
         play.Spells.WriteModels(frame.Models);

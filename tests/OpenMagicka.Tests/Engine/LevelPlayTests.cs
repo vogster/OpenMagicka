@@ -96,6 +96,7 @@ public class LevelPlayTests
             <Trigger id="go" autorun="false"><Then><changeScene scene="t_s2" spawnPoint="start" transition="fade" transitionTime="1" spawnPlayers="true"/></Then></Trigger>
             """);
         play.Start();
+        Run(play, LevelPlay.FadeIn + 0.1f);                                                         // the start's fade-in over
         var scripts = play.Scene!.Scripts!;
 
         scripts.ExecuteTrigger(ScriptScene.Hash("dark"), null);
@@ -115,6 +116,79 @@ public class LevelPlayTests
         Assert.Equal("t_s2", play.Scene!.Definition.Name);
         Run(play, 1.2f);
         Assert.Equal(0, play.Cover.Amount, 3);                                                     // back in
+    }
+
+    [Fact]
+    public void ALevel_FadesInFromBlack_AndAnOverridingFadeKeepsTheSceneChangeCovered()
+    {
+        using var play = Play("""
+            <Trigger id="go" autorun="false"><Then><changeScene scene="t_s2" spawnPoint="start" transition="fade" transitionTime="1" spawnPlayers="true"/></Then></Trigger>
+            """, """
+            <Trigger id="dark"><Then><fade fadeIn="true" time="0" override="true"/></Then></Trigger>
+            """);
+        play.Start();
+        Assert.Equal(1, play.Cover.Amount, 3);                                                     // the start: black,
+        Run(play, LevelPlay.FadeIn + 0.1f);
+        Assert.Equal(0, play.Cover.Amount, 3);                                                     // faded in
+
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("go"), null);
+        Run(play, 3);
+        Assert.Equal("t_s2", play.Scene!.Definition.Name);
+        Assert.Equal(1, play.Cover.Amount, 3);                                                     // the new scene's override fade: no way back in
+    }
+
+    [Fact]
+    public void ANewScenesPlainStartupFade_IsReplacedByTheWayBack_AndAStartsPlainFadeIsDropped()
+    {
+        using var play = Play("""
+            <Trigger id="faint"><Then><fade fadeIn="true" time="0"/></Then></Trigger>
+            <Trigger id="go" autorun="false"><Then><changeScene scene="t_s2" spawnPoint="start" transition="fade" transitionTime="1" spawnPlayers="true"/></Then></Trigger>
+            """, """
+            <Trigger id="dark"><Then><fade fadeIn="true" time="0"/></Then></Trigger>
+            """);
+        play.Start();
+        Run(play, LevelPlay.FadeIn + 0.1f);
+        Assert.Equal(0, play.Cover.Amount, 3);                                                     // the start's own fade dropped: in from black
+
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("go"), null);
+        Run(play, 3);
+        Assert.Equal("t_s2", play.Scene!.Definition.Name);
+        Assert.Equal(0, play.Cover.Amount, 3);                                                     // the way back replaced the plain fade
+    }
+
+    [Fact]
+    public void AnOverrideDuringTheWayOut_KeepsTheScreenCovered()
+    {
+        using var play = Play("""
+            <Trigger id="go" autorun="false"><Then><changeScene scene="t_s2" spawnPoint="start" transition="fade" transitionTime="1" spawnPlayers="true"/></Then></Trigger>
+            <Trigger id="hold" autorun="false"><Then><fade fadeIn="true" time="0.5" override="true"/></Then></Trigger>
+            """);
+        play.Start();
+        Run(play, 1);
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("go"), null);
+        Run(play, 0.3f);
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("hold"), null);
+        Run(play, 3);
+
+        Assert.Equal("t_s2", play.Scene!.Definition.Name);
+        Assert.Equal(1, play.Cover.Amount, 3);                                                     // the scene change does not come back in
+    }
+
+    [Fact]
+    public void AnEndOnAClearScreen_FlashesItsColour_ThenGoes()
+    {
+        using var play = Play("""
+            <Trigger id="flash" autorun="false"><Then><fade fadeIn="false" color="1,1,1,1" time="0.5"/></Then></Trigger>
+            """);
+        play.Start();
+        Run(play, 1);
+        play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("flash"), null);
+        play.Tick(Tick);
+
+        Assert.True(play.Cover.Amount > 0.9f);
+        Assert.Equal(1, play.Cover.Color.X);
+        Run(play, 0.6f);
+        Assert.Equal(0, play.Cover.Amount, 3);
     }
 
     private static System.Numerics.Vector3 Numerics(float x, float y, float z) => new(x, y, z);

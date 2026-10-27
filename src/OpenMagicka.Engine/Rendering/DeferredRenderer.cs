@@ -15,7 +15,7 @@ namespace OpenMagicka.Engine.Rendering;
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
     CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null,
-    GuiPictures? Gui = null, IReadOnlyList<bool>? Highlighted = null);
+    GuiPictures? Gui = null, IReadOnlyList<bool>? Highlighted = null, Screen.TransitionPicture Transition = default);
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -136,7 +136,7 @@ public sealed partial class DeferredRenderer : IDisposable
         {
             try
             {
-                post = new PostPass(postEffects[0], postEffects[1]);
+                post = new PostPass(postEffects[0], postEffects[1], postEffects.Length > 2 ? postEffects[2] : null);
             }
             catch (InvalidDataException e)
             {
@@ -181,6 +181,9 @@ public sealed partial class DeferredRenderer : IDisposable
 
     /// <summary>Why the spells show only their particles (their own pictures could not be set up), or null.</summary>
     public string? SpellsUnavailable { get; private set; }
+
+    /// <summary>Whether the screen's transition is drawn in the frame (else its caller covers the screen).</summary>
+    public bool DrawsTransitions => post?.DrawsTransitions == true;
 
     /// <summary>Why the filter and bloom are not applied (the scene is then shown as it is), or null.</summary>
     public string? PostUnavailable { get; private set; }
@@ -271,19 +274,24 @@ public sealed partial class DeferredRenderer : IDisposable
         {
             spells?.DrawShields(device, shielded, globals, depth!);
         }
-        if (frame.Gui is { } screen)
+        void DrawGui(GraphicsDevice on)
         {
-            var laid = MenuPicture.Scaled(new Point(main!.Width, main.Height), screen.Scale);   // the interface's size (OM-87)
-            gui?.Draw(device, screen, globals.ViewProjection, laid.X, laid.Y);
+            if (frame.Gui is { } screen)
+            {
+                var laid = MenuPicture.Scaled(new Point(main!.Width, main.Height), screen.Scale);   // the interface's size (OM-87)
+                gui?.Draw(on, screen, globals.ViewProjection, laid.X, laid.Y);
+            }
         }
 
         UnbindTextures(device);
         if (post is not null)
         {
-            post.Draw(device, quad, main!, frame.Post ?? PostProcessing.Default);
+            post.Draw(device, quad, main!, frame.Post ?? PostProcessing.Default, DrawGui, frame.Transition);   // the GUI after the filter, as the original's
         }
         else
         {
+            DrawGui(device);
+            UnbindTextures(device);
             device.SetRenderTarget(null);
             Blit(device, main!);
         }

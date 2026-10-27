@@ -30,7 +30,8 @@ public sealed partial class LevelPlay : IDisposable
     private readonly Dictionary<int, CameraMesh?> meshes = [];
     private ScreenFade? fade;
     private SceneTransition? transition;
-    private float fadeAmount, fadeFrom, fadeTime, transitionAmount;
+    private bool overridden, starting;
+    private SceneTransition? pendingIn;
     private int meshScene = -1;
 
     /// <summary>Plays a level of the game's content (a .lvl path), its first player a wizard, its dialogs in a language.</summary>
@@ -120,7 +121,26 @@ public sealed partial class LevelPlay : IDisposable
     /// <summary>The scene now, or null before the start.</summary>
     public LevelScene? Scene => Level.Current;
 
-    public ScreenCover Cover { get; private set; }
+    /// <summary>The screen's transition (OM-67): the scripts' fades and the scene changes', by the original's rules.</summary>
+    public Engine.Screen.ScreenTransitions Transitions { get; } = new();
+
+    /// <summary>What covers the screen now: the transition's colour and amount.</summary>
+    public ScreenCover Cover => Transitions.Picture is { Kind: not Engine.Screen.TransitionKind.None } shown
+        ? new ScreenCover(new Numerics.Vector4(shown.Colour, 1), shown.Amount) : default;
+
+    /// <summary>The time a level fades in from black once it starts, as the original's (and after a restart).</summary>
+    public const float FadeIn = 0.5f;
+
+    /// <summary>Back to the last checkpoint (<see cref="PlayedLevel.RestartAtCheckpoint"/>), the level fading in from black as the original's; false with none.</summary>
+    public bool RestartAtCheckpoint()
+    {
+        if (!Level.RestartAtCheckpoint())
+        {
+            return false;
+        }
+        Transitions.End(Engine.Screen.TransitionKind.Fade, Numerics.Vector3.Zero, FadeIn);
+        return true;
+    }
 
     /// <summary>The level's requests for the systems beyond the world, since the frame last took them (logic thread).</summary>
     public List<ScriptRequest> Requests { get; } = [];
@@ -142,6 +162,9 @@ public sealed partial class LevelPlay : IDisposable
     public void Start()
     {
         Level.Start();
+        Transitions.Clear();                                                  // the first scene drops what was left, as the original's,
+        Transitions.End(Engine.Screen.TransitionKind.Fade, Numerics.Vector3.Zero, FadeIn);   // and the level fades in from black
+        starting = true;                                                      // (its first tick's fades: only an override's stays)
         if (Resume is var (saved, apply))
         {
             var fits = saved.LevelHash == Hashes.Level && saved.DialogHash == Hashes.Dialogs;
@@ -272,9 +295,11 @@ public sealed partial class LevelPlay : IDisposable
         new(ToXna(avatar.Position), avatar.Body.IsTouchingGround ? avatar.Position.Y + avatar.Body.HeightOffset : null);
 
     /// <summary>
-    /// A new fade runs from where the cover is to all (in) or none (out) over its time; a scene change's
-    /// transition covers the screen over its time out, and uncovers it over its time in. The cover is the
-    /// stronger of the two, in the fade's colour (black for a transition alone).
+    /// The scripts' fades and the scene changes into the screen's transition, as the original's: a fade in (to its colour)
+    /// begins one, out ends one (from the colour, even on a clear screen); a scene change begins its kind to black over
+    /// its time, and ends it the same way once the new scene has run its first update (its startup's fades come first,
+    /// and the end replaces them), unless a fade with <c>override</c> came since. At the level's start, the first
+    /// update's plain fades are dropped (the fade-in from black stands). Then the transition steps on.
     /// </summary>
     private void StepCover(float dt)
     {
@@ -282,25 +307,52 @@ public sealed partial class LevelPlay : IDisposable
         if (!ReferenceEquals(stage.Fade, fade))
         {
             fade = stage.Fade;
-            (fadeFrom, fadeTime) = (fadeAmount, 0);
-            fadeAmount = fade is null ? 0 : fadeAmount;                       // cleared (a checkpoint's restart): the screen is uncovered
+            if (starting && fade is { Override: false })
+            {
+                // the start's plain fade: dropped, as the original's first scene drops it
+            }
+            else if (fade is { } started)
+            {
+                var colour = new Numerics.Vector3(started.Color.X, started.Color.Y, started.Color.Z);
+                if (started.In)
+                {
+                    Transitions.Begin(Engine.Screen.TransitionKind.Fade, colour, started.Time);
+                }
+                else
+                {
+                    Transitions.End(Engine.Screen.TransitionKind.Fade, colour, started.Time);
+                }
+                overridden |= started.Override;
+            }
+            // none: a checkpoint's restart cleared the stage; RestartAtCheckpoint fades the level in itself
         }
-        if (fade is { } current)
+        starting = false;
+        if (pendingIn is { } back && !overridden)
         {
-            fadeTime += dt;
-            var done = current.Time > 0 ? Math.Clamp(fadeTime / current.Time, 0, 1) : 1;
-            fadeAmount = float.Lerp(fadeFrom, current.In ? 1 : 0, done);
+            Transitions.End(Kind(back.Kind), Numerics.Vector3.Zero, back.Time);
         }
+        pendingIn = null;
         if (!ReferenceEquals(stage.Transition, transition))
         {
             transition = stage.Transition;
+            if (transition is { Kind: not ScriptTransition.None } change)
+            {
+                if (change.Out)
+                {
+                    overridden = false;
+                    Transitions.Begin(Kind(change.Kind), Numerics.Vector3.Zero, change.Time);
+                }
+                else
+                {
+                    pendingIn = change;                                       // after the new scene's first update
+                }
+            }
         }
-        transitionAmount = transition is { } change
-            ? Math.Clamp(transitionAmount + (change.Out ? 1 : -1) * (change.Time > 0 ? dt / change.Time : 1), 0, 1)
-            : 0;
-        var color = fade?.Color ?? new Numerics.Vector4(0, 0, 0, 1);
-        Cover = new ScreenCover(color with { W = 1 }, Math.Max(fadeAmount, transitionAmount));
+        Transitions.Step(dt);
     }
+
+    private static Engine.Screen.TransitionKind Kind(ScriptTransition kind) =>
+        kind == ScriptTransition.CrossFade ? Engine.Screen.TransitionKind.CrossFade : Engine.Screen.TransitionKind.Fade;
 
     private static Xna.Vector3 ToXna(Numerics.Vector3 v) => new(v.X, v.Y, v.Z);
 

@@ -371,13 +371,32 @@ them; what the engine must reproduce is how each pass is fed (from the original'
   shaders end with `exp` and `1 − …`), so light adds up without saturating. The last pass decodes it
   (x = −log2(1 − c)) and writes x to the screen; showing Main directly is darker than the game.
 - **Post-processing** (OpenMagicka: `PostPass`), after the particles:
-  - `FilterEffect` from Main into a screen-sized target: decodes, scales and offsets the light by
+  - `FilterEffect` from Main into the GUI target (screen-sized, 4× multisampled where the driver can,
+    its own depth-stencil; FNA resolves it when it is left): decodes, scales and offsets the light by
     `Brightness` and `Contrast` around a middle of 0.5, applies a colour matrix built (in the
     effect's preshader) from `SaturateMatrix`, `IdentityMatrix` and `Saturation`, and encodes
     again. The two matrices keep the values the effect file gives them; the original never sets them. The values come from the scene's `Filter` (default 1, 1, 1);
     the original first copies Main to Secondary and draws the scene's post effects there.
-  - The original draws the game's GUI and screen transitions on that target here, so they bloom
-    too (not in OpenMagicka yet: there is no GUI).
+  - The game's GUI is drawn on that target after the filter (so the scene's brightness, contrast and
+    saturation never touch it), then the screen's transition over it (OM-67, below), so both bloom too.
+  - **The transition** (`ScreenTransitions`, stepped on the logic thread; drawn by `PostPass`):
+    one at a time, None, Fade or CrossFade. A begin covers the screen (its amount from 0 to 1), an end
+    uncovers it (from 1 to 0); either starts from its start whatever the screen shows, so an end on a
+    clear screen flashes its colour (the scripts' white flashes). An out reaching its end stays,
+    covering the screen, till another starts; an in is gone. Both say they ended (the original's
+    `TransitionEnd` fires either way). Time 0 is done in one step. The original's runs on through the
+    pause menu; ours steps with the level's ticks, so the pause stops it for now. The colour is kept as
+    bytes, its alpha left out. Drawn with `FadeTransitionEffect` from the GUI target
+    into a plain one: the picture toward the colour by the amount, **in encoded light** (black stays
+    black, white is the brightest and blooms). Ours: a cross-fade, without a captured last frame yet,
+    is a fade through black (as the original's from black; the scene changes are black anyway).
+  - Who starts one: a script's `fade` (in: begin; out: end; `override` keeps the scene change from
+    ending its own); a scene change (its kind to black over its time, and back the same once the new
+    scene has run its first update, replacing what its startup faded, unless overridden); the level's
+    start (what was left dropped, then an end from black over 0.5 s; the first update's plain fades
+    dropped, an override's kept); a checkpoint's restart (back from black over 0.5 s). Ours: a fade and
+    a scene change asked in one update are taken fade first. Not yet: the level's
+    last frame cross-faded into the Tome, the menu's own fades (they keep `MenuPicture.Cover`).
   - `BloomEffect` (techniques 0 horizontal blur, 1 vertical blur, 2 combine, 3 down-sample):
     down-sample into a buffer a sixteenth of the screen on each side, keeping what is above
     `Threshold` (`SourceDimensions` = the source's size); blur horizontally into a second such
@@ -433,8 +452,8 @@ Important details:
 - `TextureLODBias` = −0.5 on samplers 0…7.
 - Light is accumulated in `Color` RGBA8, so there is no HDR. There is a GUI parameter `ScaleToHDR`.
 - `GUIScale` = screen height / 720.
-- Transitions (`Transitions`): None, Fade, CrossFade. Color and time are configurable,
-  `TransitionEnd` is called when the In direction completes.
+- Transitions (`Transitions`): None, Fade, CrossFade. Color and time are configurable;
+  `TransitionEnd` is raised when either direction completes (only an In is then cleared; §3.2).
 - The "pixels → clip" matrix for the GUI accounts for the DX9 half-pixel offset (−1−1/W, +1+1/H).
 
 ### 3.4 Light sources

@@ -220,7 +220,7 @@ public sealed partial class ShellSimulation
         (ending, byDeath) = (null, false);
         switch (end.Next)
         {
-            case EndingNext.Restart when !play!.Level.RestartAtCheckpoint():
+            case EndingNext.Restart when !play!.RestartAtCheckpoint():
                 RestartLevel();                                               // no checkpoint yet: the level from its start
                 break;
             case EndingNext.NextChapter:

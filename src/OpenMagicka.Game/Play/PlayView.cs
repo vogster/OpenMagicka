@@ -147,7 +147,10 @@ public sealed class PlayView : IDisposable
             StepParticles(fixedStep);
             Batches = renderer.Render(device, level, Frame(frame, alpha, aspect));
         }
-        DrawCover(device, frame.Cover);
+        if (level is null || Deferred() is not { DrawsTransitions: true })
+        {
+            DrawCover(device, frame.Cover);                                   // no pipeline to draw it in: a plain cover over the picture
+        }
     }
 
     private DeferredFrame Frame(PlayFrame frame, float alpha, float aspect)
@@ -161,7 +164,8 @@ public sealed class PlayView : IDisposable
         return new DeferredFrame(globals, level!.Sun, SceneLighting.Fog(frame.Settings), new Vector3(Sky.R, Sky.G, Sky.B) / 255f, ground,
             (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models.Instances(frame.Models),
             CharacterRimLight.For(frame.Settings), placed, frame.Spells, models.Get, frame.Gui,
-            placed is not null && frame.Highlighted.Count == frame.Parts.Count ? frame.Highlighted : null);   // the glow only with the parts it lines up with
+            placed is not null && frame.Highlighted.Count == frame.Parts.Count ? frame.Highlighted : null,   // the glow only with the parts it lines up with
+            frame.Transition);
     }
 
     /// <summary>The level's parts where the frame has them, when the frame is of the level shown (none: at rest).</summary>

@@ -169,7 +169,7 @@ public class EffectDirectorTests
     }
 
     [Fact]
-    public void ARestart_UncoversTheScreen()
+    public void ARestart_FadesTheLevelBackInFromBlack()
     {
         using var play = Play("""
             <Trigger id="save"><Then><triggerCheckpoint spawnPoint="start"/></Then></Trigger>
@@ -184,8 +184,13 @@ public class EffectDirectorTests
         }
         Assert.Equal(1, play.Cover.Amount, 3);
 
-        Assert.True(play.Level.RestartAtCheckpoint());
+        Assert.True(play.RestartAtCheckpoint());
         play.Tick(Tick);
+        Assert.True(play.Cover.Amount > 0.9f);                                                      // back from black, as the original's
+        for (var i = 0; i < 40; i++)
+        {
+            play.Tick(Tick);
+        }
 
         Assert.Equal(0, play.Cover.Amount, 3);
     }
