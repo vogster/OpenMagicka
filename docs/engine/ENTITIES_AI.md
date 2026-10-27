@@ -681,6 +681,46 @@ OpenMagicka has `Idle`, `Move`, `Hit`, `KnockDown`, `Flying`, `Pushed`, `Stun`, 
 with the transitions into them, come with panic and fear, magicks, grips and bloating. A character made
 without animations has no state machine and dies on the frame its hit points reach 0 (§2.5).
 
+### 5.5 Ours: grips (OM-89)
+
+- **Who and how** (`Character.Grip.cs`): only an NPC grips, and only its mind's target: the `Grip` action, every
+  frame of its window, takes hold when the target is within reach on the ground plane (from the action's bone and
+  radius, or from the NPC and its own radius) and in sight past the level and any spell shield. Refused for a victim
+  already gripped, dead, drowning, immortal, ethereal, heavier than 500, or (to ride it) without `move_stumble`, and
+  for a gripper lying knocked down. The tolerance is the action's (its 0 stands for 10; one below 1 for 3); a victim
+  that holds someone lets go, its vines go; gripper and victim pass through each other. In the game's data: Pickup
+  (trolls, the swamp thing, the shoggoth, the sausage makers: at a hand bone), Ride (goblins and slime cubes, on the
+  victim's `spine`), Hold (zombies, orcs, Vlad).
+- **Held each frame, after the state machine** (so a `Drop` is chosen the frame before the grip goes): a gripper lets
+  go when it should (`ShouldReleaseGrip`) or either is dead; a picked-up victim is carried at the gripper's bone (its
+  frame turned half round, as a held item's); a held one stands still with the gripper put in front of it, facing it;
+  a rider sits on its victim's bone (turned for a spine), lifted by its half height; a gripper that does not ride
+  stands still. Ours: no body is made immovable; the placement each frame holds them.
+- **Ending** (`ShouldReleaseGrip`): the victim burns, is immortal, has struggled up to the tolerance, or has hurt the
+  gripper (the blows it dealt, after magnitude) past its hit tolerance; either dies or drowns; the gripper falls, is
+  pushed, flies or panics. Released, the victim may turn, its struggle points go, and it is put down on the ground
+  under it (from 3 above, 6 down; capsule half and 0.1 over the hit); it may walk again unless the gripper's state is
+  one that stops it (the original's slip; the victim's next state sets it right). A knockdown clears the gripper's
+  tally.
+- **States**: `Gripping` (`idle_grip` or `idle`; no turning; on its way to losing the grip a picked-up victim on the
+  ground is dropped, else it is knocked down when it can be), `GripAttack` (its queued clips one after another,
+  holding the last frame), `Drop` (the ability's drop clip or `hit`). In the common checks a held victim is
+  entangled (ours: a picked-up one too, from any state, so none walks on hung up), a gripped one does not fly, a
+  gripper losing its grip drops or is knocked down (its push cancelled), a gripper does not jump and (not riding)
+  holds; Idle turns to `GripAttack` when one is queued; `Entangled` is left only when free; a leap or dash that took
+  hold goes to `Gripping`, a flight or landing ends at once for one gripping or gripped. Leaving the world or the
+  scene lets every grip go, both ways. A ridden victim stumbles: `Panic` with `move_stumble`, running backwards at 0.6 of its
+  speed with a wobble.
+- **Struggling** (`BreakFree`): the template's strength (whole) more points (an NPC's every half second), and a tear
+  at the vines; a player's boost button struggles while gripped (the wizards' strength is 1: ten presses against a
+  tolerance of 10); the `BreakFree` animation action struggles while gripped. The points never fade.
+- **Actions**: `Grip` as above (ours: a ride's or hold's bone found on the victim's skeleton); `DamageGrip` (each
+  frame of its window, the damages hit the NPC itself or its victim); `ReleaseGrip`; `ThrowGrip` (at its start, the
+  victim let go, put down, then pushed by the throwing ability's aim; a player's along its facing tipped up a tenth);
+  `OverkillGrip`. A thrown victim takes its throw's damages once when it next meets the level or a liquid.
+- **Not yet**: the NPC grip abilities and the Gripped/Gripping fuzzy values; the frog's tongue; the scripts' and
+  magicks' releases; the HUD's "Grabbed" and the struggle prompt; `SetItemAttach` (no game file uses it).
+
 ---
 
 ## 6. Avatar (player)

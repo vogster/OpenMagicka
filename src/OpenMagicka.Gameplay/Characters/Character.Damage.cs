@@ -63,6 +63,7 @@ public sealed partial class Character
             return result;                                                    // deflected: statuses only
         }
         HitPoints = outcome.HitPoints;
+        NoteGripDamage(attacker, outcome.Dealt);
         if (outcome.Result.HasFlag(DamageResult.Damaged))
         {
             TimeSinceDamage = 0;
@@ -229,6 +230,15 @@ public sealed partial class Character
         if (report.KnockedDownSelf)
         {
             KnockDown();
+        }
+        if (CollisionDamages.Count > 0 && (report.ImpactSpeed is not null || Body.IsInWater))
+        {
+            var damages = CollisionDamages;
+            CollisionDamages = [];                                            // a thrown victim meets the level: its throw's damages, once (OM-89)
+            foreach (var damage in damages)
+            {
+                Damage(damage, LastAttacker, Position);
+            }
         }
     }
 }

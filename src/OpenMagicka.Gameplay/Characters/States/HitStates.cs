@@ -10,6 +10,7 @@ internal sealed class KnockDownState : CharacterState
 
     protected internal override void Enter(Character character)
     {
+        character.ReleaseAttachedCharacter();                                 // a fall lets go of a victim (OM-89)
         character.Body.AllowRotate = false;
         character.GoToAnimation(Down, 0.05f);
     }
@@ -45,6 +46,7 @@ internal sealed class FlyingState : CharacterState
 {
     protected internal override void Enter(Character character)
     {
+        character.ReleaseAttachedCharacter();
         character.Body.AllowRotate = false;
         character.GoToAnimation("hit_fly", 0.03f);
     }
@@ -55,6 +57,10 @@ internal sealed class FlyingState : CharacterState
         if (Death(character) is { } next)
         {
             return next;
+        }
+        if (character.IsGripping || character.IsGripped)
+        {
+            return GoOn(character);                                           // held, or holding, it flies no more (OM-89)
         }
         if (!character.Body.IsTouchingGround)
         {
@@ -69,7 +75,11 @@ internal sealed class FlyingState : CharacterState
 /// <summary>Sliding along the ground while a push lasts.</summary>
 internal sealed class PushedState : CharacterState
 {
-    protected internal override void Enter(Character character) => character.GoToAnimation("hit_slide", 0.05f);
+    protected internal override void Enter(Character character)
+    {
+        character.ReleaseAttachedCharacter();
+        character.GoToAnimation("hit_slide", 0.05f);
+    }
 
     protected internal override CharacterState? Update(Character character, float dt)
     {
@@ -106,7 +116,7 @@ internal sealed class EntangledState : CharacterState
         {
             return CharacterStates.Attack;
         }
-        if (!character.IsEntangled)
+        if (!character.IsEntangled && !character.IsGripped)
         {
             return GoOn(character);
         }
@@ -132,6 +142,10 @@ internal sealed class JumpState : CharacterState
         if (Death(character) is { } next)
         {
             return next;
+        }
+        if (character.IsGripping)
+        {
+            return CharacterStates.Gripping;                                  // a leap that took hold (OM-89)
         }
         if (!character.Body.IsJumping)
         {
@@ -160,6 +174,10 @@ internal sealed class LandState : CharacterState
 
     protected internal override CharacterState? Update(Character character, float dt)
     {
+        if (character.IsGripped)
+        {
+            return GoOn(character);                                           // caught as it landed (OM-89)
+        }
         if (!character.Body.IsTouchingGround)
         {
             return null;

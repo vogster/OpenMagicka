@@ -64,6 +64,10 @@ public sealed partial class CharacterBody
             }
             return ContactResponse.Ignore;                                    // felt, never pushing
         }
+        if (contact.OtherBody is { } body && ReferenceEquals(body, IgnoredBody))
+        {
+            return ContactResponse.Ignore;                                    // gripper and victim pass through each other
+        }
         var other = contact.OtherBody?.Listener is Contacts { Owner: var character } ? character : null;
         if (contact.OtherMesh is null && (Conditions.IsIntangible || other is { Conditions.IsIntangible: true }))
         {

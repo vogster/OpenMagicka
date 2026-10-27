@@ -72,9 +72,9 @@ public sealed partial class Character
             }
             return;
         }
-        if (IsEntangled)
+        if (IsEntangled || IsGripped)
         {
-            DecreaseEntanglement(0.5f, Elements.Earth);
+            Struggle();                                                       // vines and grips (OM-89)
             if (State != CharacterStates.Cast)
             {
                 GoToAnimation("spec_entangled_attack", 0.1f);

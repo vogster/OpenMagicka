@@ -8,6 +8,9 @@ internal static class Panicking
 {
     public const float Slow = 0.8f;
 
+    /// <summary>How fast a ridden character staggers (OM-89).</summary>
+    public const float StumbleSpeed = 0.6f;
+
     /// <summary>The wander heading drifts by up to ±30 radians a second, as the original.</summary>
     public static Vector3 Wander(Character character, float dt)
     {
@@ -51,9 +54,11 @@ internal sealed class PanicState : CharacterState
     protected internal override void Enter(Character character)
     {
         character.RemoveInvisibility();
+        character.ReleaseAttachedCharacter();
         (character.Body.AllowMove, character.Body.AllowRotate) = (true, true);
         character.WantedMovement ??= character.Body.Movement;
-        character.GoToAnimation("move_panic", 0.2f);
+        character.Body.RunBackward = character.IsStumbling;
+        character.GoToAnimation(character.IsStumbling ? "move_stumble" : "move_panic", 0.2f);
     }
 
     protected internal override CharacterState? Update(Character character, float dt)
@@ -75,6 +80,18 @@ internal sealed class PanicState : CharacterState
         {
             return CharacterStates.Idle;
         }
+        if (!character.IsFeared && !character.IsPanicking)
+        {
+            if (!character.Body.RunBackward)
+            {
+                character.Body.RunBackward = true;                            // ridden while it panicked already
+                character.GoToAnimation("move_stumble", 0.2f);
+            }
+            character.Body.SpeedMultiplier *= Panicking.StumbleSpeed;          // ridden: it staggers backwards (OM-89)
+            var facing = character.Body.Facing;
+            character.Body.Movement = Panicking.Or(-facing * 4 + wander, -facing);
+            return null;
+        }
         character.Body.SpeedMultiplier *= Panicking.Slow;
         var wanted = (character.IsPlayer ? character.WantedMovement : character.Body.Movement) ?? Vector3.Zero;
         if (character.IsPanicking)
@@ -91,6 +108,7 @@ internal sealed class PanicState : CharacterState
 
     protected internal override void Exit(Character character)
     {
+        character.Body.RunBackward = false;
         Panicking.GiveBack(character);
     }
 }

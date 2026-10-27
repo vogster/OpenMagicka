@@ -232,6 +232,7 @@ public sealed partial class Character : Entity
     /// <summary>Falls over regardless of the tolerance (when the character can fall at all, and lives).</summary>
     public void KnockDown()
     {
+        GripDamageAccumulation = 0;
         if (CanBeKnockedDown && !Dead)
         {
             IsKnockedDown = true;
@@ -324,6 +325,7 @@ public sealed partial class Character : Entity
         {
             ChangeState(State.Update(this, dt));
         }
+        UpdateGrip();                                                         // after the states, as the original's (a Drop chosen first)
         UpdateCasting(dt);
         if (zapTimer >= 0)
         {
@@ -419,6 +421,8 @@ public sealed partial class Character : Entity
     protected internal override void OnRemoved()
     {
         StopSpell();                                                          // its spell ends with it
+        ReleaseAttachedCharacter();                                           // and its grips (OM-89)
+        ReleaseFromGripper();
         if (world.IsDisposed || Body.Body.IsRemoved)
         {
             return;

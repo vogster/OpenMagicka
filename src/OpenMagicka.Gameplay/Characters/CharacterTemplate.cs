@@ -78,6 +78,9 @@ public sealed record CharacterTemplate(
     /// <summary>The knockdown tolerance that makes a character immune to falling over.</summary>
     public const float NoKnockdown = 5000;
 
+    /// <summary>How many points a struggle against a grip makes (whole, OM-89).</summary>
+    public float BreakFreeStrength { get; init; }
+
     /// <summary>How many health bars the HUD stacks under it (a boss-like foe's 2 or more: the full ones grey, the last its share).</summary>
     public int HealthBars { get; init; } = 1;
 

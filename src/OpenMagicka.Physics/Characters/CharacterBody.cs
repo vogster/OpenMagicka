@@ -156,6 +156,9 @@ public sealed partial class CharacterBody
     /// <summary>The material of the level under the feet (a liquid's while in it); null until the first ground contact.</summary>
     public int? GroundMaterial { get; private set; }
 
+    /// <summary>A body it never collides with (its gripper or its victim, OM-89).</summary>
+    public PhysicsBody? IgnoredBody { get; set; }
+
     /// <summary>The body is in a liquid (it felt one in the last step; OM-88).</summary>
     public bool IsInWater { get; private set; }
 
@@ -196,6 +199,13 @@ public sealed partial class CharacterBody
         pendingVelocity += velocity;
         IsPushed = true;
         leavingGround |= pendingVelocity.Y > liftOff;
+    }
+
+    /// <summary>No push any more (a gripper about to lose its grip, OM-89): what was given and staged goes too.</summary>
+    public void CancelPush()
+    {
+        (pendingVelocity, IsPushed, leavingGround) = (Vector3.Zero, false, false);
+        staged.Clear();
     }
 
     /// <summary>Pushes given during the step, taken once it is over.</summary>

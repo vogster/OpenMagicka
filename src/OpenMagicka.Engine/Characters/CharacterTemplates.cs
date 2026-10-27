@@ -68,6 +68,7 @@ public static class CharacterTemplates
         {
             Sounds = ItemTemplates.Sounds(content.Sounds),
             HealthBars = Math.Max(1, stats.NumberOfHealthBars),
+            BreakFreeStrength = content.Ai.BreakFreeStrength,
             Bleeds = content.BloodType != NoBlood,
         };
     }

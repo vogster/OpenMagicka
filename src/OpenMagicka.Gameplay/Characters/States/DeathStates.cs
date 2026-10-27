@@ -6,6 +6,8 @@ internal sealed class DeadState : CharacterState
     protected internal override void Enter(Character character)
     {
         character.ReleaseEntanglement();
+        character.ReleaseAttachedCharacter();                                 // the dead let go, and are let go (OM-89)
+        character.ReleaseFromGripper();
         if (!character.IsUndying)
         {
             character.ReleaseAll();                                           // the dead drop what they held

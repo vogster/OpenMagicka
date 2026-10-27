@@ -36,6 +36,14 @@ internal sealed class IdleState : CharacterState
         {
             return next;
         }
+        if (character.GripAttacking)
+        {
+            return CharacterStates.GripAttack;
+        }
+        if (character.IsGripped && character.GripType == GripType.Pickup)
+        {
+            return CharacterStates.Entangled;                                 // hung up on its gripper (OM-89)
+        }
         if (character.IsAlerted)
         {
             return CharacterStates.Alarm;

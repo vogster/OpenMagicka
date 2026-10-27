@@ -62,17 +62,19 @@ public class CharacterAnimationActionsTests
         Assert.Throws<InvalidDataException>(() => CharacterAnimationActions.Create(new RemoveStatusAction(0, 0, "sleepy")));
 
     [Fact]
-    public void KindsForLaterSystems_AreLeftOut()
+    public void KindsForLaterSystems_AreLeftOut_ButTheGripsAreMade()
     {
         AnimationActionContent[] later =
         [
-
-            new SetItemAttachAction(0, 0, 0, "hand"), new GripAction(0, 1, GripType.Hold, 1, 1, "a", "b", false),
-            new DamageGripAction(0, 0, false, []), new ReleaseGripAction(0, 0), new ThrowGripAction(0, 0), new OverkillGripAction(0, 0),
-            new TongueAction(0, 0, 5),
+            new SetItemAttachAction(0, 0, 0, "hand"),                         // no game file uses it
+            new TongueAction(0, 0, 5),                                        // the frog's tongue comes with its entity
         ];
 
         Assert.All(later, k => Assert.Null(CharacterAnimationActions.Create(k)));
+        Assert.IsType<Actions.Grip>(CharacterAnimationActions.Create(new GripAction(0, 1, GripType.Hold, 1, 0, "a", "b", false)));
+        Assert.Equal(OpenMagicka.Gameplay.Characters.Character.DefaultBreakFreeTolerance,
+            ((Actions.Grip)CharacterAnimationActions.Create(new GripAction(0, 1, GripType.Hold, 1, 0, "a", "b", false))!).Tolerance);   // 0 stands for 10
+        Assert.IsType<Actions.ThrowGrip>(CharacterAnimationActions.Create(new ThrowGripAction(0, 0)));
     }
 
     [Fact]

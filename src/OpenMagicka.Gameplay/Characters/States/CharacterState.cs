@@ -28,11 +28,11 @@ public abstract class CharacterState
     protected static CharacterState? Hits(Character character)
     {
         var body = character.Body;
-        if (!body.IsJumping && body.IsPushed && !body.IsTouchingGround)
+        if (!body.IsJumping && body.IsPushed && !body.IsTouchingGround && !character.IsGripped)
         {
             return CharacterStates.Flying;
         }
-        if (character.IsEntangled && !character.Attacking)
+        if ((character.IsEntangled || (character.IsGripped && character.GripType != GripType.Ride)) && !character.Attacking)   // ours: a picked-up one too, whatever its state
         {
             return CharacterStates.Entangled;
         }
@@ -43,6 +43,15 @@ public abstract class CharacterState
         if (character.IsKnockedDown)
         {
             return CharacterStates.KnockDown;
+        }
+        if (character.IsGripping && character.ShouldReleaseGrip)
+        {
+            if (body.IsTouchingGround && character.GripType == GripType.Pickup)
+            {
+                return CharacterStates.Drop;                                  // a grip about to go (OM-89)
+            }
+            body.CancelPush();
+            character.KnockDown();                                            // when it can fall: the state follows next frame
         }
         if (character.IsHit)
         {
@@ -57,7 +66,7 @@ public abstract class CharacterState
     /// </summary>
     protected static CharacterState? Actions(Character character)
     {
-        if (character.Body.IsJumping)
+        if (character.Body.IsJumping && !character.IsGripping)
         {
             return CharacterStates.Jump;
         }
@@ -73,7 +82,7 @@ public abstract class CharacterState
             }
             character.Boosts = 0;
         }
-        return null;
+        return character.IsGripping && character.GripType != GripType.Ride ? CharacterStates.Gripping : null;
     }
 
     /// <summary>The three common checks in order.</summary>
@@ -114,4 +123,7 @@ public static class CharacterStates
     public static readonly CharacterState Boost = new BoostState();
     public static readonly CharacterState Panic = new PanicState();
     public static readonly CharacterState PanicCast = new PanicCastState();
+    public static readonly CharacterState Gripping = new GrippingState();
+    public static readonly CharacterState GripAttack = new GripAttackState();
+    public static readonly CharacterState Drop = new DropState();
 }

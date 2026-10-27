@@ -144,6 +144,10 @@ public sealed class BreakFree(float start, float end, float magnitude) : Animati
         {
             owner.DecreaseEntanglement(Magnitude, Elements.Earth);
         }
+        else if (first && owner.IsGripped)
+        {
+            owner.BreakFree();                                                // a struggle by its strength (OM-89)
+        }
     }
 }
 

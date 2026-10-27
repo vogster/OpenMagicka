@@ -12,18 +12,10 @@ public sealed partial class Character
     private float breakFreeTimer;
 
     /// <summary>
-    /// A struggle (an NPC's mind, every so often): it tears at its vines as an Earth blow of 0.5. A
-    /// grip's struggle comes with grips (OM-33).
+    /// A struggle (an NPC's mind, every so often; a player's boost): its strength more points against a grip, and a tear
+    /// at its vines as an Earth blow of 0.5 (OM-89).
     /// </summary>
-    public void BreakFree()
-    {
-        if (breakFreeTimer > 0)
-        {
-            return;
-        }
-        DecreaseEntanglement(0.5f, Spells.Elements.Earth);
-        breakFreeTimer = BreakFreeInterval;
-    }
+    public void BreakFree() => Struggle();
 
     /// <summary>Lets go of an attack or dash it means to make (its mind gives up the attack).</summary>
     public void StopAttacking() => (Attacking, Dashing, NextAttackAnimation) = (false, false, null);
@@ -34,9 +26,6 @@ public sealed partial class Character
     /// A script's panic order sets it to 10.
     /// </summary>
     public bool IsPanicking => panic - Template.MaxPanic > float.Epsilon && !Dead;
-
-    /// <summary>Carried by the riding grip, which comes with grips (OM-33).</summary>
-    public bool IsStumbling => false;
 
     /// <summary>A script's panic: into the panic state at once, as long as nothing burns it out.</summary>
     public void OrderPanic()

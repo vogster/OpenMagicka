@@ -53,6 +53,9 @@ public sealed partial class Character
     private void Drown(float depth, bool lava)
     {
         IsDrowning = true;
+        var at = Body.Body.Position;
+        ReleaseFromGripper();                                                 // let go of, and letting go (OM-89)
+        ReleaseAttachedCharacter();
         RemoveInvisibility();
         ReleaseEntanglement();
         HitPoints = 0;
@@ -60,7 +63,7 @@ public sealed partial class Character
         stunTimer = 0;
         fearTimer = 0;
         EndCharm();
-        Body.Body.Position += new Vector3(0, depth, 0);
+        Body.Body.Position = at + new Vector3(0, depth, 0);
         Body.Body.Velocity = Vector3.Zero;
         Body.Body.AffectedByGravity = false;                                  // it floats where it drowned
         RaiseCue(new WorldEffectCue(lava ? "lava_drown" : "water_drown", Body.Body.Position + new Vector3(0, Body.HeightOffset, 0), Body.Facing));

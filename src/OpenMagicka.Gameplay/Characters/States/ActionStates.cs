@@ -84,6 +84,10 @@ internal sealed class DashState : CharacterState
         {
             return next;
         }
+        if (character.IsGripping)
+        {
+            return CharacterStates.Gripping;
+        }
         return ClipDone(character) ? GoOn(character) : null;
     }
 

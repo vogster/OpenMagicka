@@ -42,7 +42,7 @@ public static class AiStates
     public static readonly IAiState BreakFree = new BreakFreeAiState();
 
     /// <summary>Held in vines (or, with grips, a grip) and strong enough to struggle.</summary>
-    internal static bool MustBreakFree(Agent agent) => agent.Owner.IsEntangled && agent.Profile.BreakFreeStrength > float.Epsilon;
+    internal static bool MustBreakFree(Agent agent) => (agent.Owner.IsEntangled || agent.Owner.IsGripped) && agent.Profile.BreakFreeStrength > float.Epsilon;
 }
 
 /// <summary>
@@ -271,7 +271,7 @@ internal sealed class BreakFreeAiState : IAiState
     public void Execute(Agent agent, float dt)
     {
         agent.Owner.BreakFree();
-        if (!agent.Owner.IsEntangled)
+        if (!agent.Owner.IsEntangled && !agent.Owner.IsGripped)
         {
             agent.PopState();
         }

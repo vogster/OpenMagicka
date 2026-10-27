@@ -101,7 +101,12 @@ public sealed partial class Character
         };
 
     /// <summary>Its spell ends as it waits outside (the spell's entities went with the scene).</summary>
-    protected internal override void OnWithdrawn() => StopSpell();
+    protected internal override void OnWithdrawn()
+    {
+        StopSpell();
+        ReleaseAttachedCharacter();                                           // grips do not cross scenes (OM-89)
+        ReleaseFromGripper();
+    }
 
     private void RaiseScriptTrigger(int trigger)
     {
