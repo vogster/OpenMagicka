@@ -67,7 +67,8 @@ public sealed class MenuPass : IDisposable
     /// <summary>The book's page atlas (OM-83): the paper's four sheets, 1024² each; the open spread's right page top right.</summary>
     public const int AtlasSize = 2 * MenuPicture.PageSize;
 
-    private static readonly Viewport RightPage = new(MenuPicture.PageSize, 0, MenuPicture.PageSize, MenuPicture.PageSize);
+    private static readonly Viewport RightPage = new(MenuPicture.PageSize, 0, MenuPicture.PageSize, MenuPicture.PageSize),
+        SheetPage = new(MenuPicture.PageSize, MenuPicture.PageSize, MenuPicture.PageSize, MenuPicture.PageSize);
 
     public const string Paper = "UI/ToM/tome_pages_0";
 
@@ -169,12 +170,12 @@ public sealed class MenuPass : IDisposable
         {
             device.SetRenderTarget(page);
             device.Clear(Color.Transparent);
-            text.DrawSprites(device, paper, [PaperSprite], MenuPicture.PageSize, MenuPicture.PageSize);
-            foreach (var painting in picture.PagePaintings)
+            text.DrawSprites(device, paper, PaperSprites, MenuPicture.PageSize, MenuPicture.PageSize);
+            foreach (var painting in picture.Page.Paintings)
             {
-                Paint(device, painting, text, PaperAlpha, BlendState.NonPremultiplied);
+                Paint(device, painting, text, PaperSprites, PaperAlpha, BlendState.NonPremultiplied);
             }
-            Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize, text);
+            Draw(device, picture.Page.Sprites, picture.Page.Texts, MenuPicture.PageSize, MenuPicture.PageSize, text);
             device.SetRenderTarget(null);
             if (clear)
             {
@@ -201,7 +202,8 @@ public sealed class MenuPass : IDisposable
     /// <summary>
     /// The book's page atlas (OM-83, ARCHITECTURE.md §20, "The book"), as the original's: the paper written whole (its four sheets,
     /// in the scene's encoded light), then the page drawn on its open spread's right sheet, encoded too, blending by its
-    /// alpha and keeping the paper's. The book's effect decodes it; its mip levels are made as it is let go.
+    /// alpha and keeping the paper's; while the book riffles, the turning sheets' face on the bottom right sheet. The
+    /// book's effect decodes it; its mip levels are made as it is let go.
     /// </summary>
     public Texture2D DrawAtlas(GraphicsDevice device, MenuPicture picture)
     {
@@ -212,16 +214,25 @@ public sealed class MenuPass : IDisposable
         device.SetRenderTarget(atlas);
         device.BlendState = BlendState.Opaque;
         encoded.DrawSprites(device, paper, WholePaper, AtlasSize, AtlasSize);
-        device.Viewport = RightPage;
-        device.BlendState = KeepPaper;
-        foreach (var painting in picture.PagePaintings)
+        DrawLayer(device, picture.Page, RightPage, PaperSprites);
+        if (picture.Book.SheetCount > 0)
         {
-            Paint(device, painting, encoded, AtlasPaperAlpha, KeepPaper);
+            DrawLayer(device, picture.Sheet, SheetPage, SheetPaperSprites);
         }
-        Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize, encoded);
         device.SetRenderTarget(null);
         device.BlendState = BlendState.NonPremultiplied;
         return atlas;
+    }
+
+    private void DrawLayer(GraphicsDevice device, MenuLayer layer, Viewport viewport, GuiSprite[] paperSheet)
+    {
+        device.Viewport = viewport;
+        device.BlendState = KeepPaper;
+        foreach (var painting in layer.Paintings)
+        {
+            Paint(device, painting, encoded, paperSheet, AtlasPaperAlpha, KeepPaper);
+        }
+        Draw(device, layer.Sprites, layer.Texts, MenuPicture.PageSize, MenuPicture.PageSize, encoded);
     }
 
     /// <summary>The screen's pieces (boxes, the pause menu, the loading screen) straight onto the screen, then the cover.</summary>
@@ -241,13 +252,16 @@ public sealed class MenuPass : IDisposable
 
     private static readonly GuiSprite[] WholePaper = [new(Vector2.Zero, new Vector2(AtlasSize), Vector2.Zero, Vector2.One, Vector4.One)];
 
-    private static readonly GuiSprite PaperSprite = new(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0), new Vector2(1, 0.5f), Vector4.One);
+    private static readonly GuiSprite PaperSprite = new(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0), new Vector2(1, 0.5f), Vector4.One),
+        SheetPaperSprite = new(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0.5f), Vector2.One, Vector4.One);
+
+    private static readonly GuiSprite[] PaperSprites = [PaperSprite], SheetPaperSprites = [SheetPaperSprite];
 
     /// <summary>
     /// A picture painted into the paper through its mask (the original's three draws), in the page's target; none without
     /// its pictures. The paper's alpha comes back by <paramref name="paperAlpha"/>, then the blending is <paramref name="after"/>.
     /// </summary>
-    private void Paint(GraphicsDevice device, MenuPainting painting, GuiText gui, BlendState paperAlpha, BlendState after)
+    private void Paint(GraphicsDevice device, MenuPainting painting, GuiText gui, GuiSprite[] paperSheet, BlendState paperAlpha, BlendState after)
     {
         if (!atlases.TryGetValue(painting.Mask, out var mask) || !atlases.TryGetValue(painting.Picture.Atlas, out var shown))
         {
@@ -270,7 +284,7 @@ public sealed class MenuPass : IDisposable
             Draw(device, [p], [], size, size, gui);
         }
         device.BlendState = paperAlpha;
-        gui.DrawSprites(device, paper, [PaperSprite], size, size);
+        gui.DrawSprites(device, paper, paperSheet, size, size);
         device.BlendState = after;
     }
 

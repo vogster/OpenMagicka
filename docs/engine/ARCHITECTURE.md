@@ -1838,8 +1838,8 @@ All pieces come from the atlas `UI/HUD/hud` (512 × 512) or `UI/HUD/Digits`, thr
 
 The original's menu is a 3D book (the Tome) on a desk, lit by a candle, its pages turning between menus. OpenMagicka
 draws the book, the desk and the candle (OM-83, "The book" below) with the page on the book's right; where the game's
-files lack what it needs, the right page shows flat, as a square of the screen's height in its middle. The page
-turning, the book's opening and the logos come later.
+files lack what it needs, the right page shows flat, as a square of the screen's height in its middle. The book's
+opening and the logos come later.
 
 **One window, three modes** (`GameShell` on the render thread, `ShellSimulation` on the logic thread):
 - **Menu.** The Tome's pages, with the menu music (`music_menu`).
@@ -1898,8 +1898,19 @@ turning, the book's opening and the logos come later.
   picking and the picture agree. The game's version is shown at the screen's bottom left (Maiandra14, white over a
   black shadow), not over a cutscene. The page riffle's sound gets the pages turned (`Pages`); the menu's first page
   is put down without it.
-- Ours, for now: the book is open from the start (no fly-in, no opening), the pages change at once, and the candle does
-  not dim for the intro.
+- The riffle (`TomeRiffle`, `TomeBookState`): a page put on riffles forward by its count (`flip_left`), one taken off
+  back by its own (`flip_right`); at most ten sheets (`page_flip`) turn, each at twice its clip's speed (half a second).
+  All start at once; then every sixteenth of a second the highest not yet let go starts again from its beginning,
+  moved on by its lateness and a hundredth of a second, so the first ones drop back and turn again (a flurry, as the
+  original's). It lasts (n − 1) / 16 + 0.5 s: 0.5 s for one page, 1.06 s for ten or more. The sound gets the count as
+  it is (20 for a map). While it runs, the menu takes no choice and no going back (A, B, Enter, Esc, Delete; the moves
+  and the mouse still work), and pages are neither put on nor taken off (silently refused, as the original's).
+- What the sheets show: their bottom face is the atlas's bottom-right sheet, their top face the bottom-left (bare
+  paper). Forward, the new page lies on the right page under them and the old one is on their face; back, the page
+  going stays on the right page and the one coming back rides in on them. A cutscene riffles a page of its own (no
+  page put on): the map's title page turns away over the map, an intro picture (as it ended) over the next one. What
+  a page puts over the screen while drawn on the sheets is left out. Without the book the pages change at once.
+- Ours, for now: the book is open from the start (no fly-in, no opening), and the candle does not dim for the intro.
 
 **Input** (`MenuInputReader`): the mouse hovers and clicks (a left press released, hit-tested in page pixels); the
 arrows, the d-pad and the left stick move (repeating every 0.25 s while held); Enter, Space or A choose; Esc,
@@ -2003,8 +2014,7 @@ or B too) and nothing remembers it was seen:
   (288, 288, 448, 448) (ours: centred; the original's lobby has it at the left, by the players).
 - A painting (`MenuPainting`) is the original's three draws into the page's target: the mask's alpha in, the picture
   blended by the target's alpha (the alpha kept), the paper's alpha back.
-- Ours, not the original's: the pages change at once (no turning sheet); the room's candle does not dim; the
-  subtitles follow the interface size.
+- Ours, not the original's: the room's candle does not dim; the subtitles follow the interface size.
 
 **Starting** (the launcher, without `--level`, `--viewer`, `--check-effects` or `--placeholder`):
 - Magicka is found where the player said (`--content`, `MAGICKA_DIR`), else where the settings remember, else in
@@ -2018,8 +2028,7 @@ or B too) and nothing remembers it was seen:
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the book's page turning, its fly-in and opening, its shadow map; the logos; the end page between a chapter and the
-  next one's map;
+- the book's fly-in and opening, its shadow map; the logos; the end page between a chapter and the next one's map;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - the original's `campaign.sav` read or written (OM-55);
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.

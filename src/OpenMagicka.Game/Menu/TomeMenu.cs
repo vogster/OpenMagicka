@@ -60,6 +60,18 @@ public sealed class TomeMenu(IMenuHost host)
 
     private readonly Stack<MenuPage> pages = new();
     private MessageBox? box;
+    private MenuPage? leaving;
+    private Action<MenuPicture>? turning;
+
+    /// <summary>
+    /// The 3D book the pages lie in (OM-83), while it is drawn; none: the page lies flat and changes at once. With it,
+    /// pages are put on and taken off only while it lies open, each riffling by its count, and while it riffles the
+    /// menu takes no choice or going back.
+    /// </summary>
+    public TomeBook? Book { get; set; }
+
+    /// <summary>The book riffles.</summary>
+    public bool IsTurning => Book is { IsLocked: true };
 
     public IMenuHost Host { get; } = host ?? throw new ArgumentNullException(nameof(host));
 
@@ -81,7 +93,7 @@ public sealed class TomeMenu(IMenuHost host)
     public void Open(Func<TomeMenu, MenuPage>? root = null)
     {
         pages.Clear();
-        box = null;
+        (box, leaving, turning) = (null, null, null);
         var page = root?.Invoke(this) ?? new MainPage(this);
         pages.Push(page);
         page.Enter();
@@ -91,23 +103,56 @@ public sealed class TomeMenu(IMenuHost host)
     public void Close()
     {
         pages.Clear();
-        box = null;
+        (box, leaving, turning) = (null, null, null);
     }
 
+    /// <summary>A page put on, the book riffling forward to it (the page under it on the turning sheets); refused while the book is not open, as the original's.</summary>
     public void Push(MenuPage page)
     {
         ArgumentNullException.ThrowIfNull(page);
+        if (Book is { IsOpen: false })
+        {
+            return;
+        }
+        var under = Page;
         pages.Push(page);
         page.Enter();
-        Turn(page);
+        Turn(page.Pages, true, null, under is null ? null : under.Draw);
     }
 
-    /// <summary>The riffle's sound with the pages it turns (the original's count as it is, not the sheets drawn).</summary>
-    private void Turn(MenuPage page) => Host.Cue("ui_menu_tomepage", ("Pages", page.Pages));
+    /// <summary>A riffle of the page's own (a cutscene's: its old picture goes on the sheets, the new one is under them); no page put on.</summary>
+    public void Riffle(int count, Action<MenuPicture> going)
+    {
+        ArgumentNullException.ThrowIfNull(going);
+        Turn(count, true, null, going);
+    }
 
-    /// <summary>Back a page; at the main page, the quit box.</summary>
+    /// <summary>The riffle's sound with the pages it turns (the original's count as it is, not the sheets drawn), and the book's riffle.</summary>
+    private void Turn(int count, bool forward, MenuPage? front, Action<MenuPicture>? sheets)
+    {
+        (leaving, turning) = (null, null);
+        if (count <= 0)
+        {
+            return;                                                           // no riffle, no sound
+        }
+        Host.Cue("ui_menu_tomepage", ("Pages", count));
+        if (Book is { } book)
+        {
+            book.Turn(forward, count);
+            (leaving, turning) = (front, sheets);
+        }
+    }
+
+    /// <summary>
+    /// Back a page, the book riffling back (the page going stays on the right page, the one coming back rides the sheets
+    /// in); at the main page, the quit box. Refused while the book is not open, as the original's.
+    /// </summary>
     public void Pop()
     {
+        if (Book is { IsOpen: false })
+        {
+            return;
+        }
         if (pages.Count <= 1)
         {
             if (Leave is { } leave)
@@ -121,8 +166,9 @@ public sealed class TomeMenu(IMenuHost host)
             return;
         }
         var gone = pages.Pop();
-        pages.Peek().Enter();
-        Turn(gone);
+        var back = pages.Peek();
+        back.Enter();
+        Turn(gone.Pages, false, gone, back.Draw);
     }
 
     /// <summary>Back a page without its sound (a cutscene's end); never the bottom page.</summary>
@@ -155,6 +201,14 @@ public sealed class TomeMenu(IMenuHost host)
     public void Update(MenuInput input, Point screen, float dt = 0)
     {
         Screen = screen;
+        if (IsTurning)
+        {
+            input = input with { Accept = false, Back = false, Delete = false };   // the book's lock: not the moves, nor the mouse
+        }
+        else
+        {
+            (leaving, turning) = (null, null);
+        }
         if (box is { } open)
         {
             open.Update(input, screen.X, screen.Y, BoxRow, Cue);
@@ -169,6 +223,24 @@ public sealed class TomeMenu(IMenuHost host)
         }
     }
 
+    /// <summary>What goes on the turning sheets' face: a page's picture only (what it puts over the screen is left out).</summary>
+    private static void OnSheets(MenuPicture picture, Action<MenuPicture> draw)
+    {
+        var (sprites, texts, cover) = (picture.ScreenSprites.Count, picture.ScreenTexts.Count, picture.Cover);
+        picture.OnSheet = true;
+        try
+        {
+            draw(picture);
+        }
+        finally
+        {
+            picture.OnSheet = false;
+            picture.ScreenSprites.RemoveRange(sprites, picture.ScreenSprites.Count - sprites);
+            picture.ScreenTexts.RemoveRange(texts, picture.ScreenTexts.Count - texts);
+            picture.Cover = cover;
+        }
+    }
+
     /// <summary>The game's version, shown at the screen's bottom left under the book (none: not shown).</summary>
     public string Version { get; init; } = "";
 
@@ -177,7 +249,12 @@ public sealed class TomeMenu(IMenuHost host)
         ArgumentNullException.ThrowIfNull(picture);
         Screen = screen;
         picture.ShowsPage = Page is not null;
-        Page?.Draw(picture);
+        var riffling = picture.Book.Shown && IsTurning;
+        (riffling && leaving is not null ? leaving : Page)?.Draw(picture);
+        if (riffling && turning is { } sheets)
+        {
+            OnSheets(picture, sheets);
+        }
         if (picture.Book.Shown && Version.Length > 0 && Page is not CutscenePage)
         {
             picture.ScreenTexts.Add(new MenuText("Maiandra14", Version, new Vector2(16, screen.Y - 16), Engine.Text.TextAlignment.Left, Vector4.One,

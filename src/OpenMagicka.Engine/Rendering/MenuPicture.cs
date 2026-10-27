@@ -55,6 +55,25 @@ public readonly record struct MenuText(string Font, string Text, Vector2 At, Tex
 /// </summary>
 public readonly record struct MenuPainting(MenuAtlas Mask, Rectangle Area, MenuSprite Picture, Vector4? Texels = null);
 
+/// <summary>A page's drawing: paintings into the paper, then sprites, then texts, in page pixels.</summary>
+public sealed class MenuLayer
+{
+    public List<MenuPainting> Paintings { get; } = [];
+
+    public List<MenuSprite> Sprites { get; } = [];
+
+    public List<MenuText> Texts { get; } = [];
+
+    public bool IsEmpty => Paintings.Count == 0 && Sprites.Count == 0 && Texts.Count == 0;
+
+    public void Clear()
+    {
+        Paintings.Clear();
+        Sprites.Clear();
+        Texts.Clear();
+    }
+}
+
 /// <summary>
 /// What the menu shows this frame (OM-53), filled on the logic thread: the book's right page (in page pixels,
 /// 1024 × 1024, drawn on the Tome's paper), then what lies over the screen (message boxes, the pause menu, the
@@ -70,12 +89,23 @@ public sealed class MenuPicture
     /// <summary>The book the page lies in (OM-83); not shown: the page lies flat on the screen.</summary>
     public BookPicture Book { get; } = new();
 
+    /// <summary>The right page as it lies in the book (or flat).</summary>
+    public MenuLayer Page { get; } = new();
+
+    /// <summary>The face of the turning sheets while the book riffles (OM-83): the page going, or coming back.</summary>
+    public MenuLayer Sheet { get; } = new();
+
+    /// <summary>What a page draws goes onto the turning sheets' face, not the right page.</summary>
+    public bool OnSheet { get; set; }
+
+    private MenuLayer Drawn => OnSheet ? Sheet : Page;
+
     /// <summary>Painted into the paper first, under the page's sprites and texts.</summary>
-    public List<MenuPainting> PagePaintings { get; } = [];
+    public List<MenuPainting> PagePaintings => Drawn.Paintings;
 
-    public List<MenuSprite> PageSprites { get; } = [];
+    public List<MenuSprite> PageSprites => Drawn.Sprites;
 
-    public List<MenuText> PageTexts { get; } = [];
+    public List<MenuText> PageTexts => Drawn.Texts;
 
     public List<MenuSprite> ScreenSprites { get; } = [];
 
@@ -101,9 +131,10 @@ public sealed class MenuPicture
     {
         ShowsPage = false;
         Book.Shown = false;
-        PagePaintings.Clear();
-        PageSprites.Clear();
-        PageTexts.Clear();
+        Book.SheetCount = 0;
+        Page.Clear();
+        Sheet.Clear();
+        OnSheet = false;
         ScreenSprites.Clear();
         ScreenTexts.Clear();
         Cover = 0;
@@ -163,4 +194,12 @@ public sealed class BookPicture
     public Matrix[] Left { get; } = new Matrix[PageBones];
 
     public Matrix[] Right { get; } = new Matrix[PageBones];
+
+    /// <summary>The most sheets a riffle turns.</summary>
+    public const int MaxSheets = 10;
+
+    /// <summary>The turning sheets' bones, the first <see cref="SheetCount"/> of them drawn.</summary>
+    public Matrix[][] Sheets { get; } = [.. Enumerable.Range(0, MaxSheets).Select(_ => new Matrix[PageBones])];
+
+    public int SheetCount { get; set; }
 }

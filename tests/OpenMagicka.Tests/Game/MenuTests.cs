@@ -82,7 +82,7 @@ public class MenuTests
 
     internal static MenuInput ClickOnPage(Vector2 at) => new(at, default, true, true, 0, 0, false, false, false, 0);
 
-    private static readonly Point Screen = new(1280, 720);
+    internal static readonly Point Screen = new(1280, 720);
 
     [Fact]
     public void MainPage_MovesPastTheTilesNotInTheBeta_AndAdventureOpensTheSlots()

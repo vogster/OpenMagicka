@@ -45,12 +45,16 @@ public sealed class Candle(Func<float> random)
     }
 }
 
+/// <summary>The book's states (OM-83): open and still, or riffling forward or back (its closed and opening states come later).</summary>
+public enum TomeBookState : byte { Open, RiffleForward, RiffleBackward }
+
 /// <summary>
 /// The Tome's book on the logic thread (OM-83, docs/engine/ARCHITECTURE.md §20, "The book"): its camera (a bone of an unseen
 /// rig, turned to look along its +Z), the candle at the rig's light bone, and the poses of the book and its two stacks
 /// of pages (the stacks are the page model played by the turning sheet's clips), written into each frame's
-/// <see cref="BookPicture"/>, with the mouse's way onto the right page from the same camera. For now the book lies open
-/// with the camera at rest over it (its fly-in, opening and riffles come later).
+/// <see cref="BookPicture"/>, with the mouse's way onto the right page from the same camera. It riffles its pages
+/// (<see cref="TomeRiffle"/>), the input locked till the sheets land. For now the book lies open with the camera at rest
+/// over it (its fly-in and opening come later).
 /// </summary>
 public sealed class TomeBook
 {
@@ -59,8 +63,8 @@ public sealed class TomeBook
     /// <summary>The camera's lens: its field of view upright (radians), and its near and far planes.</summary>
     public const float FieldOfView = 0.75f, Near = 2, Far = 200;
 
-    private readonly AnimatedModel rig, book, stack;
-    private readonly AnimationClip open, openLeft, openRight, rest;
+    private readonly AnimatedModel rig, book, stack, sheet;
+    private readonly AnimationClip open, openLeft, openRight, rest, flipLeft, flipRight;
     private readonly int cameraBone;
     private readonly Vector3 light;
     private readonly BonePose[] poses = new BonePose[BookPicture.PageBones];
@@ -69,12 +73,12 @@ public sealed class TomeBook
 
     public TomeBook(AnimatedModel rig, AnimatedModel book, AnimatedModel stack, AnimatedModel sheet, Candle candle)
     {
-        ArgumentNullException.ThrowIfNull(sheet);
-        (this.rig, this.book, this.stack) = (rig ?? throw new ArgumentNullException(nameof(rig)), book ?? throw new ArgumentNullException(nameof(book)),
-            stack ?? throw new ArgumentNullException(nameof(stack)));
+        (this.rig, this.book, this.stack, this.sheet) = (rig ?? throw new ArgumentNullException(nameof(rig)),
+            book ?? throw new ArgumentNullException(nameof(book)), stack ?? throw new ArgumentNullException(nameof(stack)),
+            sheet ?? throw new ArgumentNullException(nameof(sheet)));
         Candle = candle ?? throw new ArgumentNullException(nameof(candle));
         if (book.Skeleton.Bones.Count > BookPicture.BookBones || stack.Skeleton.Bones.Count > BookPicture.PageBones
-            || rig.Skeleton.Bones.Count > BookPicture.PageBones)
+            || sheet.Skeleton.Bones.Count > BookPicture.PageBones || rig.Skeleton.Bones.Count > BookPicture.PageBones)
         {
             throw new InvalidDataException("the book's models have more bones than it draws");
         }
@@ -82,6 +86,7 @@ public sealed class TomeBook
             model.Clips.GetValueOrDefault(name) ?? throw new InvalidDataException($"{what} has no clip {name}");
         (open, rest) = (Clip(book, "open", Book), Clip(rig, "idle", Rig));
         (openLeft, openRight) = (Clip(sheet, "open_left", Sheet), Clip(sheet, "open_right", Sheet));
+        (flipLeft, flipRight) = (Clip(sheet, "flip_left", Sheet), Clip(sheet, "flip_right", Sheet));
         cameraBone = rig.Skeleton.IndexOf("camera");
         var lightBone = rig.Skeleton.IndexOf("Light");
         if (cameraBone < 0 || lightBone < 0)
@@ -118,7 +123,32 @@ public sealed class TomeBook
 
     public Candle Candle { get; }
 
-    public void Update(float dt) => Candle.Step(dt);
+    public TomeRiffle Riffle { get; } = new();
+
+    public TomeBookState State { get; private set; }
+
+    /// <summary>The book lies open, still: pages may be turned to.</summary>
+    public bool IsOpen => State == TomeBookState.Open;
+
+    /// <summary>The menu takes no choice or going back (A, B and their keys): a riffle runs.</summary>
+    public bool IsLocked => !Riffle.IsOver;
+
+    /// <summary>The pages riffle forward (right to left, to a page put on) or back, as many as a page's count (at most ten sheets).</summary>
+    public void Turn(bool forward, int pages)
+    {
+        Riffle.Start(forward ? flipLeft : flipRight, pages);
+        State = Riffle.IsOver ? TomeBookState.Open : forward ? TomeBookState.RiffleForward : TomeBookState.RiffleBackward;
+    }
+
+    public void Update(float dt)
+    {
+        Candle.Step(dt);
+        Riffle.Update(dt);                                                    // on, whatever the state, as the original's
+        if (State is TomeBookState.RiffleForward or TomeBookState.RiffleBackward && Riffle.IsOver)
+        {
+            State = TomeBookState.Open;
+        }
+    }
 
     /// <summary>The camera's place in the world: its bone's pose at rest, turned half round its own up.</summary>
     public Matrix4x4 CameraWorld { get; }
@@ -161,6 +191,11 @@ public sealed class TomeBook
         Palette(book, open, open.Duration, picture.Book);
         Palette(stack, openLeft, openLeft.Duration, picture.Left);
         Palette(stack, openRight, openRight.Duration, picture.Right);
+        picture.SheetCount = Riffle.Count;
+        for (var i = 0; i < picture.SheetCount; i++)
+        {
+            Palette(sheet, Riffle[i], picture.Sheets[i]);
+        }
     }
 
     /// <summary>A model's bones placed for a clip at a time (held at its end), from the world's origin.</summary>
@@ -175,6 +210,19 @@ public sealed class TomeBook
     private void Palette(AnimatedModel model, AnimationClip clip, float time, Xna.Matrix[] palette)
     {
         Pose(model, clip, time);
+        Copy(model, palette);
+    }
+
+    /// <summary>A model's bones as a clock poses them.</summary>
+    private void Palette(AnimatedModel model, AnimationClock posing, Xna.Matrix[] palette)
+    {
+        model.Skeleton.Sample(posing, poses);
+        model.Skeleton.Place(poses, Matrix4x4.Identity, placed, skinned);
+        Copy(model, palette);
+    }
+
+    private void Copy(AnimatedModel model, Xna.Matrix[] palette)
+    {
         for (var i = 0; i < palette.Length; i++)
         {
             palette[i] = i < model.Skeleton.Bones.Count ? ToXna(skinned[i]) : Xna.Matrix.Identity;

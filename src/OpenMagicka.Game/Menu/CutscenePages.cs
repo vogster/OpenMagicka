@@ -87,7 +87,7 @@ public abstract class CutscenePage(TomeMenu menu, int slot, int chapter, bool re
 
     public sealed override void Update(MenuInput input)
     {
-        if (!IsEnding && shown >= turning && (input.Accept || input.Click || input.Back))
+        if (!IsEnding && shown >= turning && !Menu.IsTurning && (input.Accept || input.Click || input.Back))
         {
             Skip();
         }
@@ -168,7 +168,7 @@ public sealed class MapCutscenePage : CutscenePage
         time += dt;
         if (OnMap && !wasOnMap)
         {
-            Menu.Cue("ui_menu_tomepage");                                     // the page turns to the map
+            Menu.Riffle(1, picture => CutscenePages.ChapterTitle(picture, Menu, Chapter));   // the title's page turns away, the map under it
             voice?.Play();
         }
         if (OnMap && time > cutscene.Duration && voice is null or { IsStopping: true } or { IsStopped: true })
@@ -260,9 +260,9 @@ public sealed class IntroPage : CutscenePage
         }
         else if (slide < SlideTimes.Length)
         {
-            slide++;
+            var gone = slide++;
             (left, said) = (SlideTimes[slide - 1], false);
-            Menu.Cue("ui_menu_tomepage");
+            Menu.Riffle(1, picture => DrawSlide(picture, gone, 1));          // the old picture, as it ended, turns away
         }
         else
         {
@@ -312,18 +312,24 @@ public sealed class IntroPage : CutscenePage
     public override void Draw(MenuPicture picture)
     {
         base.Draw(picture);
-        if (slide <= 0)
+        DrawSlide(picture, Math.Max(slide, 0), slide > 0 ? Progress(left, SlideTimes[slide - 1]) : 0);
+        if (slide <= 0 && spoken && !IsEnding)
+        {
+            CutscenePages.Subtitles(picture, CutscenePages.Known(Menu, "#cutscene_intro0"), Menu.Screen, Menu.Screen.X * 8 / 10);
+        }
+    }
+
+    /// <summary>A slide on the page (0: the title page) at a progress of its motion.</summary>
+    private void DrawSlide(MenuPicture picture, int shown, float progress)
+    {
+        if (shown == 0)
         {
             CutscenePages.ChapterTitle(picture, Menu, 0, introRule: true);
-            if (spoken && !IsEnding)
-            {
-                CutscenePages.Subtitles(picture, CutscenePages.Known(Menu, "#cutscene_intro0"), Menu.Screen, Menu.Screen.X * 8 / 10);
-            }
             return;
         }
-        var shown = new MenuSprite(Pictures[slide - 1], PictureArea, new Vector2(PictureArea.X, PictureArea.Y), new Vector2(PictureArea.Width, PictureArea.Height),
+        var art = new MenuSprite(Pictures[shown - 1], PictureArea, new Vector2(PictureArea.X, PictureArea.Y), new Vector2(PictureArea.Width, PictureArea.Height),
             Vector4.One);
-        picture.PagePaintings.Add(new MenuPainting(MenuAtlas.IntroMask, PictureArea, shown, Window(slide, Progress(left, SlideTimes[slide - 1]))));
-        picture.PageTexts.Add(new MenuText(BoxFont, Menu.Text($"#cutscene_intro{slide}"), new Vector2(512, 768), TextAlignment.Center, WordsColour, Wrap: 896));
+        picture.PagePaintings.Add(new MenuPainting(MenuAtlas.IntroMask, PictureArea, art, Window(shown, progress)));
+        picture.PageTexts.Add(new MenuText(BoxFont, Menu.Text($"#cutscene_intro{shown}"), new Vector2(512, 768), TextAlignment.Center, WordsColour, Wrap: 896));
     }
 }

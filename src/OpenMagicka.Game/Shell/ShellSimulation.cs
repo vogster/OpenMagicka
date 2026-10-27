@@ -137,14 +137,15 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
             realScreen = input.Screen;
         }
         reader.Picking = mode == ShellMode.Menu && signals.Book ? bookPicking : null;
+        menu.Book = Book;
         var read = reader.Read(input, (float)dt);
         var laid = screen;                                                    // the mouse over the screen's pieces, on their smaller screen
         read = read with { Screen = new Point(read.Screen.X * laid.X / Math.Max(1, realScreen.X), read.Screen.Y * laid.Y / Math.Max(1, realScreen.Y)) };
+        book?.Update((float)dt);                                              // in every mode: a riffle a chapter began in lands
         switch (mode)
         {
             case ShellMode.Menu:
                 menu.Update(read, screen, (float)dt);
-                book?.Update((float)dt);
                 content.Sounds?.Update((float)dt, []);
                 break;
             case ShellMode.Loading:

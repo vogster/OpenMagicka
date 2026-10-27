@@ -12,13 +12,14 @@ namespace OpenMagicka.Engine.Rendering;
 /// The Tome's book drawn (OM-83, docs/engine/ARCHITECTURE.md §20, "The book"), as the original's menu: the room (desk, wall and
 /// the things on the desk), the book, then its right and left stacks of pages, each with XNAnimation's forward technique
 /// (lit by the candle alone, its light over the squared distance, written in the scene's encoded light) into a
-/// multisampled target with depth; then the colour filter (left as it is) and the bloom onto the screen, which decode it.
+/// multisampled target with depth, then the turning sheets while it riffles; then the colour filter (left as it is) and
+/// the bloom onto the screen, which decode it.
 /// The pages show the page atlas (<see cref="MenuPass.DrawAtlas"/>), their texels decoded by the effect. No shadow map
 /// yet (every pixel lit). Render thread only.
 /// </summary>
 public sealed class BookPass : IDisposable
 {
-    public const string Room = "UI/ToM/background_mesh", Book = "UI/ToM/tome", Stack = "UI/ToM/page";
+    public const string Room = "UI/ToM/background_mesh", Book = "UI/ToM/tome", Stack = "UI/ToM/page", Sheet = "UI/ToM/page_flip";
 
     /// <summary>The parameters set on the forward effect (checked once it is made).</summary>
     internal static readonly string[] Parameters =
@@ -30,15 +31,15 @@ public sealed class BookPass : IDisposable
 
     private readonly GameEffect effect;
     private readonly FnaEffectParameters parameters;
-    private readonly GpuLevel room, book, stack;
+    private readonly GpuLevel room, book, stack, sheet;
     private readonly PostPass post;
     private readonly FullscreenQuad quad;
     private readonly Matrix[] still = [Matrix.Identity];
     private RenderTarget2D? scene;
 
-    private BookPass(GameEffect effect, GpuLevel room, GpuLevel book, GpuLevel stack, PostPass post, FullscreenQuad quad)
+    private BookPass(GameEffect effect, GpuLevel room, GpuLevel book, GpuLevel stack, GpuLevel sheet, PostPass post, FullscreenQuad quad)
     {
-        (this.effect, this.room, this.book, this.stack, this.post, this.quad) = (effect, room, book, stack, post, quad);
+        (this.effect, this.room, this.book, this.stack, this.sheet, this.post, this.quad) = (effect, room, book, stack, sheet, post, quad);
         parameters = new FnaEffectParameters(effect.Effect);
         effect.Effect.CurrentTechnique = effect.Effect.Techniques[XnAnimationEffect.Forward];
     }
@@ -58,7 +59,7 @@ public sealed class BookPass : IDisposable
         var inputs = EffectInputs.Read(patched);
         LevelBatch Prepare(LevelBatch batch) => VertexPadding.Complete(Unframed(batch), inputs);
         var effectTask = gpu.Enqueue(device => new GameEffect(program, new Effect(device, program.Bytecode)));
-        var modelTasks = new[] { Room, Book, Stack }.Select(asset => GpuLevel.Load(loader, asset, gpu, prepare: Prepare)).ToArray();
+        var modelTasks = new[] { Room, Book, Stack, Sheet }.Select(asset => GpuLevel.Load(loader, asset, gpu, prepare: Prepare)).ToArray();
         var postTasks = new[] { shaders.Load("FilterEffect"), shaders.Load("BloomEffect") };   // the library's: not ours to dispose
         try
         {
@@ -71,7 +72,8 @@ public sealed class BookPass : IDisposable
                 }
                 EffectChecks.Require(effectTask.Result, Parameters);
                 var post = new PostPass(postTasks[0].Result, postTasks[1].Result);       // checks, and makes its targets only when drawing
-                return new BookPass(effectTask.Result, modelTasks[0].Result, modelTasks[1].Result, modelTasks[2].Result, post, new FullscreenQuad(device));
+                return new BookPass(effectTask.Result, modelTasks[0].Result, modelTasks[1].Result, modelTasks[2].Result, modelTasks[3].Result, post,
+                    new FullscreenQuad(device));
             }).ConfigureAwait(false);
         }
         catch
@@ -141,6 +143,10 @@ public sealed class BookPass : IDisposable
         Samplers(device, SamplerState.LinearClamp);
         Draw(device, stack, picture.Right, BlendState.NonPremultiplied, pages);
         Draw(device, stack, picture.Left, BlendState.NonPremultiplied, pages);
+        for (var i = 0; i < Math.Min(picture.SheetCount, picture.Sheets.Length); i++)
+        {
+            Draw(device, sheet, picture.Sheets[i], BlendState.NonPremultiplied, pages);
+        }
         device.SetRenderTarget(null);
         device.Textures[0] = null;
         post.Draw(device, quad, scene, PostProcessing.Default);
@@ -201,6 +207,7 @@ public sealed class BookPass : IDisposable
         room.Dispose();
         book.Dispose();
         stack.Dispose();
+        sheet.Dispose();
         effect.Dispose();
     }
 }
