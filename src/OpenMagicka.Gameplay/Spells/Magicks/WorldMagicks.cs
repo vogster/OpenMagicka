@@ -115,6 +115,7 @@ public sealed class TractorPull() : Magick(MagickType.TractorPull, "cast_area_gr
             var toward = (at - entity.Position) with { Y = 0 };
             var strength = 2.5f * MathF.Sqrt(distance / Range);
             var beyond = entity.Position - toward;                            // the pull comes from the far side
+            (entity as Character)?.ReleaseFromGripper();                     // pulled out of a grip (OM-89)
             if (entity.IsDamageable && entity is not Missile)
             {
                 entity.Damage(new DamageEntry(AttackProperties.Pushed, Elements.Earth, Mass(entity), strength), caster, beyond);

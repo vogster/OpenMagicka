@@ -104,6 +104,30 @@ public sealed class ThrowGrip(float start, float end) : AnimationAction(start, e
     }
 }
 
+/// <summary>At the window's start, a frog shoots its tongue from its mouth, out to the length (OM-89).</summary>
+public sealed class Tongue(float start, float end, float maxLength) : AnimationAction(start, end)
+{
+    public float MaxLength { get; } = Finite(maxLength, nameof(maxLength));
+
+    public override void Run(Character owner, bool first)
+    {
+        if (!first || owner.Manager is not { } manager || owner.World.IsDisposed || manager.Entities.Count >= Entities.EntityManager.Capacity)
+        {
+            return;
+        }
+        var tongue = new Entities.FrogTongue(owner.World, owner, MaxLength);
+        try
+        {
+            manager.Add(tongue);
+        }
+        catch
+        {
+            owner.World.Remove(tongue.Body);
+            throw;
+        }
+    }
+}
+
 /// <summary>Each frame of the window, its victim is shattered.</summary>
 public sealed class OverkillGrip(float start, float end) : AnimationAction(start, end)
 {

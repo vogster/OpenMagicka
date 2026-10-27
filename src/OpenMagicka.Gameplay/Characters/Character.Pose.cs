@@ -43,6 +43,14 @@ public sealed partial class Character
         return placed[bone];
     }
 
+    /// <summary>
+    /// Its mouth (a frog's tongue comes from there, OM-89): its <c>Mouth</c> bone turned about, as the original's; ours,
+    /// without one, at its position along its facing (the original's is the world's origin).
+    /// </summary>
+    public Matrix4x4 MouthFrame => skeleton?.IndexOf("Mouth") is >= 0 and var mouth
+        ? Matrix4x4.CreateRotationY(MathF.PI) * BoneWorld(mouth)
+        : Matrix4x4.CreateWorld(Position, Body.Facing.LengthSquared() > 1e-12f ? Body.Facing : -Vector3.UnitZ, Vector3.UnitY);
+
     /// <summary>Whether an item can hang from the bone (any case); without a skeleton any can (the item sits at the root).</summary>
     public bool HasBone(string bone) => skeleton is null || skeleton.IndexOf(bone) >= 0;
 

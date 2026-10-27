@@ -1787,6 +1787,9 @@ the render thread draws it (`GuiPass`). Without the game's fonts, frame or effec
 - It shows while the mouse hovers a character to talk to (`KeyboardMouseControl.Hovered`: one of the avatar's side
   with a dialog), at the mouse. On a pad it shows for the one ahead within 3 (`ControlTargets.Ahead`), under the
   wizard, with the X button's glyph.
+- While the wizard is held (OM-89) it says `#interact_12` instead, whatever it hovers: with the space bar's glyph (a
+  pad's B, under the wizard), the glyph at half brightness while boosts wait, coming back to full by a thousandth a
+  second.
 - Its text is `#interact_NN`, NN being the next interact's InteractType in two digits (Talk's, 08, by default).
 - It is hidden while presses wait, while the player drives a dialog, in a cutscene, and with the HUD off. It fades in
   and out at 3 a second.

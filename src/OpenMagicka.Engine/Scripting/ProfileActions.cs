@@ -149,8 +149,8 @@ public sealed class EndUnequipWeaponsSectionAction : ScriptAction
 }
 
 /// <summary>
-/// <c>releaseGrip id= | area= type= factions=</c> (never used by the game): the grabbed would be let go by the
-/// named NPC or those in the area; the grips themselves wait for OM-33, so nothing is held yet.
+/// <c>releaseGrip id= | area= type= factions=</c> (never used by the game): the named NPC, or each NPC in the area,
+/// lets go of its victim and is let go by its gripper (OM-89).
 /// </summary>
 public sealed class ReleaseGripAction : ScriptAction
 {
@@ -164,6 +164,17 @@ public sealed class ReleaseGripAction : ScriptAction
 
     protected override void Execute()
     {
+        var targets = Id.Length > 0
+            ? Scene.World.Entities.FindByUniqueId(Hash(Id)) is Character named ? [named] : []
+            : ScriptTargets.InArea(Scene, Area, Type, Factions, false);
+        foreach (var character in targets)
+        {
+            if (!character.IsPlayer)
+            {
+                character.ReleaseAttachedCharacter();
+                character.ReleaseFromGripper();
+            }
+        }
     }
 }
 

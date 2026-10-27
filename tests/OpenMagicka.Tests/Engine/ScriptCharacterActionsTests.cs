@@ -258,4 +258,33 @@ public class ScriptCharacterActionsTests
         Assert.Throws<InvalidDataException>(() => Scene(world, """<Trigger id="a"><Then><spawn type="orc"><kill when="now"/></spawn></Then></Trigger>"""));
         Assert.Throws<InvalidDataException>(() => Scene(world, """<Trigger id="a"><Then><avatarMove><Wizard/></avatarMove></Then></Trigger>"""));
     }
+
+    [Fact]
+    public void ReleaseGripAndGiveOrder_FreeTheNpcsGrips_BothWays()
+    {
+        using var world = World();
+        var scene = Scene(world, """
+            <Trigger id="free" autorun="false"><Then><releaseGrip id="boss"/></Then></Trigger>
+            <Trigger id="order" autorun="false"><Then><giveOrder area="gate" type="orc" order="wander"/></Then></Trigger>
+            <Trigger id="area" autorun="false"><Then><releaseGrip area="gate" type="orc"/></Then></Trigger>
+            """);
+        var boss = Spawn(world, Orc, at: new Numerics.Vector3(9, 0.9f, 0));
+        boss.UniqueId = ScriptScene.Hash("Boss");
+        var held = Spawn(world, Orc, at: new Numerics.Vector3(10, 0.9f, 0));
+        Assert.True(boss.GripCharacter(held, GripType.Hold, -1, 10));
+        Fire(scene, "free");
+        Assert.False(boss.IsGripping);
+        Assert.False(held.IsGripped);
+
+        var inside = Spawn(world, Orc, at: new Numerics.Vector3(0, 0.9f, 0));
+        var gripper = Spawn(world, Orc, at: new Numerics.Vector3(9, 0.9f, 3));
+        Assert.True(gripper.GripCharacter(inside, GripType.Hold, -1, 10));
+        Fire(scene, "order");
+        Assert.False(inside.IsGripped);                                                            // let go by its gripper, outside the area
+        Assert.False(gripper.IsGripping);
+
+        Assert.True(inside.GripCharacter(gripper, GripType.Hold, -1, 10));
+        Fire(scene, "area");
+        Assert.False(inside.IsGripping);
+    }
 }

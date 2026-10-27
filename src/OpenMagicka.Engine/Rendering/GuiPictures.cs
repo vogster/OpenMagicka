@@ -83,8 +83,11 @@ public readonly record struct TutorialPicture(float Dark, string? Hint, Scriptin
 public readonly record struct SpeechBoxPicture(string Text, int Visible, string? Name, float Scale, Vector3? At, Vector2? OnScreen, Point MinSize,
     bool ForceOnScreen, bool Cutscene);
 
-/// <summary>The interact prompt ("Talk"): its text, at the mouse in pixels, or over a point of the world with a pad's button; how much it shows.</summary>
-public readonly record struct PromptPicture(string Text, Vector2? Mouse, Vector3? Avatar, float Alpha);
+/// <summary>
+/// The interact prompt ("Talk"): its text, at the mouse in pixels or over a point of the world; how much it shows; the
+/// button's glyph in it (none: the keyboard's strip, without one) and how bright that glyph is.
+/// </summary>
+public readonly record struct PromptPicture(string Text, Vector2? Mouse, Vector3? Avatar, float Alpha, char? Button = null, float ButtonIntensity = 1);
 
 /// <summary>
 /// A health bar: the world point it hangs under (its top 16.5 px below it, centred), its share, its width (of the

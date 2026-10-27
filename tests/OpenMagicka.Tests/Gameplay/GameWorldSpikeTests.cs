@@ -49,7 +49,7 @@ public class GameWorldSpikeTests(ITestOutputHelper output)
     }
 
     /// <summary>Actions of the kinds that work now, in the animations whose clips load.</summary>
-    private const int MadeActions = 16262;                                    // 16112 and the 150 grip actions (OM-89)
+    private const int MadeActions = 16263;                                    // 16112, the 150 grip actions and the frog's tongue (OM-89)
 
     [GameContentFact]
     public void EveryItem_MakesATemplate_AndEveryCharacterIsEquipped()

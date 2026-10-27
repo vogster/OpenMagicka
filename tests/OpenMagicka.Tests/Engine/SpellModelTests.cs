@@ -120,5 +120,7 @@ public class SpellModelTests
             .LoadUncached(SpellVisuals.Armour);
         Assert.Equal(2, ModelMeshes.ForModel(armour).Count);                                            // the earth part, the ice part: the mask's two bits
         Assert.Null(models(Effects + "nothing_here"));
+        var tongue = models(SpellVisuals.TongueModel)!.Skeleton;
+        Assert.Equal((0, 1, 2), (tongue.IndexOf("joint1"), tongue.IndexOf("joint2"), tongue.Bones.Count));         // the frog's tongue, its two ends
     }
 }

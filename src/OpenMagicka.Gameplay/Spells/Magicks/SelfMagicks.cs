@@ -73,6 +73,8 @@ public sealed class Teleport() : Magick(MagickType.Teleport, SelfClip)
         }
         Sound(character, DepartSound);
         character.ReleaseEntanglement();
+        character.ReleaseFromGripper();                                       // grips stay behind (OM-89)
+        character.ReleaseAttachedCharacter();
         character.Body.Body.Position = floor.Position + Vector3.UnitY * (0.1f - character.Body.HeightOffset);
         Sound(character, ArriveSound);
         return true;

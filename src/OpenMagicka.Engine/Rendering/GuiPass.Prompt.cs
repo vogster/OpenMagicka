@@ -6,15 +6,16 @@ namespace OpenMagicka.Engine.Rendering;
 
 /// <summary>
 /// The interact prompt, as the original's notifier button (docs/engine/ARCHITECTURE.md §18): a strip 32 high of
-/// <c>UI/HUD/NotifierButton</c> (a pad's, its X button's glyph in it) or <c>…_Keyboard</c>, its middle stretched to its text
-/// (Maiandra14), its caps kept; placed 42 px left of and 20 below its anchor (the mouse, or the avatar for a pad).
+/// <c>UI/HUD/NotifierButton</c> (with a button's glyph in it, as bright as the prompt says) or <c>…_Keyboard</c> (none), its
+/// middle stretched to its text (Maiandra14), its caps kept; placed 42 px left of and 20 below its anchor (the mouse, or the
+/// avatar for a pad).
 /// </summary>
 public sealed partial class GuiPass
 {
     public const string PadPrompt = "UI/HUD/NotifierButton", KeyboardPrompt = "UI/HUD/NotifierButton_Keyboard";
 
-    /// <summary>The pad's X button in the Maiandra fonts.</summary>
-    public const char PadXGlyph = (char)0x326;
+    /// <summary>The pad's B and X buttons and the space bar in the Maiandra fonts.</summary>
+    public const char PadBGlyph = (char)0x325, PadXGlyph = (char)0x326, SpaceBarGlyph = (char)0x32A;
 
     private static readonly VertexPositionTexture[] PromptStrip = Strip();
 
@@ -44,7 +45,7 @@ public sealed partial class GuiPass
             return;
         }
         var font = Fonts["Maiandra14"];
-        var pad = picture.Mouse is null;
+        var pad = picture.Button is not null;
         var corner = PromptCorner(picture.Mouse ?? Project(picture.Avatar!.Value, viewProjection, width, height));
         var parameters = new FnaEffectParameters(prompt.Effect);
         parameters.SetValue("ScreenSize", new Vector2(width, height));
@@ -59,9 +60,10 @@ public sealed partial class GuiPass
             device.DrawUserPrimitives(PrimitiveType.TriangleStrip, PromptStrip, 0, PromptStrip.Length - 2);
         }
         var colour = new Vector4(1, 1, 1, picture.Alpha);
-        if (pad)
+        if (picture.Button is { } button)
         {
-            Text.Draw(device, font, PadXGlyph.ToString(), colour, corner + new Vector2(16, 3), 1, 1, width, height, TextAlignment.Center);
+            var lit = new Vector4(picture.ButtonIntensity, picture.ButtonIntensity, picture.ButtonIntensity, picture.Alpha);
+            Text.Draw(device, font, button.ToString(), lit, corner + new Vector2(16, 3), 1, 1, width, height, TextAlignment.Center);
         }
         Text.Draw(device, font, picture.Text, colour, corner + new Vector2(pad ? 34 : 8, 8), 1, int.MaxValue, width, height);
     }

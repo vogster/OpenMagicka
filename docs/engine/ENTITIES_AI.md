@@ -718,8 +718,24 @@ without animations has no state machine and dies on the frame its hit points rea
   frame of its window, the damages hit the NPC itself or its victim); `ReleaseGrip`; `ThrowGrip` (at its start, the
   victim let go, put down, then pushed by the throwing ability's aim; a player's along its facing tipped up a tenth);
   `OverkillGrip`. A thrown victim takes its throw's damages once when it next meets the level or a liquid.
-- **Not yet**: the frog's tongue; the scripts' and
-  magicks' releases; the HUD's "Grabbed" and the struggle prompt; `SetItemAttach` (no game file uses it).
+- **Let go by others**: the script `releaseGrip` (the named NPC, or each NPC in the area, lets go of its victim and is
+  let go by its gripper) and `giveOrder` (the ordered NPC, both ways); Teleport (the caster, both ways) and Tractor
+  Pull/Push (each character moved is let go by its gripper).
+- **The frog's tongue** (`FrogTongue`, the `Tongue` action at its start): not a grip. A tip (a sphere of
+  radius 0.5, mass 4, falling) is shot from the `Mouth` bone (turned half round) along its forward, the way down halved
+  and turned up, at 60. It turns back at its full length (at 80, or 30 holding), on the level (at 80, `generic_dust`
+  there), on a blow that hurts (at 80, letting go), or on meeting a character other than its frog (it catches it, at
+  30); bosses it passes. Coming back it heads for the mouth (level once the catch is more than 2 away along X and Z
+  added) and dies within 1 of it; the catch is put at the tip each frame (lowered by the tip's radius, raised by its
+  half height), its own state untouched, and dropped when it dies, is gripped, burns or is greased. Drawn as
+  `Models/Missiles/Tongue`: its `joint1` at the mouth, `joint2` at the tip, both turned as it was shot. Ours: it
+  passes its own frog; it goes when its frog goes or dies, or after 5 s; one it let go it never catches again (the
+  original's, still on the tip, is caught the next step); its catch gathers no fall while carried; a shot straight up
+  or down goes along the facing; a frog without a mouth bone shoots from its middle (the original's from the world's
+  origin). No level of the game has a frog.
+- **The prompt**: while the player's wizard is held, the interact prompt says `#interact_12` (break free) with the
+  space bar's glyph (a pad's B), dimmed to half while boosts wait (ARCHITECTURE.md §18).
+- **Not yet**: the HUD's "Grabbed" buff (ours has no buff tracker); `SetItemAttach` (no game file uses it).
 
 ---
 

@@ -67,10 +67,10 @@ public class CharacterAnimationActionsTests
         AnimationActionContent[] later =
         [
             new SetItemAttachAction(0, 0, 0, "hand"),                         // no game file uses it
-            new TongueAction(0, 0, 5),                                        // the frog's tongue comes with its entity
         ];
 
         Assert.All(later, k => Assert.Null(CharacterAnimationActions.Create(k)));
+        Assert.Equal(5, Assert.IsType<Actions.Tongue>(CharacterAnimationActions.Create(new TongueAction(0, 0, 5))).MaxLength);
         Assert.IsType<Actions.Grip>(CharacterAnimationActions.Create(new GripAction(0, 1, GripType.Hold, 1, 0, "a", "b", false)));
         Assert.Equal(OpenMagicka.Gameplay.Characters.Character.DefaultBreakFreeTolerance,
             ((Actions.Grip)CharacterAnimationActions.Create(new GripAction(0, 1, GripType.Hold, 1, 0, "a", "b", false))!).Tolerance);   // 0 stands for 10

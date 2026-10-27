@@ -10,7 +10,7 @@ public enum GripType : byte { Pickup, Ride, Hold }
 public readonly record struct GripThrowAim(float MinRange, float MaxRange, float Elevation);
 
 /// <summary>
-/// Grips (OM-89, docs/engine/ENTITIES_AI.md §5.6), as the original's: an NPC takes hold of a character (its mind's
+/// Grips (OM-89, docs/engine/ENTITIES_AI.md §5.5), as the original's: an NPC takes hold of a character (its mind's
 /// target) and holds it every frame after the state machine: a picked-up victim hangs at the gripper's bone, a held
 /// one stands still with the gripper glued in front, a ridden one stumbles backwards with the gripper on its back. The
 /// victim struggles free (its strength a struggle, up to the gripper's tolerance), or the grip ends when the victim

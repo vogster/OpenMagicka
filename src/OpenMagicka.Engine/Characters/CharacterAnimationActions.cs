@@ -8,7 +8,7 @@ namespace OpenMagicka.Engine.Characters;
 
 /// <summary>
 /// The gameplay action for a template's action record (docs/engine/ENTITIES_AI.md §4.2); null for
-/// the kinds that wait for items, spells, grips or the frog's tongue.
+/// the kinds that wait for items or spells.
 /// </summary>
 public static class CharacterAnimationActions
 {
@@ -45,6 +45,7 @@ public static class CharacterAnimationActions
             ReleaseGripAction => new Actions.ReleaseGrip(start, end),
             ThrowGripAction => new Actions.ThrowGrip(start, end),
             OverkillGripAction => new Actions.OverkillGrip(start, end),
+            TongueAction a => new Actions.Tongue(start, end, a.MaxLength),
             _ => null,
         };
     }

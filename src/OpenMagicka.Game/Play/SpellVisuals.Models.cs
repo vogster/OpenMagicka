@@ -1,6 +1,7 @@
 using System.Numerics;
 using OpenMagicka.Engine.Characters;
 using OpenMagicka.Gameplay.Animation;
+using OpenMagicka.Gameplay.Entities;
 using OpenMagicka.Gameplay.Spells;
 using OpenMagicka.Gameplay.Spells.Effects;
 using Barrier = OpenMagicka.Gameplay.Spells.Effects.Barrier;
@@ -18,6 +19,9 @@ public sealed partial class SpellVisuals
     public const float BarrierClipSpeed = 2, MineClipSpeed = 3, MineScale = 2.1f, MineGlow = 2, RuneTurn = -0.25f;
 
     public const string EffectModels = "Models/Effects/";
+
+    /// <summary>A frog's tongue: a skinned strip whose two joints are its ends.</summary>
+    public const string TongueModel = "Models/Missiles/Tongue";
 
     private readonly Func<string, AnimatedModel?> models;
     private readonly Dictionary<Barrier, List<Posed>> barrierModels = new(ReferenceEqualityComparer.Instance);
@@ -64,6 +68,7 @@ public sealed partial class SpellVisuals
     [
         .. new[] { "iceBarrier0_mesh", "iceBarrier_animation", "icebarrier_geyser", "icebarrier_tesla", "iceBarrier_Earth", "earthBarrier0_mesh",
             "earthBarrier_animation", "earthBarrier_volcano", "mine" }.Select(m => EffectModels + m),
+        TongueModel,
     ];
 
     /// <summary>A barrier's model as it stands: scaled by the barrier, along its way, its origin on the ground.</summary>
@@ -231,5 +236,38 @@ public sealed partial class SpellVisuals
             into.Add(new DrawnModel(posed.Asset, posed.Root, [.. posed.Skinned], SpellColours.Of(mine.Spell), Emissive: MineGlow));
         }
         WriteArmours(into);
+        WriteTongues(into);
+    }
+
+    /// <summary>
+    /// The frogs' tongues, as the original draws them: the strip's <c>joint1</c> at the mouth and its <c>joint2</c> at the
+    /// tip, both turned as the tongue was shot; its other bones (it has none) at the origin.
+    /// </summary>
+    private void WriteTongues(List<DrawnModel> into)
+    {
+        if (models(TongueModel) is not { } model)
+        {
+            return;
+        }
+        var bones = model.Skeleton.Bones;
+        var (start, end) = (model.Skeleton.IndexOf("joint1"), model.Skeleton.IndexOf("joint2"));
+        foreach (var tongue in world.Entities.Entities.OfType<FrogTongue>())
+        {
+            if (tongue.IsDead)
+            {
+                continue;
+            }
+            var skinned = new Matrix4x4[bones.Count];
+            Array.Fill(skinned, Matrix4x4.Identity);
+            if (start >= 0)
+            {
+                skinned[start] = bones[start].InverseBindPose * (tongue.Orientation with { Translation = tongue.Start });
+            }
+            if (end >= 0)
+            {
+                skinned[end] = bones[end].InverseBindPose * (tongue.Orientation with { Translation = tongue.End });
+            }
+            into.Add(new DrawnModel(TongueModel, Matrix4x4.CreateTranslation(tongue.Start), skinned, Vector3.One));
+        }
     }
 }

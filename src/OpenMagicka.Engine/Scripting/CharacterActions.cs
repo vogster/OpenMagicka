@@ -244,8 +244,9 @@ public sealed class GiveOrderAction : ScriptAction
             Animation is "" or "none" ? null : Animation, IdleAnimation is "" or "none" ? null : IdleAnimation);
         if (Id.Length > 0)
         {
-            if (Scene.World.Entities.FindByUniqueId(Hash(Id)) is Character { IsPlayer: false, Mind: { } mind })
+            if (Scene.World.Entities.FindByUniqueId(Hash(Id)) is Character { IsPlayer: false, Mind: { } mind } named)
             {
+                Free(named);
                 mind.Give(spec, byName: true);
             }
             return;
@@ -254,9 +255,17 @@ public sealed class GiveOrderAction : ScriptAction
         {
             if (character is { IsPlayer: false, Mind: { } mind })
             {
+                Free(character);
                 mind.Give(spec, byName: false);
             }
         }
+    }
+
+    /// <summary>An ordered NPC's grips go, both ways (OM-89).</summary>
+    private static void Free(Character character)
+    {
+        character.ReleaseAttachedCharacter();
+        character.ReleaseFromGripper();
     }
 }
 

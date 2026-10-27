@@ -69,6 +69,17 @@ public class CutscenePresentationTests
         Assert.Equal((40f, 6f), (GuiPass.PromptWidth(40, pad: true), GuiPass.PromptWidth(40, pad: false)));
     }
 
+    [Fact]
+    public void TheBreakFreePrompt_SaysItsWord_ItsGlyphDimmedWhileBoostsWait_ComingBackInAboutASecond()
+    {
+        Assert.Equal("#interact_12", LevelPlay.InteractKey(InteractType.BreakFree));
+        Assert.Equal((char)0x32A, GuiPass.SpaceBarGlyph);
+        Assert.Equal(0.554f, LevelPlay.ButtonGlow(LevelPlay.PromptButtonDimmed, 1f / 60), 3);       // dimmed each frame, it shows a bit over half
+        Assert.Equal(0.9995f, LevelPlay.ButtonGlow(LevelPlay.PromptButtonDimmed, 1), 4);
+        Assert.Equal(1, new PromptPicture("x", null, null, 1).ButtonIntensity);
+        Assert.Null(new PromptPicture("x", null, null, 1).Button);                                  // the keyboard's strip, without a glyph
+    }
+
     private sealed class ToleranceComparer : IEqualityComparer<(float, float)>
     {
         public bool Equals((float, float) a, (float, float) b) => MathF.Abs(a.Item1 - b.Item1) < 1e-4f && MathF.Abs(a.Item2 - b.Item2) < 1e-4f;

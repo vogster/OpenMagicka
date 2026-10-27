@@ -127,6 +127,29 @@ public class FieldMagickTests
     }
 
     [Fact]
+    public void TractorPull_PullsAVictimOutOfItsGrip_AndTeleport_LeavesTheGripperBehind()
+    {
+        var (world, _, wizard) = NewGame();
+        using var _ = world;
+        var gripper = Animated(world, Foe, at: wizard.Position + new Vector3(10, 0, 3));
+        var victim = Animated(world, Foe, at: wizard.Position + new Vector3(10, 0, 0));
+        Run(world, Tick);
+        Assert.True(gripper.GripCharacter(victim, GripType.Hold, -1, 10));
+        Assert.True(Cast(wizard, MagickType.TractorPull));
+        Assert.False(victim.IsGripped);
+
+        Assert.True(gripper.GripCharacter(wizard, GripType.Hold, -1, 10));
+        Assert.True(Cast(wizard, MagickType.Teleport));
+        Assert.False(wizard.IsGripped);
+        Assert.False(gripper.IsGripping);
+
+        Run(world, 1.1f);
+        Assert.True(wizard.GripCharacter(gripper, GripType.Hold, -1, 10));   // holding, it leaves its victim behind too
+        Assert.True(Cast(wizard, MagickType.Teleport));
+        Assert.False(gripper.IsGripped);
+    }
+
+    [Fact]
     public void ProppMagick_LobsABallOfPlasma()
     {
         var (world, _, wizard) = NewGame();

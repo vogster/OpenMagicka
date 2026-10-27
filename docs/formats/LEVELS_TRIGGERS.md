@@ -931,7 +931,7 @@ checkpoint's restart takes the bar away before the replay sets it up again (ours
 **The wizards:** `wizardControl` lights the staffs or puts them out; `beginDefaultAvatarSection`/`end…` and
 `beginUnequipWeaponsSection`/`end…` mark those stretches; the latter's end plays its clip on every avatar.
 
-**Never used by the game:** `releaseGrip` waits for the grips (OM-33); `physAnimation` (a part's clip bound to a prop) is
+**Never used by the game:** `releaseGrip` (done, OM-89: ENTITIES_AI.md §5.5); `physAnimation` (a part's clip bound to a prop) is
 left out.
 
 ### 9.6 Ours: the boss fights (OM-46)
