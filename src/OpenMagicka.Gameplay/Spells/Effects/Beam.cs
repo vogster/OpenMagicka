@@ -46,6 +46,9 @@ public sealed class Beam : Entity
 
     public float Length { get; private set; }
 
+    /// <summary>Its end is cut short by what it meets (an entity, the level): the hit's loop sounds there.</summary>
+    public bool IsHitting { get; private set; }
+
     public bool IsArcane { get; }
 
     /// <summary>What it carries besides Arcane and Life.</summary>
@@ -147,6 +150,7 @@ public sealed class Beam : Entity
         }
         var met = entity is not null;
         var (reflects, normal, wallAt) = Wall(ref met, ref entity);
+        IsHitting = met;
         var crossing = Cross(manager, ref met, ref entity);
         if (!crossing && Child is { } child && entity is not IShield && !Bubbled(entity) && !reflects)   // as the original, a beam joined at its start goes this way too
         {

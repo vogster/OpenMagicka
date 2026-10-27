@@ -51,7 +51,7 @@ public sealed class SprayEffect : SpellEffect
         (timeLeft, MaxTime, range) = (SprayRules.MaxDuration, SprayRules.MaxDuration, SprayRules.Range(Spell));
         damage = SpellDamage.For(Spell, SpellType.Spray, CastType.Force);
         PlaySounds(caster, SpellType.Spray, CastType.Force);
-        Show(caster, ForceEffects, caster.CastSource);
+        Show(caster, ForceEffects, c => c.CastSource);
         GreaseBurn(caster);
     }
 
@@ -71,7 +71,7 @@ public sealed class SprayEffect : SpellEffect
     {
         timeLeft = 1;                                                         // ends with its 0.2 s maximum
         damage = SpellDamage.For(Spell, SpellType.Spray, CastType.Self);
-        Show(caster, SelfEffects, caster.Position);
+        Show(caster, SelfEffects, c => c.Position);
         caster.Damage(damage, caster, caster.Position);
     }
 
@@ -81,7 +81,7 @@ public sealed class SprayEffect : SpellEffect
         timeLeft = MaxTime;
         damage = SpellDamage.For(Spell, SpellType.Spray, CastType.Weapon);
         var at = caster.WeaponSource;
-        Show(caster, WeaponEffects, at);
+        Show(caster, WeaponEffects, c => c.WeaponSource);
         if (caster.Manager is { } manager)
         {
             Blasts.Arc(manager, caster, caster, at, caster.Body.Facing, SprayRules.WeaponRadius, SprayRules.WeaponHalfAngle, damage);
@@ -169,9 +169,20 @@ public sealed class SprayEffect : SpellEffect
         }
     }
 
-    /// <summary>Each element with a whole magnitude of 1 or more starts its effect, until the spray ends.</summary>
-    private void Show(Character caster, IReadOnlyDictionary<Elements, string> effects, Vector3 at)
+    private Character? shower;
+    private Func<Character, Vector3>? spot;
+
+    /// <summary>
+    /// Where the spray's effects are now: their spot on the caster (the staff's tip, the weapon's, the caster) and the
+    /// caster's facing, so a held spray sweeps with its caster; none once it ended.
+    /// </summary>
+    public (Vector3 At, Vector3 Facing)? Place => IsActive && shower is { } caster && spot is { } where ? (where(caster), caster.Body.Facing) : null;
+
+    /// <summary>Each element with a whole magnitude of 1 or more starts its effect, following the spray until it ends.</summary>
+    private void Show(Character caster, IReadOnlyDictionary<Elements, string> effects, Func<Character, Vector3> where)
     {
+        (shower, spot) = (caster, where);
+        var at = where(caster);
         foreach (var (element, name) in effects.Where(e => (int)Spell[e.Key] > 0))
         {
             caster.RaiseCue(new ItemEffectCue(name, at, caster.Body.Facing, Follow: true, this));

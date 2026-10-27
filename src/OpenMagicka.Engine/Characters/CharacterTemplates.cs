@@ -9,6 +9,9 @@ namespace OpenMagicka.Engine.Characters;
 /// <summary>The content reader's character template as the gameplay core needs it.</summary>
 public static class CharacterTemplates
 {
+    /// <summary>The original's blood type "none" (regular, green, black, wood, insect, none).</summary>
+    private const int NoBlood = 5;
+
     /// <summary>The template with its slots filled from the items it refers to (from <paramref name="templateAsset"/>), through a fresh library.</summary>
     public static Gameplay.Characters.CharacterTemplate From(ContentLoader loader, string templateAsset, CharacterTemplateContent content) =>
         From(new TemplateLibrary(loader), templateAsset, content);
@@ -65,6 +68,7 @@ public static class CharacterTemplates
         {
             Sounds = ItemTemplates.Sounds(content.Sounds),
             HealthBars = Math.Max(1, stats.NumberOfHealthBars),
+            Bleeds = content.BloodType != NoBlood,
         };
     }
 }

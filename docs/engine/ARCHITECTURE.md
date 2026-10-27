@@ -1031,13 +1031,24 @@ touched). The impact damage rule is `OpenMagicka.Gameplay.Characters.ImpactDamag
     playing. A stopped global sound stays known, so a later `playSound` with its id plays it;
   - a dialog's lines are no scene's: each plays once (3D at its speaker, flat without one) and
     is stopped by its id.
+- The cues the original's code raises (0.0.3), beside those its data carries (animations, items, missiles, props):
+  - a spell's sounds as it is cast (`SpellSounds`, the original's table): one Spells-bank cue for each element in it, at
+    its magnitude, chosen by the spell's type and the cast (`_spray` forward and for every lightning cast, `_area`,
+    `_self` for a beam's self-cast, `_blast`); the spell's own (`Follow`) go with the caster and stop with the effect;
+  - a beam (each reflection too): `spell_<arcane|life>_ray_stage1` and its extra elements' sprays at its start, the
+    `_ray_stage2` loop where it hits while cut short; a beam's kill bloats with `spell_arcane_ray_stage3` and bursts with
+    `_stage4`;
+  - blood: a physical blow (earth, ice or arcane damage) taking hit points from a character with blood plays
+    `misc_hit_blood` at it, by the amount after resistances (none on a frozen one);
+  - `wep_deathblow` at a melee blow's victim when it kills;
+  - a self-shield's `spell_shield_self` (ice: `_self_ice`, earth: `_self_earth`);
+  - a book of magick picked up plays the `pickup_magick` clip (its `ui_pickup_magick`);
+  - a barrier's `_barrier_break` by its ice and earth, or its elements' `_area` when it goes off; a mine's
+    `spell_mine_activate` as its fuse is lit and its elements' `_area` when it goes off.
 - Not done:
-  - blood on hits (`misc_hit_blood`): the gameplay has no hit event for the sound;
-  - spells' element sound sets (sprays, beams' stages) beyond what the gameplay raises;
-  - barrier breaks and mine detonations;
-  - pausing (no pause menu yet);
-  - the menus' sounds and music (OM-53);
-  - the volume settings (OM-53).
+  - the blood's splash and decal (visuals); the gore setting;
+  - the earth weapon cast's ground wave, drowning and wading (`WaterDepth`);
+  - the characters' Death and OverKill events (their template's sounds there).
 
 
 ### 8.2 Ours: the WMA banks transcoded (OM-61)

@@ -1,3 +1,4 @@
+using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Combat;
 using OpenMagicka.Gameplay.Entities;
 using OpenMagicka.Gameplay.Spells;
@@ -38,6 +39,7 @@ public sealed partial class Character
         if (Template.HasGibs)
         {
             (IsBloating, bloatTimer, HitPoints) = (true, 0, 0);
+            RaiseCue(new SoundCue("spell_arcane_ray_stage3", SoundBank.Spells, Position, Body.Facing));   // the arcane one even for life, as the original's
         }
         else
         {
@@ -63,6 +65,7 @@ public sealed partial class Character
     {
         if (bloatElement != Elements.None && Manager is { } manager && !world.IsDisposed)
         {
+            RaiseCue(new SoundCue("spell_arcane_ray_stage4", SoundBank.Spells, Position, Body.Facing));
             var amount = bloatElement == Elements.Life ? SpellDamage.Life : SpellDamage.Arcane;
             var burst = new DamageEntry(AttackProperties.Damage, bloatElement, amount, 1 + MaxHitPoints / 5000);
             Blasts.Full(manager, world, bloatKiller, null, Radius + BloatReach, Position, [burst], source: this);

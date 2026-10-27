@@ -17,7 +17,8 @@ namespace OpenMagicka.Game.Play;
 /// </summary>
 public sealed class PlayView : IDisposable
 {
-    public static readonly Color Sky = new(40, 44, 60);
+    /// <summary>What shows where the level draws nothing: black, as the original clears its frame (the viewer keeps its blue).</summary>
+    public static readonly Color Sky = Color.Black;
 
     private readonly ContentLoader loader;
     private readonly RenderQueue<GraphicsDevice> gpu;

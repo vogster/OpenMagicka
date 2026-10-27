@@ -22,7 +22,6 @@ public sealed class BeamEffect : SpellEffect
     {
         timeLeft = caster.Modify(Modified.SpellTtl, BeamRules.Lifetime(Spell));
         Beam = Beam.Fire(caster, Spell, SpellDamage.For(Spell, SpellType.Beam, CastType.Force));
-        PlaySounds(caster, SpellType.Spray, CastType.Force);                  // as the original's beam: its elements' spray sounds
     }
 
     protected override void Area(Character caster)

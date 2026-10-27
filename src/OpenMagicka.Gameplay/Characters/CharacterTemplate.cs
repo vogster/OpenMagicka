@@ -81,6 +81,9 @@ public sealed record CharacterTemplate(
     /// <summary>How many health bars the HUD stacks under it (a boss-like foe's 2 or more: the full ones grey, the last its share).</summary>
     public int HealthBars { get; init; } = 1;
 
+    /// <summary>Whether a blow draws its blood (all but the bloodless, the original's blood type "none").</summary>
+    public bool Bleeds { get; init; } = true;
+
     /// <summary>What it sounds of while it lives (a hum, an engine): up to 4 cues, lowered (docs/engine/ARCHITECTURE.md §8).</summary>
     public IReadOnlyList<TemplateSound> Sounds { get; init; } = [];
 

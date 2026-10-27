@@ -109,10 +109,13 @@ public sealed class EffectDirector : IDisposable
                 Start(null, once.Effect, () => Facing(once.Position, once.Direction));
                 break;
             case ItemEffectCue item:
-                Start(item.Source, item.Effect, Follower(item.Source, item.Position, item.Direction));
+                Start(new ItemKey(item.Source, item.Effect), item.Effect, Follower(item.Source, item.Position, item.Direction));   // a spray of fire and steam shows both
                 break;
             case ItemEffectEndCue end:
-                Stop(end.Source);
+                foreach (var key in following.Keys.OfType<ItemKey>().Where(k => ReferenceEquals(k.Source, end.Source)).ToList())
+                {
+                    Stop(key);
+                }
                 break;
             case EffectCue { Attached: false } bone when source is Character character:
                 Start(null, bone.Effect, Bone(character, bone.Bone));
@@ -144,12 +147,13 @@ public sealed class EffectDirector : IDisposable
     }
 
     /// <summary>
-    /// Where a following item's effect is: on its missile, at its item's tip, on the entity; none once the
-    /// missile or entity is gone. Another source (an item's passive, a spray) cannot be followed: its effect
-    /// stays where it began, until its end cue or the scene's end.
+    /// Where a following item's effect is: on its missile, at its item's tip, on the entity, with its spray (its spot on
+    /// the caster, turned as the caster turns); none once the missile, the entity or the spray is gone. Another source
+    /// (an item's passive) cannot be followed: its effect stays where it began, until its end cue or the scene's end.
     /// </summary>
     private static Func<Matrix4x4?> Follower(object source, Vector3 position, Vector3 direction) => source switch
     {
+        Gameplay.Spells.Effects.SprayEffect spray => () => spray.Place is var (at, facing) ? Facing(at, facing) : null,
         Missile missile => () => missile.IsDead || missile.Manager is null ? null : Facing(missile.Position, missile.Velocity),
         Item item => () => Facing(item.Tip, direction),
         Entity entity => () => entity.IsRemovable || entity.Manager is null ? null : Facing(entity.Position, direction),
@@ -193,6 +197,9 @@ public sealed class EffectDirector : IDisposable
 
     /// <summary>One of a prop's own effects.</summary>
     private sealed record PropKey(PhysicsProp Prop, PropEffect Effect);
+
+    /// <summary>A following item's effect: each of a source's effects is its own (a new one of the same name replaces it).</summary>
+    private sealed record ItemKey(object Source, string Effect);
 
     private void Start(object? key, string effect, Func<Matrix4x4?> where)
     {

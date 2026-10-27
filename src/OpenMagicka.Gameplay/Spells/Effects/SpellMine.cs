@@ -97,6 +97,10 @@ public sealed class SpellMine : Entity
         (dead, HasGoneOff) = (true, true);
         if (Manager is { } manager && !world.IsDisposed)
         {
+            foreach (var cue in SpellSounds.Blast(Spell))
+            {
+                manager.RaiseCue(this, new Animation.SoundCue(cue, Animation.SoundBank.Spells, Position, Vector3.UnitZ));
+            }
             Blasts.Full(manager, world, Owner, this, BlastRadius, Position, BlastDamage, source: this);
         }
     }
@@ -115,6 +119,7 @@ public sealed class SpellMine : Entity
         if (IsArmed && fuse <= 0 && Touched())
         {
             fuse = Fuse;
+            Manager?.RaiseCue(this, new Animation.SoundCue("spell_mine_activate", Animation.SoundBank.Spells, Position, Vector3.UnitZ));
         }
         if (fuse > 0)
         {

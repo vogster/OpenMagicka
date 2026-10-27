@@ -63,6 +63,12 @@ public class AudioBackendTests
                 global::OpenMagicka.Gameplay.Spells.SpellType.Spray, global::OpenMagicka.Gameplay.Spells.CastType.Force));
             Assert.NotNull(names.Find(sound.Cue));                           // what sprays and strikes sounds (0.0.3); earth, shield and ice never spray
         }
+        foreach (var raised in (string[])["misc_hit_blood", "wep_deathblow", "spell_arcane_ray_stage1", "spell_arcane_ray_stage2", "spell_arcane_ray_stage3",
+            "spell_arcane_ray_stage4", "spell_life_ray_stage1", "spell_life_ray_stage2", "spell_shield_self", "spell_shield_self_ice", "spell_shield_self_earth",
+            "spell_earth_barrier_break", "spell_ice_barrier_break", "spell_ice_earth_barrier_break", "spell_mine_activate", "ui_pickup_magick"])
+        {
+            Assert.NotNull(names.Find(raised));                                 // the cues the code raises (0.0.3)
+        }
 
         using var audio = XactAudio.Open(files, "eng", out var failure);
         if (audio is null)

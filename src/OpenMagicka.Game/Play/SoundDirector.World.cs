@@ -42,6 +42,9 @@ public sealed partial class SoundDirector
 
         public bool Shattered { get; set; }
 
+        /// <summary>A beam's loop where it hits, while it is cut short.</summary>
+        public ISoundCue? Loop { get; set; }
+
         public int Seen { get; set; }
 
         /// <summary>Where it was last seen (a shattered one is gone the tick it shatters).</summary>
@@ -91,7 +94,7 @@ public sealed partial class SoundDirector
         tick++;
         foreach (var entity in world.Entities.Entities)
         {
-            if (entity is not (Character or SpellShield or Barrier or SpellMine))
+            if (entity is not (Character or SpellShield or Barrier or SpellMine or Beam))
             {
                 continue;
             }
@@ -124,6 +127,9 @@ public sealed partial class SoundDirector
                     break;
                 case SpellMine when first:
                     Sounds.Play(SoundBanks.Spells, "spell_mine01", at);
+                    break;
+                case Beam beam:
+                    StepBeam(beam, state, first, at);
                     break;
             }
         }
@@ -272,8 +278,44 @@ public sealed partial class SoundDirector
         }
     }
 
+    /// <summary>
+    /// A beam as the original's sounds it: at its start its stage-one cue and its extra elements' sprays (at magnitude 1),
+    /// and while something cuts it short, its stage-two loop where it hits; a reflection is a beam of its own.
+    /// </summary>
+    private void StepBeam(Beam beam, Heard state, bool first, SoundPlace at)
+    {
+        var kind = beam.IsArcane ? "arcane" : "life";
+        if (first)
+        {
+            Keep(state, Sounds.Play(SoundBanks.Spells, $"spell_{kind}_ray_stage1", at));
+            foreach (var spray in SpellSounds.ExtraSprays(beam.ExtraElements))
+            {
+                Keep(state, Sounds.Play(SoundBanks.Spells, spray, at, ("Magnitude", 1)));
+            }
+        }
+        if (beam.IsHitting && !beam.IsDead)
+        {
+            var end = SoundPlace.At(beam.Position + beam.Direction * beam.Length, beam.Direction);
+            if (state.Loop is { IsStopped: false } loop)
+            {
+                Sounds.Place(loop, end);
+            }
+            else
+            {
+                state.Loop = Sounds.Play(SoundBanks.Spells, $"spell_{kind}_ray_stage2", end);
+            }
+        }
+        else if (state.Loop is { } loop)
+        {
+            loop.Stop(immediate: false);
+            state.Loop = null;
+        }
+    }
+
     private static void StopAll(Heard state)
     {
+        state.Loop?.Stop(immediate: false);
+        state.Loop = null;
         foreach (var cue in state.Own)
         {
             cue.Stop(immediate: false);

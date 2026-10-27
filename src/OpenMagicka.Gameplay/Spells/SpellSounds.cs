@@ -35,6 +35,14 @@ public static class SpellSounds
         return sounds;
     }
 
+    /// <summary>A blast's sounds (a barrier or a mine going off): each element's area cue but the shield's.</summary>
+    public static IEnumerable<string> Blast(Spell spell) =>
+        For(spell, SpellType.Spray, CastType.Area).Select(s => s.Cue).Where(c => c != "spell_shield_area");
+
+    /// <summary>A beam's extra elements' spray cues (heard at its start beside its own stage sound, each at magnitude 1).</summary>
+    public static IEnumerable<string> ExtraSprays(Elements extras) =>
+        Order.Where(e => e is not (Elements.Arcane or Elements.Life) && (extras & e) != 0).Select(e => $"spell_{e.ToString().ToLowerInvariant()}_spray");
+
     private static string? Kind(SpellType type, CastType cast, Elements element) => (type, cast) switch
     {
         (SpellType.Lightning, _) => "spray",

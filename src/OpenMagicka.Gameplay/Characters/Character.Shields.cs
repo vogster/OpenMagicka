@@ -1,3 +1,4 @@
+using OpenMagicka.Gameplay.Animation;
 using OpenMagicka.Gameplay.Buffs;
 using OpenMagicka.Gameplay.Combat;
 using OpenMagicka.Gameplay.Spells;
@@ -25,11 +26,20 @@ public sealed partial class Character
             if (!hadBubble)
             {
                 SelfShield = new SelfShield(spell);
+                RaiseCue(new SoundCue("spell_shield_self", SoundBank.Spells, Position, Body.Facing));
             }
             return;
         }
         RemoveSelfShield();
         SelfShield = new SelfShield(spell);
+        if (spell.Ice > 0)
+        {
+            RaiseCue(new SoundCue("spell_shield_self_ice", SoundBank.Spells, Position, Body.Facing));
+        }
+        if (spell.Earth > 0)
+        {
+            RaiseCue(new SoundCue("spell_shield_self_earth", SoundBank.Spells, Position, Body.Facing));
+        }
         SyncShieldMass();
         if (spell.Ice > 0 && Manager is { } manager)
         {

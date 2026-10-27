@@ -15,6 +15,9 @@ public static class Melee
     /// <summary>The animation a turned blow blends to.</summary>
     public const string Recoil = "attack_recoil";
 
+    /// <summary>The sound of a blow that kills, at its victim.</summary>
+    public const string DeathblowSound = "wep_deathblow";
+
     /// <summary>The results that let a blow carry on (knocked down is never reported, as the original).</summary>
     private const DamageResult CarriesOn = DamageResult.KnockedDown | DamageResult.KnockedBack | DamageResult.Pushed | DamageResult.Killed;
 
@@ -98,6 +101,10 @@ public static class Melee
         for (var i = item.NextToDamage; i < item.HitList.Count; i++)
         {
             var result = Fire(owner, item, new EventContext(EventTrigger.Hit), item.HitList[i]);
+            if ((result & (DamageResult.Killed | DamageResult.OverKilled)) != 0 && item.HitList[i] is Entity victim)
+            {
+                owner.RaiseCue(new Animation.SoundCue(DeathblowSound, Animation.SoundBank.Weapons, victim.Position, owner.Body.Facing));
+            }
             carryOn = carryOn && (result & CarriesOn) != 0;
             if (!carryOn && result.HasFlag(DamageResult.Deflected))
             {

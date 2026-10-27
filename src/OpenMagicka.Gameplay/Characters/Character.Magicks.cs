@@ -312,6 +312,7 @@ public sealed partial class Character
         {
             return false;
         }
+        PlayAttack("pickup_magick", allowRotate: false);                      // its clip sounds the pickup, as the original's
         RaiseScriptTrigger(book.OnPickupTrigger);
         return true;
     }

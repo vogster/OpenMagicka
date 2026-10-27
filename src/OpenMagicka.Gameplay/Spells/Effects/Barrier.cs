@@ -222,6 +222,15 @@ public sealed partial class Barrier : Entity
         Raise(manager, world, Owner, next, Vector3.Transform(Facing, step.Turn), Scale, Spell, ContactDamage, Hits, step);
     }
 
+    /// <summary>A solid barrier's sound as it breaks: its ice and earth's, its ice's, or its earth's.</summary>
+    public static string? BreakSound(Spell spell) => (spell.Ice > 0, spell.Earth > 0) switch
+    {
+        (true, true) => "spell_ice_earth_barrier_break",
+        (true, false) => "spell_ice_barrier_break",
+        (false, true) => "spell_earth_barrier_break",
+        _ => null,
+    };
+
     /// <summary>A solid barrier with Arcane or Life blasts as it breaks and goes at once; another solid one sinks first; a wall goes at once.</summary>
     private void Break()
     {
@@ -235,9 +244,17 @@ public sealed partial class Barrier : Entity
         {
             if (Manager is { } manager && !world.IsDisposed)
             {
+                foreach (var cue in SpellSounds.Blast(Spell))
+                {
+                    manager.RaiseCue(this, new Animation.SoundCue(cue, Animation.SoundBank.Spells, Position, Vector3.UnitZ));
+                }
                 Blasts.Full(manager, world, Owner, this, BlastRadius, Position, ContactDamage, source: this);
             }
             return;
+        }
+        if (BreakSound(Spell) is { } breaking)
+        {
+            Manager?.RaiseCue(this, new Animation.SoundCue(breaking, Animation.SoundBank.Spells, Position, Vector3.UnitZ));
         }
         sinkTimer = SinkTime;
     }

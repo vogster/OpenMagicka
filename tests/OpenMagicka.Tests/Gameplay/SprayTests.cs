@@ -107,6 +107,26 @@ public class SprayTests
     }
 
     [Fact]
+    public void AHeldForceSpray_TurnsAfterTheCursor_AndItsFireWithIt()
+    {
+        using var world = World();
+        var wizard = Wizard(world, Elements.Fire);
+        Assert.True(wizard.PressCast(CastType.Force));
+        Assert.True(RunUntil(world, () => wizard.CurrentSpell is SprayEffect));
+        var before = wizard.Body.Facing;
+
+        for (var t = 0f; t < 1; t += Tick)
+        {
+            wizard.Steer(Vector3.UnitX * 5, walk: false);                    // the cursor off to the right, as the controls steer each tick
+            world.Tick(Tick);
+        }
+
+        var spray = Assert.IsType<SprayEffect>(wizard.CurrentSpell);
+        Assert.True(Vector3.Dot(wizard.Body.Facing, Vector3.UnitX) > 0.9f, $"{before} → {wizard.Body.Facing}");
+        Assert.Equal((wizard.CastSource, wizard.Body.Facing), spray.Place);        // its fire sweeps with it, as the original's
+    }
+
+    [Fact]
     public void AForceSpray_LastsFourSecondsAtMost()
     {
         using var world = World();

@@ -1,3 +1,4 @@
+using OpenMagicka.Gameplay.Animation;
 using System.Numerics;
 using OpenMagicka.Gameplay.Combat;
 using OpenMagicka.Gameplay.Entities;
@@ -52,6 +53,7 @@ public sealed partial class Character
         }
         result |= Pushes(damage, attackPosition);
         var blocked = Block(ref damage, attackPosition);
+        var frozen = Statuses.Has(StatusEffects.Frozen);
         var outcome = DamageRules.Hit(blocked ? damage with { Attack = damage.Attack & AttackProperties.Status } : damage, AsDamageTarget);
         result |= outcome.Result | (blocked ? DamageResult.Deflected : DamageResult.None);
         Statuses = outcome.Statuses;
@@ -67,6 +69,7 @@ public sealed partial class Character
             BlowsTaken++;
         }
         Consequences(damage, outcome, attacker);
+        Bleed(damage, outcome, frozen);
         if (outcome.Result.HasFlag(DamageResult.Killed))
         {
             if (outcome.Result.HasFlag(DamageResult.OverKilled) && (damage.Element & ~Elements.Arcane) != 0)
@@ -149,6 +152,23 @@ public sealed partial class Character
         damage = damage with { Amount = MathF.Max(0, damage.Amount - blocked) };
         return false;
     }
+
+    /// <summary>
+    /// A physical blow (earth, ice or arcane damage) that took hit points draws blood as the original's: its gore sound at
+    /// the character, by the amount after resistances; none on a frozen character (it shatters instead) or a bloodless one.
+    /// </summary>
+    private void Bleed(DamageEntry damage, DamageOutcome outcome, bool frozen)
+    {
+        var amount = damage.Magnitude > 0 ? outcome.Dealt / damage.Magnitude : 0;
+        if (BloodAndGore && Template.Bleeds && !frozen && damage.Attack.HasFlag(AttackProperties.Damage) && (damage.Element & (Elements.Earth | Elements.Ice | Elements.Arcane)) != 0
+            && amount > 0)
+        {
+            RaiseCue(new SoundCue(GoreSound, SoundBank.Misc, Position, Body.Facing, amount));
+        }
+    }
+
+    /// <summary>The sound of a blow drawing blood.</summary>
+    public const string GoreSound = "misc_hit_blood";
 
     private void Consequences(DamageEntry damage, DamageOutcome outcome, Entity? attacker)
     {

@@ -5,6 +5,12 @@ namespace OpenMagicka.Gameplay.Animation;
 /// <summary>Presentation an animation asks for (docs/engine/ENTITIES_AI.md §4.2); the engine plays it.</summary>
 public abstract record AnimationCue;
 
+/// <summary>The original's sound banks, as a cue names them (its <c>Banks</c> flags).</summary>
+public static class SoundBank
+{
+    public const int UI = 0x8, Spells = 0x10, Characters = 0x20, Weapons = 0x80, Misc = 0x100, Additional = 0x200;
+}
+
 /// <param name="Banks">The original's sound bank flags.</param>
 /// <param name="Magnitude">The cue's magnitude variable, when the source sets one.</param>
 public sealed record SoundCue(string Cue, int Banks, Vector3 Position, Vector3 Facing, float? Magnitude = null) : AnimationCue
