@@ -33,10 +33,14 @@ once with `--content` and its folder, or delete `settings.json` (see below).
 - Pause (Esc or Start): resume, restart the chapter, options, quit to the menu.
 - Checkpoints. When every player dies, the chapter starts again from the last checkpoint. A finished chapter goes on
   to the next one.
+- A slot keeps its last checkpoint: quit (or close the game), and Start in the slot's lobby goes straight back to it.
+  Choosing another chapter in the lobby asks first, since the checkpoint is lost.
 
-What is not in it yet: the 3D book and its page turning, the intro and the map cutscenes between chapters,
-multiplayer, challenges, versus, DLC, the magick book, and saving at a checkpoint across runs (continuing a slot
-starts its chapter from the beginning).
+- The intro before the first chapter and the world map's cutscene before the others, with their narration and
+  subtitles. A click, Enter, Space or Esc skips them.
+
+What is not in it yet: the 3D book and its page turning, the end page with the level's last frame, multiplayer,
+challenges, versus, DLC, and the magick book.
 
 ## Controls
 

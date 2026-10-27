@@ -371,6 +371,8 @@ If there are > 300 start actions, a loading screen with progress is shown.
 - At the level's end (`End`), what waits outside is let go with the rest of the world.
 ### 6.2 Checkpoint and replay
 
+(Kept across runs in a campaign slot, OM-85: docs/engine/ARCHITECTURE.md §20.)
+
 `triggerCheckpoint` takes a snapshot of the **level state**: current scene, timers, counters,
 and for each scene: the first-entry flag, stored entities, global and 3D sounds,
 animation states, the state of each trigger (repeat timer, hasTriggered, action

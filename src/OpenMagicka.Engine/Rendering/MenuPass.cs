@@ -23,10 +23,37 @@ public sealed class MenuPass : IDisposable
     private static readonly (MenuAtlas Atlas, string Asset)[] Atlases =
     [
         (MenuAtlas.Pages, "UI/Menu/pages"), (MenuAtlas.PagesNew, "UI/Spritesheets/pagesNew"), (MenuAtlas.Hud, "UI/HUD/hud"), (MenuAtlas.FadeBox, "UI/Menu/FadeBox"),
-        (MenuAtlas.Loading, "UI/Loading/background"),
+        (MenuAtlas.Loading, "UI/Loading/background"), (MenuAtlas.CampaignMap, "UI/Menu/CampaignMap"), (MenuAtlas.MapMask, "UI/Menu/MapMask"),
+        (MenuAtlas.IntroMask, "UI/Cutscenes/intro_mask"), (MenuAtlas.Intro1, "UI/Cutscenes/intro_s1"), (MenuAtlas.Intro2, "UI/Cutscenes/intro_s2"),
+        (MenuAtlas.Intro3, "UI/Cutscenes/intro_s3"), (MenuAtlas.Intro4, "UI/Cutscenes/intro_s4"), (MenuAtlas.Intro5, "UI/Cutscenes/intro_s5"),
+        (MenuAtlas.Intro6, "UI/Cutscenes/intro_s6"),
     ];
 
+    /// <summary>A painting's three steps: the mask's alpha in; the picture blended by it (the alpha kept); the paper's alpha back (its first draw's, a²).</summary>
+    private static readonly BlendState MaskIn = new()
+    {
+        ColorWriteChannels = ColorWriteChannels.Alpha, ColorSourceBlend = Blend.One, ColorDestinationBlend = Blend.Zero,
+        AlphaSourceBlend = Blend.One, AlphaDestinationBlend = Blend.Zero,
+    };
+
+    private static readonly BlendState ByMask = new()
+    {
+        ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Green | ColorWriteChannels.Blue,
+        ColorSourceBlend = Blend.DestinationAlpha, ColorDestinationBlend = Blend.InverseDestinationAlpha,
+        AlphaSourceBlend = Blend.Zero, AlphaDestinationBlend = Blend.One,
+    };
+
+    private static readonly BlendState PaperAlpha = new()
+    {
+        ColorWriteChannels = ColorWriteChannels.Alpha, ColorSourceBlend = Blend.One, ColorDestinationBlend = Blend.Zero,
+        AlphaSourceBlend = Blend.SourceAlpha, AlphaDestinationBlend = Blend.Zero,
+    };
+
     public const string Paper = "UI/ToM/tome_pages_0";
+
+    /// <summary>The cutscenes' pictures, which the menu does without.</summary>
+    private static readonly HashSet<MenuAtlas> Optional = [MenuAtlas.CampaignMap, MenuAtlas.MapMask, MenuAtlas.IntroMask, MenuAtlas.Intro1, MenuAtlas.Intro2,
+        MenuAtlas.Intro3, MenuAtlas.Intro4, MenuAtlas.Intro5, MenuAtlas.Intro6];
 
     private readonly GuiText text;
     private readonly Texture2D paper;
@@ -48,7 +75,18 @@ public sealed class MenuPass : IDisposable
         ArgumentNullException.ThrowIfNull(loader);
         Texture2DContent Picture(string asset) => loader.LoadUncached(asset).Root as Texture2DContent ?? throw new InvalidDataException($"{asset} is not a picture");
         var paper = Picture(Paper);
-        var pictures = Atlases.ToDictionary(a => a.Atlas, a => Picture(a.Asset));
+        var pictures = new Dictionary<MenuAtlas, Texture2DContent>();
+        foreach (var (atlas, asset) in Atlases)
+        {
+            try
+            {
+                pictures[atlas] = Picture(asset);
+            }
+            catch (Exception e) when (Optional.Contains(atlas) && e is InvalidDataException or IOException)
+            {
+                // a cutscene's picture missing: its page shows the paper
+            }
+        }
         var fonts = FontNames.ToDictionary(n => n, n =>
         {
             var own = $"Languages/{language}/Font/{n}";
@@ -110,8 +148,11 @@ public sealed class MenuPass : IDisposable
         {
             device.SetRenderTarget(page);
             device.Clear(Color.Transparent);
-            text.DrawSprites(device, paper, [new GuiSprite(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0), new Vector2(1, 0.5f), Vector4.One)],
-                MenuPicture.PageSize, MenuPicture.PageSize);
+            text.DrawSprites(device, paper, [PaperSprite], MenuPicture.PageSize, MenuPicture.PageSize);
+            foreach (var painting in picture.PagePaintings)
+            {
+                Paint(device, painting);
+            }
             Draw(device, picture.PageSprites, picture.PageTexts, MenuPicture.PageSize, MenuPicture.PageSize);
             device.SetRenderTarget(null);
             if (clear)
@@ -132,6 +173,36 @@ public sealed class MenuPass : IDisposable
             text.DrawSprites(device, atlases[MenuAtlas.White], [new GuiSprite(Vector2.Zero, new Vector2(width, height), Vector2.Zero, Vector2.One,
                 new Vector4(0, 0, 0, Math.Clamp(picture.Cover, 0, 1)))], width, height);
         }
+    }
+
+    private static readonly GuiSprite PaperSprite = new(Vector2.Zero, new Vector2(MenuPicture.PageSize), new Vector2(0.5f, 0), new Vector2(1, 0.5f), Vector4.One);
+
+    /// <summary>A picture painted into the paper through its mask (the original's three draws), in the page's target; none without its pictures.</summary>
+    private void Paint(GraphicsDevice device, MenuPainting painting)
+    {
+        if (!atlases.TryGetValue(painting.Mask, out var mask) || !atlases.TryGetValue(painting.Picture.Atlas, out var shown))
+        {
+            return;
+        }
+        var size = MenuPicture.PageSize;
+        var area = painting.Area;
+        device.BlendState = MaskIn;
+        text.DrawSprites(device, mask, [new GuiSprite(new Vector2(area.X, area.Y), new Vector2(area.Right, area.Bottom), Vector2.Zero,
+            Vector2.One, Vector4.One)], size, size);
+        device.BlendState = ByMask;
+        var p = painting.Picture;
+        if (painting.Texels is { } t)
+        {
+            text.DrawSprites(device, shown, [new GuiSprite(p.At, p.At + p.Size, new Vector2(t.X / shown.Width, t.Y / shown.Height),
+                new Vector2((t.X + t.Z) / shown.Width, (t.Y + t.W) / shown.Height), p.Colour)], size, size);
+        }
+        else
+        {
+            Draw(device, [p], [], size, size);
+        }
+        device.BlendState = PaperAlpha;
+        text.DrawSprites(device, paper, [PaperSprite], size, size);
+        device.BlendState = BlendState.NonPremultiplied;
     }
 
     /// <summary>The sprites (in batches of one atlas and saturation, in order), then the texts.</summary>
@@ -158,7 +229,13 @@ public sealed class MenuPass : IDisposable
                 continue;
             }
             var shown = line.Wrap > 0 ? font.Metrics.Wrap(line.Text, line.Wrap) : line.Text;
-            text.Draw(device, font, shown, line.Colour, line.At, line.Scale, int.MaxValue, width, height, line.Alignment);
+            var at = line.FromBottom ? line.At - new Vector2(0, (shown.Count(c => c == '\n') + 1) * font.Metrics.LineHeight * line.Scale) : line.At;
+            if (line.Shadow)
+            {
+                text.Draw(device, font, shown, new Vector4(0, 0, 0, 0.8f * line.Colour.W), at + Vector2.One, line.Scale, int.MaxValue, width, height,
+                    line.Alignment);
+            }
+            text.Draw(device, font, shown, line.Colour, at, line.Scale, int.MaxValue, width, height, line.Alignment);
         }
     }
 

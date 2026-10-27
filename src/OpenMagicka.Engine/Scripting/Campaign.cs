@@ -3,7 +3,7 @@ namespace OpenMagicka.Engine.Scripting;
 /// <summary>
 /// The campaigns' chapters, in order (docs/formats/LEVELS_TRIGGERS.md §3): written into the original's
 /// code, not into any file. The paths are the levels' under <c>Levels/</c>. Each chapter after the first
-/// is reached from the world map, with the cutscene <c>Levels/Cutscenes.xml</c> gives it (OM-49).
+/// is reached from the world map, with the cutscene <c>Levels/Cutscenes.xml</c> gives it (OM-84).
 /// </summary>
 public static class Campaign
 {

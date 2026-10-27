@@ -11,7 +11,8 @@ namespace OpenMagicka.Game.Shell;
 /// The loading screen between the menu and a level (OM-53, docs/engine/ARCHITECTURE.md §20), as the original's in
 /// part: black, its backdrop as a square of the screen's height in the middle, the chapter's name and title, "Loading"
 /// with dots counting up, and a tip at the bottom (Maiandra14 wrapped to 700 px, its bottom two lines above the
-/// screen's). The original's picture of a spell and its progress bar are left out.
+/// screen's). The original's picture of a spell and its progress bar are left out. A narration (the intro's last
+/// words, OM-84) takes the tip's place.
 /// </summary>
 public static class LoadingScreen
 {
@@ -23,7 +24,7 @@ public static class LoadingScreen
     /// <summary>A tip's key (1…22).</summary>
     public static string TipKey(int tip) => "#tip" + Math.Clamp(tip, 1, Tips).ToString("D2", CultureInfo.InvariantCulture);
 
-    public static void Write(MenuPicture picture, StringTable strings, int chapter, int tip, double seconds, Point screen, float alpha = 1)
+    public static void Write(MenuPicture picture, StringTable strings, int chapter, int tip, double seconds, Point screen, float alpha = 1, string? narration = null)
     {
         ArgumentNullException.ThrowIfNull(picture);
         ArgumentNullException.ThrowIfNull(strings);
@@ -36,7 +37,7 @@ public static class LoadingScreen
             white, 0.8f * s));
         var dots = new string('.', (int)(Math.Max(0, seconds) / 0.5) % 4);
         picture.ScreenTexts.Add(new MenuText(WordFont, strings.Get("#network_23") + dots, new Vector2(w / 2f, h * 0.6f), TextAlignment.Center, white, s));
-        picture.ScreenTexts.Add(new MenuText(TipFont, strings.Get("#tip") + strings.Get(TipKey(tip)), new Vector2(w / 2f, h - 4 * 18 * s), TextAlignment.Center,
-            white, s, TipWidth));                                                   // wrapped before scaling
+        var words = narration is { } told ? strings.Get(told) : strings.Get("#tip") + strings.Get(TipKey(tip));
+        picture.ScreenTexts.Add(new MenuText(TipFont, words, new Vector2(w / 2f, h - 4 * 18 * s), TextAlignment.Center, white, s, TipWidth));   // wrapped before scaling
     }
 }

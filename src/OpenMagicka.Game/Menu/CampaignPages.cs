@@ -57,6 +57,7 @@ public sealed class SlotsPage : MenuPage
     {
         if (Menu.Host.Saves[slot] is null)
         {
+            Menu.Host.Saves.SetCheckpoint(slot, null);                        // a stale checkpoint goes
             Menu.Host.Saves.Set(slot, new CampaignSlot(0, 0));
         }
         Menu.Push(new LobbyPage(Menu, slot));
@@ -108,12 +109,34 @@ public sealed class LobbyPage : MenuPage
     {
         this.slot = slot;
         Items.Add(new MenuItem(new Rectangle(64, 64, 896, 160), ChangeChapter));
-        Items.Add(new MenuItem(new Rectangle(640, 860, 320, 72), () => Menu.Host.Play(slot, Saved.Chapter)));
+        Items.Add(new MenuItem(new Rectangle(640, 860, 320, 72), () => CutscenePages.Begin(Menu, slot, Saved.Chapter, resume: true)));
         Items.Add(new MenuItem(BackPlate, Back));
         Selected = 1;
     }
 
     private CampaignSlot Saved => Menu.Host.Saves[slot] ?? new CampaignSlot(0, 0);
+
+    /// <summary>Where the chapter's map is shown under its title (ours: centred; the original's lobby has it at the left, by the players).</summary>
+    public static readonly Rectangle PreviewArea = new(288, 288, 448, 448);
+
+    /// <summary>
+    /// The chapter's place on the world map, as the original's lobby: a square of 1024 / zoom texels of the map around its
+    /// cutscene's last key, painted through the map's mask; none for a chapter with no cutscene.
+    /// </summary>
+    public static MenuPainting? Preview(Content.Levels.MapCutscene? cutscene)
+    {
+        if (cutscene is null || cutscene.Position.Count == 0 || cutscene.Zoom.Count == 0 || !(cutscene.Zoom[^1].Value > 0))
+        {
+            return null;
+        }
+        var (at, side) = (cutscene.Position[^1].Value, 1024 / cutscene.Zoom[^1].Value);
+        var room = Math.Max(0, MapCutscenePage.MapSize - side);              // kept on the map, not smeared past its edge
+        var source = new Rectangle((int)MathF.Round(Math.Clamp(at.X - side / 2, 0, room)), (int)MathF.Round(Math.Clamp(at.Y - side / 2, 0, room)),
+            (int)MathF.Round(side), (int)MathF.Round(side));
+        var map = new MenuSprite(MenuAtlas.CampaignMap, source, new Vector2(PreviewArea.X, PreviewArea.Y), new Vector2(PreviewArea.Width, PreviewArea.Height),
+            Vector4.One);
+        return new MenuPainting(MenuAtlas.MapMask, PreviewArea, map);
+    }
 
     private void ChangeChapter()
     {
@@ -121,10 +144,23 @@ public sealed class LobbyPage : MenuPage
         var chapters = Enumerable.Range(0, saved.Reached + 1).Select(c => $"{Menu.Text(Chapters.NameKey(c))}: {Menu.Text(Chapters.TitleKey(c))}").ToList();
         Menu.Ask("", chapters, saved.Chapter, chosen =>
         {
-            if (chosen is { } chapter && chapter != saved.Chapter)
+            if (chosen is not { } chapter || chapter == saved.Chapter)
+            {
+                return;
+            }
+            if (!Menu.Host.Saves.HasCheckpoint(slot))
             {
                 Menu.Host.Saves.Set(slot, saved with { Chapter = chapter });
+                return;
             }
+            Menu.Ask(Menu.Text("#chapter_notification"), [Menu.Text("#add_menu_yes"), Menu.Text("#add_menu_no")], 1, answer =>
+            {
+                if (answer == 0)                                              // as the original: another chapter loses the checkpoint
+                {
+                    Menu.Host.Saves.SetCheckpoint(slot, null);
+                    Menu.Host.Saves.Set(slot, saved with { Chapter = chapter });
+                }
+            });
         });
     }
 
@@ -134,6 +170,10 @@ public sealed class LobbyPage : MenuPage
         Text(picture, TitleFont, Menu.Text(Chapters.NameKey(saved.Chapter)), new Vector2(512, 80), ColourOf(0));
         Text(picture, TitleFont, Menu.Text(Chapters.TitleKey(saved.Chapter)), new Vector2(512, 150), ColourOf(0), scale: 0.8f);
         Text(picture, BoxFont, Menu.Text("#tooltip_lobby_level"), new Vector2(512, 240), Ink with { W = 0.5f });
+        if (Preview(Menu.Host.Cutscenes.GetValueOrDefault(saved.Chapter)) is { } preview)
+        {
+            picture.PagePaintings.Add(preview);
+        }
         Text(picture, ItemFont, Menu.Text("#add_menu_start"), new Vector2(896, 880), ColourOf(1), TextAlignment.Right);
         BackArt(picture, 2);
     }

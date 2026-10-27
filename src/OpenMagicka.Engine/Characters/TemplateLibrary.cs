@@ -15,6 +15,10 @@ public sealed class TemplateLibrary(ContentLoader loader)
     private readonly Dictionary<string, Gameplay.Items.ItemTemplate> items = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Gameplay.Characters.CharacterTemplate> characters = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<object, Rendering.ModelLook> looks = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, string> assets = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The asset an item this library made was read from; null for one it did not make (what a saved checkpoint names it by).</summary>
+    public string? AssetOf(Gameplay.Items.ItemTemplate template) => assets.GetValueOrDefault(template);
 
     /// <summary>
     /// What a template this library (or the scripts' assets over it) made looks like: a character's first
@@ -56,6 +60,7 @@ public sealed class TemplateLibrary(ContentLoader loader)
                 Remember(ranged, asset, content.Ranged.ProjectileModel, System.Numerics.Vector3.One);   // what it throws
             }
             items[asset] = item;
+            assets[item] = asset;
         }
         return item;
     }

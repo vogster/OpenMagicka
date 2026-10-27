@@ -56,12 +56,17 @@ public abstract class MenuPage
 
     public virtual void Back() => Menu.Pop();
 
+    /// <summary>The time passing on the page (a cutscene's), after its input.</summary>
+    public virtual void Tick(float dt)
+    {
+    }
+
     /// <summary>The Delete key's action on the page (none but the slots').</summary>
     protected virtual void Delete()
     {
     }
 
-    public void Update(MenuInput input)
+    public virtual void Update(MenuInput input)
     {
         if (input.Moved && input.Page is { } over)
         {

@@ -136,7 +136,7 @@ public class SoundDirectorTests
         var sound = play.Sound!;
 
         sound.Take(new PlayMusicRequest(SoundBanks.Music, "music_a", 0.3f));
-        var saved = sound.Save();
+        var saved = sound.Read(sound.Write(sound.Save()));                                          // as a saved slot keeps it (OM-85)
         sound.Take(new PlayMusicRequest(SoundBanks.Music, "music_b", null));
         sound.Take(new PlaySoundRequest(4, SoundBanks.Ambience, "amb_wind", 0.5f, null, 0, false));
         Assert.Equal("music_b", play.Sound!.Sounds.Music);
@@ -259,7 +259,8 @@ public class SoundDirectorTests
         sound.Take(new PlaySoundRequest(4, SoundBanks.Ambience, "amb_wind", 0.5f, null, 0, false));
         sound.Take(new PlaySoundRequest(5, SoundBanks.Ambience, "amb_bird", null, null, 0, false));
         sound.Take(new StopSoundRequest(5, Instant: true));
-        var saved = sound.Save();
+        var saved = sound.Read(sound.Write(sound.Save()));                                          // as a saved slot keeps it (OM-85)
+        Assert.NotNull(saved);
 
         sound.Restore(saved);
         sound.Take(new SceneChangedRequest(scene, scene, Kept: false));

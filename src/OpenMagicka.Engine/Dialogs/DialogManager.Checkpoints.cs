@@ -1,3 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using OpenMagicka.Engine.Scripting;
+
 namespace OpenMagicka.Engine.Dialogs;
 
 /// <summary>
@@ -11,6 +15,10 @@ public sealed record DialogsCheckpoint(IReadOnlyDictionary<int, DialogsCheckpoin
 
 public sealed partial class DialogManager
 {
+    public JsonNode? Write(object? saved) => saved is DialogsCheckpoint checkpoint ? JsonSerializer.SerializeToNode(checkpoint, SavedCheckpoint.Json) : null;
+
+    public object? Read(JsonNode? node) => SavedCheckpoint.Read<DialogsCheckpoint>(node, c => c.Dialogs.Values.All(d => d is { Interacts: not null }));
+
     public object Save() => new DialogsCheckpoint(runs.ToDictionary(p => p.Key, p => new DialogsCheckpoint.Dialog(p.Value.IsFinished, p.Value.Next,
         p.Value.Interacted, [.. p.Value.Interacts.Select(i => (i.Current, i.RepeatCounter))])));
 

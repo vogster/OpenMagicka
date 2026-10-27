@@ -23,13 +23,37 @@ public enum MenuAtlas : byte
 
     /// <summary><c>UI/Loading/background</c> (1024²): the loading screen's backdrop.</summary>
     Loading,
+
+    /// <summary><c>UI/Menu/CampaignMap</c> (2048²): the world map of the cutscenes between chapters (OM-84).</summary>
+    CampaignMap,
+
+    /// <summary><c>UI/Menu/MapMask</c>: the torn sheet the map is painted through, over the whole page.</summary>
+    MapMask,
+
+    /// <summary><c>UI/Cutscenes/intro_mask</c>: the torn sheet the intro's pictures are painted through.</summary>
+    IntroMask,
+
+    /// <summary><c>UI/Cutscenes/intro_s1</c> … <c>intro_s6</c>: the intro's pictures.</summary>
+    Intro1, Intro2, Intro3, Intro4, Intro5, Intro6,
 }
 
 /// <summary>A piece of an atlas drawn at a place: its source rectangle, where (top left) and how big, its colour and saturation.</summary>
 public readonly record struct MenuSprite(MenuAtlas Atlas, Rectangle Source, Vector2 At, Vector2 Size, Vector4 Colour, float Saturation = 1, bool Mirrored = false);
 
-/// <summary>A text drawn at a place: its font (by the original's name), its anchor and alignment, colour and scale; wrapped when given a width.</summary>
-public readonly record struct MenuText(string Font, string Text, Vector2 At, TextAlignment Alignment, Vector4 Colour, float Scale = 1, int Wrap = 0);
+/// <summary>
+/// A text drawn at a place: its font (by the original's name), its anchor and alignment, colour and scale; wrapped when
+/// given a width; with a shadow, a black copy (0.8 of its alpha) a pixel down and right under it; from the bottom,
+/// its anchor is under its last line, the lines rising from it (the subtitles').
+/// </summary>
+public readonly record struct MenuText(string Font, string Text, Vector2 At, TextAlignment Alignment, Vector4 Colour, float Scale = 1, int Wrap = 0,
+    bool Shadow = false, bool FromBottom = false);
+
+/// <summary>
+/// A picture painted into the page's paper through a torn sheet, as the original's map and intro (OM-84): the mask
+/// (its whole texture) over its area gives how much of the picture shows at each pixel, the paper the rest. A window
+/// of texels (x, y, width, height) in between texels, when given, is the picture's source instead of its rectangle.
+/// </summary>
+public readonly record struct MenuPainting(MenuAtlas Mask, Rectangle Area, MenuSprite Picture, Vector4? Texels = null);
 
 /// <summary>
 /// What the menu shows this frame (OM-53), filled on the logic thread: the book's right page (in page pixels,
@@ -42,6 +66,9 @@ public sealed class MenuPicture
 
     /// <summary>Whether the book's page is shown (the main menu); not over a level.</summary>
     public bool ShowsPage { get; set; }
+
+    /// <summary>Painted into the paper first, under the page's sprites and texts.</summary>
+    public List<MenuPainting> PagePaintings { get; } = [];
 
     public List<MenuSprite> PageSprites { get; } = [];
 
@@ -70,6 +97,7 @@ public sealed class MenuPicture
     public void Clear()
     {
         ShowsPage = false;
+        PagePaintings.Clear();
         PageSprites.Clear();
         PageTexts.Clear();
         ScreenSprites.Clear();

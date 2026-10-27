@@ -125,9 +125,31 @@ public sealed partial class LevelPlay : IDisposable
     /// <summary>The level's requests for the systems beyond the world, since the frame last took them (logic thread).</summary>
     public List<ScriptRequest> Requests { get; } = [];
 
+    /// <summary>The hashes a saved checkpoint of this level carries (OM-85): of its files, of its dialogs.</summary>
+    public (string Level, string Dialogs) Hashes { get; set; } = ("", "");
+
+    /// <summary>
+    /// A saved slot's checkpoint for the start: gone back to at once (Continue), or only kept as the restart point (a
+    /// restart from the pause menu, as the original's). One of other files is passed over.
+    /// </summary>
+    public (Engine.Scripting.SavedCheckpoint Saved, bool Apply)? Resume { get; set; }
+
+    /// <summary>The level's last checkpoint as a slot keeps it; none before the first.</summary>
+    public Engine.Scripting.SavedCheckpoint? SaveCheckpoint() => Level.Checkpoint is { } checkpoint
+        ? Engine.Scripting.SavedCheckpoint.From(checkpoint, Hashes.Level, Hashes.Dialogs, Level.Services.Assets, Level.Game)
+        : null;
+
     public void Start()
     {
         Level.Start();
+        if (Resume is var (saved, apply))
+        {
+            var fits = saved.LevelHash == Hashes.Level && saved.DialogHash == Hashes.Dialogs;
+            if (!fits || !Level.Resume(saved, apply))
+            {
+                Console.Error.WriteLine($"OpenMagicka: the slot's checkpoint was passed over ({(fits ? "it does not fit the level's scripts" : "of other files")})");
+            }
+        }
         Effects.Update();
         Spells.Update(0);
         StepCamera(0, snap: true);

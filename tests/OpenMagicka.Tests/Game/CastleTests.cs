@@ -120,6 +120,43 @@ public class CastleTests
     }
 
     [GameContentFact]
+    public void ACheckpointWrittenToDisk_TakesAFreshCastleBackToItsRoom_OneOfOtherFilesNot()
+    {
+        string json;
+        using (var play = Castle())
+        {
+            play.Hashes = ("castle", "dialogs");
+            play.Level.ChangeScene(new SpawnPoint(LegacyStringHash.Lower("wc_s3"), [LegacyStringHash.Compute("start")], true),
+                ScriptTransition.None, 0, keep: false);
+            Wait(play, 0.5f);
+            play.Scene!.Scripts!.ExecuteTrigger(ScriptScene.Hash("Room1"), null, ignoreConditions: true);
+            Wait(play, 0.5f);
+            json = play.SaveCheckpoint()!.ToJson();
+        }
+        var saved = SavedCheckpoint.FromJson(json)!;
+
+        using var fresh = CastleAt(saved, ("castle", "dialogs"));
+        Assert.Equal("wc_s3", fresh.Scene!.Definition.Name);                    // straight in the checkpoint's scene
+        Wait(fresh, 0.5f);
+        Assert.Contains("unarmed", Held(fresh.Player.Avatar!, Character.WeaponSlot), StringComparison.OrdinalIgnoreCase);
+
+        using var other = CastleAt(saved, ("changed", "dialogs"));
+        Assert.NotEqual("wc_s3", other.Scene!.Definition.Name);                 // other files: the level's start
+        Assert.Null(other.Level.Checkpoint);
+    }
+
+    private static LevelPlay CastleAt(SavedCheckpoint saved, (string, string) hashes)
+    {
+        var files = new ContentFileSystem(GameContent.ContentDirectory!);
+        var loader = new ContentLoader(files, XnbReaderRegistry.Magicka);
+        var path = PlayGame.FindLevel(files, "Wizard_Castle")!;
+        var play = LevelPlay.Open(LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path), files, loader);
+        (play.Hashes, play.Resume) = (hashes, (saved, true));
+        play.Start();
+        return play;
+    }
+
+    [GameContentFact]
     public void TheFallIntoTheCellar_ReachesIt_ButAFallOutOfTheLevel_Kills()
     {
         using var play = Castle();

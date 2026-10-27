@@ -1,5 +1,8 @@
 using Microsoft.Xna.Framework;
+using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Localization;
+using OpenMagicka.Content.Magicka;
+using OpenMagicka.Engine.Audio;
 using OpenMagicka.Engine.Rendering;
 using OpenMagicka.Game.Install;
 
@@ -25,8 +28,19 @@ public interface IMenuHost
 
     void Cue(string name);
 
+    /// <summary>The world map's cutscenes by chapter (OM-84); none without the game's file.</summary>
+    IReadOnlyDictionary<int, MapCutscene> Cutscenes { get; }
+
+    /// <summary>A narration's cue, prepared, not played; none without the sound.</summary>
+    ISoundCue? Voice(SoundBanks bank, string cue);
+
+    /// <summary>The music bank's cue as the music.</summary>
+    void PlayMusic(string cue);
+
     /// <summary>A campaign chapter starts from a save slot.</summary>
-    void Play(int slot, int chapter);
+    /// <param name="resume">At the slot's saved checkpoint (Continue), else from the chapter's start.</param>
+    /// <param name="narration">What the loading screen narrates, the level waiting for it (the intro's end).</param>
+    void Play(int slot, int chapter, bool resume = false, Narration? narration = null);
 
     void Quit();
 }
@@ -47,6 +61,9 @@ public sealed class TomeMenu(IMenuHost host)
     public IMenuHost Host { get; } = host ?? throw new ArgumentNullException(nameof(host));
 
     public MenuPage? Page => pages.Count > 0 ? pages.Peek() : null;
+
+    /// <summary>The screen the screen's pieces are laid out on, as last updated or drawn.</summary>
+    public Point Screen { get; private set; }
 
     public bool HasBox => box is not null;
 
@@ -100,6 +117,16 @@ public sealed class TomeMenu(IMenuHost host)
         Cue("ui_menu_tomepage");
     }
 
+    /// <summary>Back a page without its sound (a cutscene's end); never the bottom page.</summary>
+    public void PopSilently()
+    {
+        if (pages.Count > 1)
+        {
+            pages.Pop();
+            pages.Peek().Enter();
+        }
+    }
+
     public void AskToQuit() => Ask(Text("#add_menu_rus_quit"), [Text("#add_menu_yes"), Text("#add_menu_no")], 0, yes =>
     {
         if (yes == 0)
@@ -116,21 +143,28 @@ public sealed class TomeMenu(IMenuHost host)
             done(answer);
         }, font);
 
-    public void Update(MenuInput input, Point screen)
+    /// <param name="dt">The time passed, for a page that plays (a cutscene's).</param>
+    public void Update(MenuInput input, Point screen, float dt = 0)
     {
+        Screen = screen;
         if (box is { } open)
         {
             open.Update(input, screen.X, screen.Y, BoxRow, Cue);
         }
-        else
+        else if (Page is { } page)
         {
-            Page?.Update(input);
+            page.Update(input);
+            if (ReferenceEquals(page, Page))
+            {
+                page.Tick(dt);
+            }
         }
     }
 
     public void Draw(MenuPicture picture, Point screen)
     {
         ArgumentNullException.ThrowIfNull(picture);
+        Screen = screen;
         picture.ShowsPage = Page is not null;
         Page?.Draw(picture);
         box?.Draw(picture, screen.X, screen.Y, BoxRow);

@@ -1,7 +1,9 @@
 using Microsoft.Xna.Framework;
+using OpenMagicka.Content.Levels;
 using OpenMagicka.Content.Localization;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine;
+using OpenMagicka.Engine.Audio;
 using OpenMagicka.Engine.Rendering;
 using OpenMagicka.Engine.Threading;
 using OpenMagicka.Game.Install;
@@ -67,6 +69,12 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
 
     public IReadOnlyList<Point> Resolutions { get; }
 
+    public IReadOnlyDictionary<int, MapCutscene> Cutscenes => content.Cutscenes;
+
+    public ISoundCue? Voice(SoundBanks bank, string cue) => content.Sounds?.Get(bank, cue);
+
+    public void PlayMusic(string cue) => content.Sounds?.PlayMusic(SoundBanks.Music, cue);
+
     private StringTable StringsOf(string language)
     {
         try
@@ -124,7 +132,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         switch (mode)
         {
             case ShellMode.Menu:
-                menu.Update(read, screen);
+                menu.Update(read, screen, (float)dt);
                 content.Sounds?.Update((float)dt, []);
                 break;
             case ShellMode.Loading:
@@ -154,7 +162,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
                 menu.Draw(frame.Menu, screen);
                 break;
             case ShellMode.Loading:
-                LoadingScreen.Write(frame.Menu, strings, chapter, tip, loadingSeconds, screen);
+                LoadingScreen.Write(frame.Menu, strings, chapter, tip, loadingSeconds, screen, LoadingAlpha, told);
                 break;
             default:
                 WritePlay(frame, timing);

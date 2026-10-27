@@ -28,6 +28,7 @@ public sealed partial class PlayedLevel
         {
             Dialogs = Game.Dialogs?.Save(),
             Sounds = Game.Sounds?.Save(),
+            Sections = (Game.DefaultAvatarSection, Game.UnequipWeaponsSection),
         };
     }
 
@@ -65,8 +66,49 @@ public sealed partial class PlayedLevel
         Respawn(checkpoint);
         ReplayEntry(target);                                                  // after the fresh wizards: the replay's items and factions are theirs
         Level.Load(checkpoint.Level);
+        (Game.DefaultAvatarSection, Game.UnequipWeaponsSection) = checkpoint.Sections;
         Game.PlayerDiedInLevel = true;
         requests.Enqueue(new SceneChangedRequest(from, target.Key, Kept: false));
+        return true;
+    }
+
+    /// <summary>
+    /// A saved slot's checkpoint (OM-85) taken as this level's last one, its scenes' scripts made first (a fresh level has
+    /// only its start scene's, and a scene without them would be taken as never entered); with <paramref name="apply"/>,
+    /// the level goes back to it at once, as the original's Continue. False, and the level left as it was, for one that
+    /// does not fit this level's scripts.
+    /// </summary>
+    public bool Resume(SavedCheckpoint saved, bool apply = true)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        if (!saved.Scenes.Keys.All(scenes.ContainsKey) || !scenes.ContainsKey(saved.Scene))
+        {
+            return false;
+        }
+        var made = saved.Scenes.Where(s => s.Value.Scripts is not null && scenes[s.Key].Scripts is null).Select(s => scenes[s.Key]).ToList();
+        foreach (var scene in made)
+        {
+            Prepare(scene);
+        }
+        if (saved.Resolve(key => scenes[key].Scripts, Services.Assets, Game) is not { } checkpoint)
+        {
+            foreach (var scene in made)
+            {
+                (scene.Scripts, scene.NavMesh) = (null, null);                // as never gone to: a later checkpoint keeps none of it
+            }
+            return false;
+        }
+        var before = Checkpoint;
+        Checkpoint = checkpoint;
+        if (apply && !RestartAtCheckpoint())
+        {
+            Checkpoint = before;
+            return false;
+        }
+        if (apply)
+        {
+            Game.PlayerDiedInLevel = false;                                   // as the original: a load is no death
+        }
         return true;
     }
 

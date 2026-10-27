@@ -28,6 +28,8 @@ internal sealed class FakeMenuHost : IMenuHost, IDisposable
 
     public (int Slot, int Chapter)? Played { get; private set; }
 
+    public bool Resumed { get; private set; }
+
     public bool Quitted { get; private set; }
 
     public string SavesPath => Path.Combine(folder.FullName, "campaign.json");
@@ -36,7 +38,27 @@ internal sealed class FakeMenuHost : IMenuHost, IDisposable
 
     public void Cue(string name) => Cues.Add(name);
 
-    public void Play(int slot, int chapter) => Played = (slot, chapter);
+    public void Play(int slot, int chapter, bool resume = false, Narration? narration = null) =>
+        (Played, Resumed, Narrated) = ((slot, chapter), resume, narration);
+
+    public Narration? Narrated { get; private set; }
+
+    public Dictionary<int, OpenMagicka.Content.Levels.MapCutscene> Cutscenes { get; } = [];
+
+    IReadOnlyDictionary<int, OpenMagicka.Content.Levels.MapCutscene> IMenuHost.Cutscenes => Cutscenes;
+
+    public List<OpenMagicka.Tests.Engine.FakeCue> Voices { get; } = [];
+
+    public OpenMagicka.Engine.Audio.ISoundCue? Voice(OpenMagicka.Content.Magicka.SoundBanks bank, string cue)
+    {
+        var voice = new OpenMagicka.Tests.Engine.FakeCue(cue, bank);
+        Voices.Add(voice);
+        return voice;
+    }
+
+    public string? Music { get; private set; }
+
+    public void PlayMusic(string cue) => Music = cue;
 
     public void Quit() => Quitted = true;
 
@@ -87,7 +109,7 @@ public class MenuTests
     }
 
     [Fact]
-    public void AnEmptySlot_StartsACampaign_ItsLobbyStartsItsChapter()
+    public void AnEmptySlot_StartsACampaign_ItsLobbyStartsItsChaptersIntro()
     {
         using var host = new FakeMenuHost();
         var menu = new TomeMenu(host);
@@ -99,7 +121,7 @@ public class MenuTests
         Assert.Equal(new CampaignSlot(0, 0), host.Saves[1]);
         Assert.Equal(new CampaignSlot(0, 0), CampaignSaves.Load(host.SavesPath)[1]);
         menu.Update(Keys(accept: true), Screen);                              // Start is selected first
-        Assert.Equal((1, 0), host.Played);
+        Assert.IsType<IntroPage>(menu.Page);                                  // the first chapter's intro, then the chapter (OM-84)
     }
 
     [Fact]
@@ -143,6 +165,49 @@ public class MenuTests
         menu.Update(Keys(accept: true), Screen);
 
         Assert.Equal(new CampaignSlot(3, 3), host.Saves[2]);
+    }
+
+    [Fact]
+    public void ASlotsCheckpoint_IsKeptBesideIt_AndGoesWithTheSlot()
+    {
+        using var host = new FakeMenuHost();
+        host.Saves.Set(0, new CampaignSlot(2, 2));
+        host.Saves.SetCheckpoint(0, new OpenMagicka.Engine.Scripting.SavedCheckpoint { LevelHash = "abc", Scene = 7 });
+
+        Assert.Equal(("abc", 7), (host.Saves.Checkpoint(0)!.LevelHash, host.Saves.Checkpoint(0)!.Scene));
+        Assert.Null(host.Saves.Checkpoint(1));
+        host.Saves.Set(0, null);
+        Assert.False(host.Saves.HasCheckpoint(0));
+        Assert.False(File.Exists(host.Saves.CheckpointPath(0)));
+    }
+
+    [Fact]
+    public void TheLobbysStart_Continues_AndAnotherChapterAsksFirstWithACheckpoint_NoIsTheFirstAnswer()
+    {
+        using var host = new FakeMenuHost();
+        host.Saves.Set(2, new CampaignSlot(1, 3));
+        host.Saves.SetCheckpoint(2, new OpenMagicka.Engine.Scripting.SavedCheckpoint());
+        var menu = new TomeMenu(host);
+        menu.Open(m => new LobbyPage(m, 2));
+        menu.Update(Keys(accept: true), Screen);                              // Start
+        Assert.Equal(((2, 1), true), (host.Played, host.Resumed));
+
+        menu.Update(ClickOnPage(new Vector2(512, 120)), Screen);              // the chapter block
+        menu.Update(Keys(vertical: 1), Screen);
+        menu.Update(Keys(accept: true), Screen);                              // chapter 3
+        Assert.True(menu.HasBox);                                             // #chapter_notification
+        menu.Update(Keys(accept: true), Screen);                              // No
+        Assert.Equal(new CampaignSlot(1, 3), host.Saves[2]);
+        Assert.True(host.Saves.HasCheckpoint(2));
+
+        menu.Update(Keys(), Screen);
+        menu.Update(ClickOnPage(new Vector2(512, 120)), Screen);
+        menu.Update(Keys(vertical: 1), Screen);
+        menu.Update(Keys(accept: true), Screen);
+        menu.Update(Keys(vertical: -1), Screen);
+        menu.Update(Keys(accept: true), Screen);                              // Yes
+        Assert.Equal(new CampaignSlot(2, 3), host.Saves[2]);
+        Assert.False(host.Saves.HasCheckpoint(2));
     }
 
     [Fact]

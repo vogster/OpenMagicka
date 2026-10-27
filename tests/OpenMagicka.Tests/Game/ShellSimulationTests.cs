@@ -123,6 +123,63 @@ public sealed class ShellSimulationTests : IDisposable
         Assert.InRange(CampaignSaves.Load(Path.Combine(folder.FullName, "campaign.json"))[0]!.Seconds, 1.9, 2.1);
     }
 
+    [GameContentFact]
+    public void ACheckpointTaken_IsWrittenToTheSlot_AndTheNextChaptersMapCutsceneComesAfterTheChapter()
+    {
+        var shell = Start();
+        shell.Saves.Set(0, new CampaignSlot(0, 0));
+        shell.Play(0, 0);
+        Assert.True(TickUntil(shell, () => shell.Mode == ShellMode.Play));
+        shell.Tick(Step);
+        Show(shell);
+        shell.Tick(Step);
+        var play = shell.Level!;
+        play.Level.ChangeScene(new OpenMagicka.Engine.Scripting.SpawnPoint(OpenMagicka.Content.LegacyStringHash.Lower("wc_s3"),
+            [OpenMagicka.Content.LegacyStringHash.Compute("start")], true), OpenMagicka.Engine.Scripting.ScriptTransition.None, 0, keep: false);
+        for (var i = 0; i < 30; i++)
+        {
+            shell.Tick(Step);
+        }
+        play.Scene!.Scripts!.ExecuteTrigger(OpenMagicka.Engine.Scripting.ScriptScene.Hash("Room1"), null, ignoreConditions: true);
+        for (var i = 0; i < 30; i++)
+        {
+            shell.Tick(Step);
+        }
+
+        var saved = shell.Saves.Checkpoint(0);
+        Assert.NotNull(saved);
+        Assert.Equal(OpenMagicka.Content.LegacyStringHash.Lower("wc_s3"), saved.Scene);
+        Assert.Equal(play.Hashes, (saved.LevelHash, saved.DialogHash));
+
+        play.Requests.Add(new OpenMagicka.Engine.Scripting.EndGameRequest(OpenMagicka.Engine.Scripting.EndGameCondition.LevelComplete, false, false));
+        Assert.True(TickUntil(shell, () => shell.Mode == ShellMode.Menu));
+        Assert.IsType<MapCutscenePage>(shell.Menu.Page);                      // the map to chapter 2
+        Assert.False(shell.Saves.HasCheckpoint(0));
+        Assert.Equal(1, shell.Saves[0]!.Chapter);
+    }
+
+    [GameContentFact]
+    public void ANarrationThatNeverEnds_HoldsTheLevelNoLongerThanItsLimit_AndIsToldTillTheLevelShows()
+    {
+        var shell = Start();
+        shell.Saves.Set(0, new CampaignSlot(0, 0));
+        var cue = new OpenMagicka.Tests.Engine.FakeCue("cuts_int7", OpenMagicka.Content.Magicka.SoundBanks.WaveBank);
+        cue.Play();
+        shell.Play(0, 0, narration: new Narration("#cutscene_intro7", cue));
+        var held = 0.0;
+        for (var clock = System.Diagnostics.Stopwatch.StartNew(); shell.Level is null && clock.Elapsed < TimeSpan.FromSeconds(60);)
+        {
+            shell.Tick(0.25);                                                 // the loading's own time, in long steps
+            held += 0.25;
+            Thread.Sleep(5);
+        }
+
+        Assert.InRange(held, ShellSimulation.NarrationLimit, ShellSimulation.NarrationLimit + 30);   // waited for it, then no longer
+        var frame = new ShellFrame();
+        shell.WriteFrame(frame, new FrameTiming(0, TimeSpan.Zero, Step));
+        Assert.Contains(frame.Menu.ScreenTexts, t => t.Text == shell.Strings.Get("#cutscene_intro7"));   // still told till the level shows
+    }
+
     public void Dispose()
     {
         content?.Dispose();

@@ -186,7 +186,8 @@ public class DialogManagerTests
         using var fixture = new Fixture(dialog);
         fixture.Dialogs.Start(Key("story"), new DialogAnchor(fixture.Hermit));
         fixture.Step(1);
-        var saved = fixture.Dialogs.Save();
+        var saved = fixture.Dialogs.Read(fixture.Dialogs.Write(fixture.Dialogs.Save()));      // as a saved slot keeps it (OM-85)
+        Assert.NotNull(saved);
 
         fixture.Dialogs.Start(Key("story"), new DialogAnchor(fixture.Hermit));
         fixture.Step(1);

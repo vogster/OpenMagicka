@@ -1879,7 +1879,30 @@ Backspace or B go back; Delete deletes a slot. The original's book takes only th
 **The campaign** (`Chapters`, `CampaignSlot`, `CampaignSaves`): the twelve chapters of `Campaign.Chapters`, named
 `#chapter_NN` and titled `#chaptertitle_NN`. A slot keeps its chapter, the furthest reached, whether it was finished
 once, and the time played. The slots are JSON in OpenMagicka's data folder (the original's `campaign.sav` is left
-alone). Checkpoints are not kept across runs yet: continuing a slot starts its chapter from the beginning.
+alone).
+
+**A slot's checkpoint** (OM-85, `SavedCheckpoint`; `campaign.slotN.checkpoint.json` beside the slots):
+- Written when a `triggerCheckpoint` with `saveToDisk` runs (no level of the game turns it off, so every
+  checkpoint), with the time played so far; nothing else writes it, as the original's.
+- The content is the original's: the counters and timers, every scene's first-entry flag, scripts (each trigger's
+  state, the log, the animated parts) and kept props and items, the spawn points, the ignored triggers, the magicks,
+  the dialogs, the music and named sounds, and the default-robe and no-weapons stretches. Not kept, as the original:
+  hit points, positions, the NPCs (their `spawn`s replay with the survivors' hit points), the spells. Not kept,
+  ours: the camera, each player's weapon and staff, the fairy, the other scenes' sounds.
+- What is a reference in memory is named: a logged action by its trigger's key, variant and index (the original's
+  global 16-bit handles do the same job); a prop or an item by its asset; an `executeTrigger`'s waiting senders by
+  their count only (from disk they are no one, as the original's).
+- The guard is the original's: the level's hash (the SHA-256 of its `.lvl` XOR-ed with each of its scenes') and its
+  dialogs' (the SHA-256 of the dialog file, zeros without one). A checkpoint of other hashes, of another format, or
+  one naming a trigger or an action the level lacks is passed over: the chapter starts from its beginning.
+- Start in the lobby (Continue) builds the level, enters its start, then goes back to the checkpoint at once
+  (`PlayedLevel.Resume`), straight into its scene. Every scene it saved scripts for is made first, else it would be
+  taken as never entered. A load is no death (`PlayerDiedInLevel` stays false).
+- A restart from the pause menu loads the level from its start but keeps the saved checkpoint as the one a defeat
+  goes back to, as the original's. A defeat goes back to the checkpoint in memory; the disk is not read again.
+- Gone with a deleted slot, with a new campaign in an empty slot, and when the lobby changes the chapter: then
+  `#chapter_notification` asks first (No chosen first); No changes nothing. Ours: completing a chapter deletes it
+  too (the original leaves it for the next chapter's hash to pass over).
 
 **Pause** (`PauseMenu`), on Escape or a pad's Start: the level stops ticking and its sounds pause.
 - A dark `FadeBox` panel, 400 × 400 scaled by the screen's height against 720, its items in Maiandra18 from y 290,
@@ -1894,8 +1917,37 @@ alone). Checkpoints are not kept across runs yet: continuing a slot starts its c
   2 s; at 3 s it is over. A player alive again during a defeat's delay calls it off.
 - "To be continued" fades to black over 8 s without a word. A phony ending only shows its word.
 - Then: a defeat goes back to the last checkpoint (or the level's start without one); any other ending saves the
-  slot at the next chapter (after the last: the first, looped, back to the menu) and loads it. The original's end
-  page, its screenshot of the frame and the map cutscene are left out.
+  slot at the next chapter (after the last: the first, looped, back to the menu) and, back in the menu over the
+  lobby, plays the next chapter's map cutscene. The original's end page with its screenshot of the frame is left out.
+
+**Before a chapter** (OM-84, `CutscenePages`), every time its Start is chosen in the lobby or the chapter before it
+ends (never on a restart), as the original's; each can be skipped at any time (a click, Enter, Space or A; ours: Esc
+or B too) and nothing remembers it was seen:
+- The world map's cutscene before chapters 2–12 (`MapCutscenePage`, the data `Levels/Cutscenes.xml`: its `id`s are
+  the chapters, 0-based, read by `MapCutsceneReader`). For 3 s the chapter's name and title (MenuTitle, ink, at page
+  (512, 360) and (512, 480), a title longer than 64 letters left out, the rest wrapped to 800 px); then the page turns
+  to the map and the narration plays. The map (`UI/Menu/CampaignMap`, 2048²) is painted into the paper through
+  `UI/Menu/MapMask` over the whole page: the camera's map texel at the page's centre, at its zoom (page pixels per
+  texel). The camera's zoom and position are two tracks of keys, each eased (smoothstep) from key to key, holding the
+  first key before it and the last after. The narration's subtitles (one block, Maiandra14 wrapped to the screen's
+  width less 128, white over a black shadow a pixel off, its last line 32 px above the screen's bottom) stay while it
+  plays. It ends when the keys are over and the narration done (13–30 s), with a fade to black of half a second, and
+  the chapter loads. The menu's music plays on, into the loading.
+- The intro before chapter 1 (`IntroPage`): `music_intro`; the title page (the chapter's name and title) with the
+  narration `cuts_int0` from 3 s, its words as subtitles (wrapped to 0.8 of the screen); at 25 s six pictures
+  (`UI/Cutscenes/intro_s1`…`s6`, 6, 20, 11, 17, 13 and 9 s), each painted into the paper through `intro_mask` in
+  (86, 90, 852, 652) with its words under it (MenuDefault, dark grey, wrapped to 896 px, at (512, 768)) and its
+  narration half a second after its page turns. The third picture pans, the fourth zooms out to all of it, the fifth
+  drifts; each is still for its first and last tenth, eased twice between. Then a fade of 2 s and the loading screen
+  tells the last words (`#cutscene_intro7` in the tip's place) while `cuts_int7` plays, the level waiting for its end.
+  Skipped, it fades and the chapter loads plainly.
+- The lobby shows the chapter's place on the map under its title: a square of 1024 / zoom texels around its
+  cutscene's last key (chapter 1's is the file's id 0, used for nothing else), painted through `MapMask` into
+  (288, 288, 448, 448) (ours: centred; the original's lobby has it at the left, by the players).
+- A painting (`MenuPainting`) is the original's three draws into the page's target: the mask's alpha in, the picture
+  blended by the target's alpha (the alpha kept), the paper's alpha back.
+- Ours, not the original's: the pages change at once (no turning sheet); the room's candle does not dim; the
+  subtitles follow the interface size.
 
 **Starting** (the launcher, without `--level`, `--viewer`, `--check-effects` or `--placeholder`):
 - Magicka is found where the player said (`--content`, `MAGICKA_DIR`), else where the settings remember, else in
@@ -1909,9 +1961,9 @@ alone). Checkpoints are not kept across runs yet: continuing a slot starts its c
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the 3D book, its light and its page turning; the logos; the intro and the map cutscenes;
+- the 3D book, its light and its page turning; the logos; the end page between a chapter and the next one's map;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
-- checkpoints saved across runs; the original's `campaign.sav` read or written;
+- the original's `campaign.sav` read or written (OM-55);
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.
 
 ## 21. Ours: the tutorial's hints

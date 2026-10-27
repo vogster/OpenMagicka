@@ -29,7 +29,7 @@ public class PlayedLevelTests
         public LevelModelContent? Model(string asset) => models.GetValueOrDefault(asset);
     }
 
-    private sealed class Props : IScriptAssets
+    internal sealed class Props : IScriptAssets
     {
         public OpenMagicka.Gameplay.Items.ItemTemplate? Item(string asset) => null;
 
@@ -37,9 +37,11 @@ public class PlayedLevelTests
             ? new PropTemplate("crate", false, false, true, 140, 100, OpenMagicka.Gameplay.Combat.ResistanceTable.Neutral,
                 new PropBox(new Numerics.Vector3(-0.5f, 0, -0.5f), Numerics.Vector3.One, Numerics.Quaternion.Identity), [], "", [], [])
             : null;
+
+        public string? AssetOf(object template) => template is PropTemplate { Id: "crate" } ? "data/physicsentities/crate" : null;
     }
 
-    private static (PlayedLevel Level, GameWorld World, Player First) Level(string firstScripts = "", string secondScripts = "")
+    internal static (PlayedLevel Level, GameWorld World, Player First) Level(string firstScripts = "", string secondScripts = "")
     {
         var definition = new LevelDefinition("#Chapter", "#Desc", "#Desc", "loading", new LevelStart("Town_S1", "start", true, false, null, true), null,
             ["Levels/Town/town_s1.xml", "Levels/Town/town_s2.xml"], LevelDefinition.DefaultAvatar, [], []);
@@ -58,7 +60,7 @@ public class PlayedLevelTests
         return (new PlayedLevel(definition, content, world, new LevelServices(orcs, new Props())), world, first);
     }
 
-    private static void Run(PlayedLevel level, float seconds)
+    internal static void Run(PlayedLevel level, float seconds)
     {
         for (var t = 0f; t < seconds; t += Tick)
         {

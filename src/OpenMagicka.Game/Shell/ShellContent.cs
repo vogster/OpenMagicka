@@ -22,6 +22,23 @@ public sealed class ShellContent : IDisposable
         SettingsPath = settingsPath;
         Saves = saves;
         Languages = LanguagePack.Available(files);
+        Cutscenes = ReadCutscenes(files);
+    }
+
+    /// <summary>The world map's cutscenes (OM-84); none when the file is missing or does not read.</summary>
+    private static IReadOnlyDictionary<int, Content.Levels.MapCutscene> ReadCutscenes(ContentFileSystem files)
+    {
+        try
+        {
+            return files.Exists(Content.Levels.MapCutsceneReader.Path)
+                ? Content.Levels.MapCutsceneReader.Read(new MemoryStream(files.ReadAllBytes(Content.Levels.MapCutsceneReader.Path)))
+                : new Dictionary<int, Content.Levels.MapCutscene>();
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException)
+        {
+            Console.Error.WriteLine($"OpenMagicka: no map cutscenes ({e.Message})");
+            return new Dictionary<int, Content.Levels.MapCutscene>();
+        }
     }
 
     public ContentFileSystem Files { get; }
@@ -39,6 +56,8 @@ public sealed class ShellContent : IDisposable
     public CampaignSaves Saves { get; }
 
     public IReadOnlyList<string> Languages { get; }
+
+    public IReadOnlyDictionary<int, Content.Levels.MapCutscene> Cutscenes { get; }
 
     /// <summary>The game's content at a Content folder, with the player's files (by default where OpenMagicka keeps them).</summary>
     public static ShellContent Open(string content, GameSettings settings, string? settingsPath = null, string? savesPath = null, bool sound = true)

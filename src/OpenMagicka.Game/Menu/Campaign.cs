@@ -37,7 +37,8 @@ public sealed record CampaignSlot(int Chapter, int Reached, bool Looped = false,
 
 /// <summary>
 /// The three campaign save slots (OM-53), kept as JSON in OpenMagicka's data folder (the original's
-/// <c>campaign.sav</c> is left alone). A missing or unreadable file gives three empty slots.
+/// <c>campaign.sav</c> is left alone). A missing or unreadable file gives three empty slots. Each slot's last
+/// checkpoint (OM-85) is a file of its own beside it, gone with the slot.
 /// </summary>
 public sealed class CampaignSaves
 {
@@ -80,20 +81,71 @@ public sealed class CampaignSaves
             Seconds = double.IsFinite(slot.Seconds) && slot.Seconds > 0 ? slot.Seconds : 0 };
     }
 
-    /// <summary>A slot set (or emptied) and the slots written; a write that fails is said, and the slots stay as set.</summary>
+    /// <summary>A slot set (or emptied, its checkpoint too) and the slots written; a write that fails is said, and the slots stay as set.</summary>
     public void Set(int slot, CampaignSlot? value)
     {
         slots[slot] = value is null ? null : Valid(value);
+        if (value is null)
+        {
+            SetCheckpoint(slot, null);
+        }
+        Write(path, JsonSerializer.Serialize(slots), "the campaign");
+    }
+
+    /// <summary>Where a slot's checkpoint is kept.</summary>
+    public string CheckpointPath(int slot) => Path.ChangeExtension(path, null) + ".slot" + (slot + 1).ToString(CultureInfo.InvariantCulture) + ".checkpoint.json";
+
+    /// <summary>The slot's last checkpoint; none when there is none, or it does not read.</summary>
+    public Engine.Scripting.SavedCheckpoint? Checkpoint(int slot)
+    {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            var partial = path + ".part";
-            File.WriteAllText(partial, JsonSerializer.Serialize(slots));
-            File.Move(partial, path, overwrite: true);
+            var file = CheckpointPath(slot);
+            return File.Exists(file) ? Engine.Scripting.SavedCheckpoint.FromJson(File.ReadAllText(file)) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine($"OpenMagicka: the campaign was not saved ({e.Message})");
+            return null;
+        }
+    }
+
+    /// <summary>The slot has a checkpoint file (one that may not read, or be of other files: it is still the one a chapter change asks about, as the original's).</summary>
+    public bool HasCheckpoint(int slot) => File.Exists(CheckpointPath(slot));
+
+    /// <summary>The slot's checkpoint written (or deleted, with none); a write that fails is said.</summary>
+    public void SetCheckpoint(int slot, Engine.Scripting.SavedCheckpoint? checkpoint)
+    {
+        var file = CheckpointPath(slot);
+        if (checkpoint is not null)
+        {
+            Write(file, checkpoint.ToJson(), "the checkpoint");
+            return;
+        }
+        try
+        {
+            if (File.Exists(file))
+            {
+                File.Delete(file);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"OpenMagicka: the checkpoint was not deleted ({e.Message})");
+        }
+    }
+
+    private static void Write(string file, string text, string what)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
+            var partial = file + ".part";
+            File.WriteAllText(partial, text);
+            File.Move(partial, file, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"OpenMagicka: {what} was not saved ({e.Message})");
         }
     }
 }

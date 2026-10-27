@@ -24,6 +24,12 @@ public sealed partial class ShellSimulation
     private PlaySimulation? playing;
     private LevelEnding? ending;
     private int level, slot, chapter, tip = 1;
+    private bool resume;
+    private Narration? narration;
+    private string? told;
+
+    /// <summary>How long a level waits at most for the loading screen's narration (the intro's is 16 s), should its cue never end.</summary>
+    public const double NarrationLimit = 30;
     private double loadingSeconds, waitSeconds, playSeconds;
 
     /// <summary>How long a started level waits for the render thread to show it before it runs anyway.</summary>
@@ -37,15 +43,19 @@ public sealed partial class ShellSimulation
 
     public LevelEnding? Ending => ending;
 
-    /// <summary>A chapter is started from a slot: it loads in the background.</summary>
-    public void Play(int slot, int chapter)
+    /// <summary>
+    /// A chapter is started from a slot: it loads in the background (the music playing on till it starts, as the
+    /// original's); with <paramref name="resume"/> (Continue) at the slot's saved checkpoint, else from its start with
+    /// that checkpoint kept as the restart point; with a narration, the loading screen tells it and the level waits.
+    /// </summary>
+    public void Play(int slot, int chapter, bool resume = false, Narration? narration = null)
     {
         if (slot is < 0 or >= CampaignSaves.Slots || chapter < 0 || chapter >= Chapters.Count)
         {
             throw new ArgumentOutOfRangeException(nameof(chapter), $"no chapter {chapter} in slot {slot}");
         }
-        (this.slot, this.chapter, tip, loadingSeconds, mode) = (slot, chapter, Random.Shared.Next(1, LoadingScreen.Tips + 1), 0, ShellMode.Loading);
-        content.Sounds?.StopMusic();
+        (this.slot, this.chapter, this.resume, this.narration, told, tip, loadingSeconds, mode) =
+            (slot, chapter, resume, narration, narration?.TextKey, Random.Shared.Next(1, LoadingScreen.Tips + 1), 0, ShellMode.Loading);
         var language = Settings.Language;
         loading = Task.Run(() => Open(chapter, language));
     }
@@ -55,23 +65,30 @@ public sealed partial class ShellSimulation
         var files = content.Files;
         var path = PlayGame.FindLevel(files, Chapters.Levels[chapter]) ?? throw new FileNotFoundException($"the game has no level {Chapters.Levels[chapter]}");
         var definition = LevelReader.Read(new MemoryStream(files.ReadAllBytes(path)), path);
-        return LevelPlay.Open(definition, files, content.Loader, language);
+        var play = LevelPlay.Open(definition, files, content.Loader, language);
+        play.Hashes = (SavedCheckpoint.LevelHashOf(files, path, definition), SavedCheckpoint.DialogHashOf(files, definition));
+        return play;
     }
 
     private void TickLoading(double dt)
     {
         loadingSeconds += dt;
-        if (loading is not { IsCompleted: true } done)
+        if (loading is not { IsCompleted: true } done || (narration?.Cue is { IsStopped: false } && loadingSeconds < NarrationLimit))
         {
-            return;
+            return;                                                           // ready, the level waits for the narration's end
         }
-        loading = null;
+        (loading, narration) = (null, null);
+        content.Sounds?.StopMusic();
         if (!done.IsCompletedSuccessfully)
         {
             Fail(done.Exception?.GetBaseException().Message ?? "the level did not load");
             return;
         }
         play = done.Result;
+        if (Saves.Checkpoint(slot) is { } saved)
+        {
+            play.Resume = (saved, resume);
+        }
         if (content.Sounds is { } sounds)
         {
             play.Hear(sounds, owned: false);
@@ -106,7 +123,7 @@ public sealed partial class ShellSimulation
             }
             else if (signals.Shown == level || play.Scene?.Definition.Model is not { Length: > 0 } || (waitSeconds += dt) > ShowTimeout)
             {
-                waiting = false;
+                (waiting, told) = (false, null);
                 playing.Pause();                                              // what was held on the loading screen is let go
             }
             return;
@@ -128,8 +145,33 @@ public sealed partial class ShellSimulation
             return;                                                           // it paused this tick
         }
         playSeconds += dt;
+        WriteCheckpoint();
         TakeEnding();
         StepEnding((float)dt);
+    }
+
+    /// <summary>
+    /// A checkpoint the scripts took to keep on disk (all of the game's do): the slot keeps it, and the time played so
+    /// far. One that cannot be written is said, and play goes on.
+    /// </summary>
+    private void WriteCheckpoint()
+    {
+        if (!play!.Requests.OfType<CheckpointRequest>().Any(r => r.SaveToDisk))
+        {
+            return;
+        }
+        try
+        {
+            if (play.SaveCheckpoint() is { } saved)
+            {
+                KeepTime();
+                Saves.SetCheckpoint(slot, saved);
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or NotSupportedException or System.Text.Json.JsonException or ArgumentException)
+        {
+            Console.Error.WriteLine($"OpenMagicka: the checkpoint was not saved ({e.Message})");
+        }
     }
 
     /// <summary>A script's ending (the first), or a defeat when every player is dead, called off if one lives again in time.</summary>
@@ -229,14 +271,12 @@ public sealed partial class ShellSimulation
         var done = (saved with { Chapter = chapter }).Completed() with { Seconds = saved.Seconds + playSeconds };
         playSeconds = 0;
         Save(done);
+        Saves.SetCheckpoint(slot, null);                                      // ours: the original leaves it, for the next chapter's hash to pass over
         LeaveLevel();
-        if (done.Looped && chapter == Chapters.Count - 1)
+        BackToMenu();
+        if (!done.Looped || chapter != Chapters.Count - 1)
         {
-            BackToMenu();
-        }
-        else
-        {
-            Play(slot, done.Chapter);
+            CutscenePages.Begin(menu, slot, done.Chapter, resume: true);      // the next chapter's map, over the lobby
         }
     }
 
@@ -285,6 +325,9 @@ public sealed partial class ShellSimulation
         menu.Ask(why, [strings.Get("#add_menu_ok")], 0, _ => { });
     }
 
+    /// <summary>The loading screen fades in from black over half a second, as the original's.</summary>
+    private float LoadingAlpha => (float)Math.Min(1, loadingSeconds / 0.5);
+
     private void ApplyHud()
     {
         if (play is not null)
@@ -305,7 +348,7 @@ public sealed partial class ShellSimulation
         if (waiting)
         {
             frame.Mode = ShellMode.Loading;
-            LoadingScreen.Write(frame.Menu, strings, chapter, tip, loadingSeconds, screen);
+            LoadingScreen.Write(frame.Menu, strings, chapter, tip, loadingSeconds, screen, LoadingAlpha, told);
             return;
         }
         if (paused)

@@ -27,6 +27,12 @@ public interface IScriptDialogs
     void Restore(object? saved)
     {
     }
+
+    /// <summary>A checkpoint's state as a saved slot keeps it (OM-85); none by default.</summary>
+    System.Text.Json.Nodes.JsonNode? Write(object? saved) => null;
+
+    /// <summary>A saved slot's state as a checkpoint's again; none for what it does not read.</summary>
+    object? Read(System.Text.Json.Nodes.JsonNode? node) => null;
 }
 
 /// <summary>The sound's part of a checkpoint (OM-51): the music the scripts chose and the scene's named sounds.</summary>
@@ -36,6 +42,12 @@ public interface IScriptSounds
 
     /// <summary>Back to a checkpoint's sound: every sound stops at once, then its music and named sounds play again.</summary>
     void Restore(object? saved);
+
+    /// <summary>A checkpoint's sound as a saved slot keeps it (OM-85); none by default.</summary>
+    System.Text.Json.Nodes.JsonNode? Write(object? saved) => null;
+
+    /// <summary>A saved slot's sound as a checkpoint's again; none for what it does not read.</summary>
+    object? Read(System.Text.Json.Nodes.JsonNode? node) => null;
 }
 
 /// <summary>The downloadable packs the scripts ask about.</summary>

@@ -59,7 +59,7 @@ public sealed record SceneCheckpoint(bool FirstEntry, ScriptScene.Snapshot? Scri
 /// <summary>
 /// A level's checkpoint (§6.2): the scene it was taken in, the counters and timers, each scene, the
 /// players' spawn points, the triggers it leaves out on loading, and the magicks the players had unlocked.
-/// Writing it to disk goes with the saves (OM-55).
+/// A campaign slot keeps it on disk as a <see cref="SavedCheckpoint"/> (OM-85).
 /// </summary>
 public sealed record LevelCheckpoint(int Scene, ScriptLevel.Snapshot Level, IReadOnlyDictionary<int, SceneCheckpoint> Scenes,
     IReadOnlyList<Matrix4x4> SpawnPoints, IReadOnlyList<int> Ignored, ulong UnlockedMagicks)
@@ -69,4 +69,7 @@ public sealed record LevelCheckpoint(int Scene, ScriptLevel.Snapshot Level, IRea
 
     /// <summary>The sound's state (OM-51); none when the level plays without it.</summary>
     public object? Sounds { get; init; }
+
+    /// <summary>The stretches the scripts began (the default robe's, the one without weapons), as the original keeps them.</summary>
+    public (bool DefaultAvatar, bool UnequipWeapons) Sections { get; init; }
 }

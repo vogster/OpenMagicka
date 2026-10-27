@@ -1,4 +1,7 @@
 using System.Numerics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using OpenMagicka.Content.Magicka;
 using OpenMagicka.Engine.Audio;
 using OpenMagicka.Engine.Scripting;
@@ -31,6 +34,7 @@ public sealed partial class SoundDirector : IScriptSounds
 
     private sealed record Named(SoundBanks Bank, string Cue, float? Volume, Vector3? At, float Radius, bool Apply3D)
     {
+        [JsonIgnore]
         public ISoundCue? Playing { get; set; }
 
         public float? Volume { get; set; } = Volume;
@@ -248,6 +252,11 @@ public sealed partial class SoundDirector : IScriptSounds
     /// <summary>A checkpoint's sound: the scripts' music, and the scene's named sounds with whether each was playing.</summary>
     private sealed record Saved((SoundBanks Bank, string Cue, float? Focus)? Music, IReadOnlyList<(int Id, Named Sound, bool Playing)> Global,
         IReadOnlyList<(int Id, Named Sound, bool Playing)> Located);
+
+    public JsonNode? Write(object? saved) => saved is Saved state ? JsonSerializer.SerializeToNode(state, SavedCheckpoint.Json) : null;
+
+    public object? Read(JsonNode? node) =>
+        SavedCheckpoint.Read<Saved>(node, s => s.Global.Concat(s.Located).All(n => n.Sound is not null));
 
     public object? Save()
     {
