@@ -29,6 +29,7 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
     private Task<MenuPass>? passLoading;
     private BookPass? book;
     private Task<BookPass>? bookLoading;
+    private Texture2D? shot;
     private string? passLanguage;
     private readonly HashSet<string> failed = [];
     private int levelShown;
@@ -88,6 +89,7 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
         view?.Dispose();
         pass?.Dispose();
         book?.Dispose();
+        shot?.Dispose();
         if (bookLoading is { IsCompletedSuccessfully: true } loaded && !ReferenceEquals(loaded.Result, book))
         {
             loaded.Result.Dispose();
@@ -112,6 +114,10 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
             SetScreen(applied);
         }
         var menu = Pass(frame.Language);
+        if (menu is not null)
+        {
+            menu.Shot = shot;
+        }
         view.Language = frame.Language;
         Follow(frame);
         var (w, h) = (GraphicsDevice.PresentationParameters.BackBufferWidth, GraphicsDevice.PresentationParameters.BackBufferHeight);
@@ -135,6 +141,11 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
                 signals.Shown = frame.Level;                                  // the level may run: it is seen (or never will be)
             }
             menu?.Draw(GraphicsDevice, frame.Menu, w, h, clear: frame.Mode == ShellMode.Loading);
+            if (frame.CaptureShot && frame.Level == levelShown && signals.Captured != frame.Level)
+            {
+                Capture(w, h);
+                signals.Captured = frame.Level;
+            }
         }
         if (screenshot is not null && menu is not null && ++framesShown == ScreenshotAfterFrames)
         {
@@ -160,6 +171,17 @@ public sealed class GameShell : ThreadedGame<ShellFrame>
             }
         }
         return book;
+    }
+
+    /// <summary>The frame just drawn kept as the shot (read back once, as a chapter ends).</summary>
+    private void Capture(int width, int height)
+    {
+        var pixels = new Color[width * height];
+        GraphicsDevice.GetBackBufferData(pixels);
+        var taken = new Texture2D(GraphicsDevice, width, height);
+        taken.SetData(pixels);
+        shot?.Dispose();
+        shot = taken;
     }
 
     /// <summary>The view follows the frame's level: begun for a new one, ended when it goes.</summary>

@@ -41,7 +41,7 @@ public sealed class TomeBook
     public const float Hurry = 6, Settling = 0.75f;
 
     private readonly AnimatedModel rig, book, stack, sheet;
-    private readonly AnimationClip open, close, openLeft, openRight, closeLeft, closeRight, wakeUp, rest, flipLeft, flipRight;
+    private readonly AnimationClip open, close, openLeft, openRight, closeLeft, closeRight, wakeUp, rest, leaving, flipLeft, flipRight;
     private readonly int cameraBone;
     private readonly Vector3 light;
     private readonly BonePose[] poses = new BonePose[BookPicture.PageBones];
@@ -65,7 +65,7 @@ public sealed class TomeBook
         AnimationClip Clip(AnimatedModel model, string name, string what) =>
             model.Clips.GetValueOrDefault(name) ?? throw new InvalidDataException($"{what} has no clip {name}");
         (open, close) = (Clip(book, "open", Book), Clip(book, "close", Book));
-        (wakeUp, rest) = (Clip(rig, "wakeup", Rig), Clip(rig, "idle", Rig));
+        (wakeUp, rest, leaving) = (Clip(rig, "wakeup", Rig), Clip(rig, "idle", Rig), Clip(rig, "exitlevel", Rig));
         (openLeft, openRight) = (Clip(sheet, "open_left", Sheet), Clip(sheet, "open_right", Sheet));
         (closeLeft, closeRight) = (Clip(sheet, "close_left", Sheet), Clip(sheet, "close_right", Sheet));
         (flipLeft, flipRight) = (Clip(sheet, "flip_left", Sheet), Clip(sheet, "flip_right", Sheet));
@@ -138,12 +138,28 @@ public sealed class TomeBook
     /// <summary>The book open at once, the camera at rest over it (no fly-in, no sound): for a test or a start without one.</summary>
     public void Settle()
     {
+        if (!hurried)
+        {
+            camera.ClipSpeed *= Hurry;                                        // as if it had been opened
+        }
         (hurried, State) = (true, TomeBookState.Open);
         Hold(camera, rest);
         Hold(cover, open);
         Hold(left, openLeft);
         Hold(right, openRight);
         Candle.Aim(1, 0.2f, 6);
+        Place();
+    }
+
+    /// <summary>
+    /// A level ended into the book (its end page): open at once, the camera starting its pull back from the page and at
+    /// once blending to rest over a second of the clip (six times fast, as the original's).
+    /// </summary>
+    public void EndLevel()
+    {
+        Settle();
+        camera.Start(leaving, false);
+        camera.CrossFade(rest, 1, false);
         Place();
     }
 

@@ -25,6 +25,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     private readonly TomeBook? book;
     private readonly Func<Point, Point, Vector2?>? bookPicking;
     private bool bookSeen;
+    private float shotShown;
     private readonly MenuInputReader reader = new();
     private ShellMode mode = ShellMode.Menu;
     private Point realScreen;
@@ -59,6 +60,9 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
     }
 
     public const string MenuMusic = "music_menu";
+
+    /// <summary>The cross-fade from a level's last frame to the book (seconds).</summary>
+    public const float ShotFade = 1;
 
     public ShellMode Mode => mode;
 
@@ -158,6 +162,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         switch (mode)
         {
             case ShellMode.Menu:
+                shotShown = Math.Max(0, shotShown - (float)dt / ShotFade);
                 menu.Update(read, screen, (float)dt);
                 content.Sounds?.Update((float)dt, []);
                 break;
@@ -177,6 +182,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
         frame.Screen = new ScreenMode(Settings.Width, Settings.Height, Settings.Fullscreen, Settings.VSync);
         frame.Language = Settings.Language;
         frame.Menu.Clear();
+        frame.CaptureShot = false;
         frame.Menu.ScreenScale = InterfaceScale;
         frame.Play.Gui.Scale = InterfaceScale;
         frame.Mode = mode;
@@ -187,6 +193,7 @@ public sealed partial class ShellSimulation : ISimulation<ShellFrame>, IMenuHost
             case ShellMode.Menu:
                 Book?.Write(frame.Menu.Book, realScreen.X / (float)Math.Max(1, realScreen.Y));
                 menu.Draw(frame.Menu, screen);
+                frame.Menu.Shot = shotShown;
                 break;
             case ShellMode.Loading:
                 LoadingScreen.Write(frame.Menu, strings, chapter, tip, loadingSeconds, screen, LoadingAlpha, told);

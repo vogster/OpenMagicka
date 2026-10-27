@@ -111,6 +111,10 @@ public abstract class CutscenePage(TomeMenu menu, int slot, int chapter, bool re
             gone = true;
             Leave();
             Menu.PopSilently();
+            if (Menu.Page is EndPage)
+            {
+                Menu.PopSilently();                                           // the end page it came from goes with it
+            }
             Menu.Host.Play(slot, chapter, resume, StartNarration());
         }
     }

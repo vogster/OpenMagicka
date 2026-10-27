@@ -1923,6 +1923,15 @@ come later.
   going stays on the right page and the one coming back rides in on them. A cutscene riffles a page of its own (no
   page put on): the map's title page turns away over the map, an intro picture (as it ended) over the next one. What
   a page puts over the screen while drawn on the sheets is left out. Without the book the pages change at once.
+- The end page (`EndPage`), as the original's: when a chapter's end (not "to be continued") is over and the book is
+  drawn, the level is not covered; the render thread keeps its last frame, whole (`ShellFrame.CaptureShot`, read back
+  once; a second without it and the map comes at once). Back in the menu the screen cross-fades from that frame to the
+  book over a second (ours: blended on the screen, not in the scene's encoded light); the camera starts `exitlevel`
+  and at once blends to `idle` over a second of the clip (six times fast, so it is still in under a second); the end
+  page is put on at once (no riffle, no sound; it counts 9 pages), the book open. It shows the frame's middle cut to
+  1.25 : 1, at 800 × 640 in the page's middle (112, 192), lit by the candle, and takes no input. Once the camera is
+  still it riffles on to the next chapter's map (20 pages, the end page on the sheets), whose end takes the end page
+  away too; a chapter with no map loads at once; with no next chapter it riffles back.
 - The intro dims the room: entered, the candle goes out over about a second (target 0, no wobble, speed 1.5); with
   the title page (8 s on) it comes back slowly (1, 0.2, speed 0.5); left, it burns as in the menu (1, 0.2, 6).
 
@@ -2042,10 +2051,10 @@ or B too) and nothing remembers it was seen:
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the logos; the end page between a chapter and the next one's map;
+- the logos;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - the original's `campaign.sav` read or written (OM-55);
-- the loading screen's spell picture and progress bar; the end page with the level's last frame.
+- the loading screen's spell picture and progress bar; "to be continued"'s end page with the book shut, and the credits.
 
 ## 21. Ours: the tutorial's hints
 

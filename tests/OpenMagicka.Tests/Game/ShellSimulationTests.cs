@@ -159,6 +159,38 @@ public sealed class ShellSimulationTests : IDisposable
     }
 
     [GameContentFact]
+    public void AChaptersEnd_WithTheBook_KeepsTheLastFrame_ThenShowsItOnTheEndPage()
+    {
+        var shell = Start();
+        signals.Book = true;                                                  // the render thread made the book's pass
+        shell.Saves.Set(0, new CampaignSlot(0, 0));
+        shell.Play(0, 0);
+        Assert.True(TickUntil(shell, () => shell.Mode == ShellMode.Play));
+        shell.Tick(Step);
+        Show(shell);
+        shell.Tick(Step);
+        shell.Level!.Requests.Add(new OpenMagicka.Engine.Scripting.EndGameRequest(OpenMagicka.Engine.Scripting.EndGameCondition.LevelComplete, false, false));
+        shell.Tick(Step);                                                     // taken before a frame is written (which drops the requests)
+        ShellFrame? frame = null;
+        Assert.True(TickUntil(shell, () => (frame = Show(shell)).CaptureShot));
+        Assert.Equal(0, frame!.Menu.Cover);                                   // the level as it ends, not black
+
+        Press(Keys.Escape);
+        shell.Tick(Step);
+        Press();
+        shell.Tick(Step);
+        Assert.False(shell.Paused);                                           // no pause while it is kept
+        signals.Captured = frame.Level;
+        Assert.True(TickUntil(shell, () => shell.Mode == ShellMode.Menu));
+
+        Assert.IsType<EndPage>(shell.Menu.Page);
+        Assert.Equal(1, shell.Saves[0]!.Chapter);
+        var shown = new ShellFrame();
+        shell.WriteFrame(shown, new FrameTiming(0, TimeSpan.Zero, Step));
+        Assert.InRange(shown.Menu.Shot, 0.9f, 1);                             // the cross-fade from it begins
+    }
+
+    [GameContentFact]
     public void ANarrationThatNeverEnds_HoldsTheLevelNoLongerThanItsLimit_AndIsToldTillTheLevelShows()
     {
         var shell = Start();

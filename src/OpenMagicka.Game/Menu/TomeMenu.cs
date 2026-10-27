@@ -120,6 +120,14 @@ public sealed class TomeMenu(IMenuHost host)
         Turn(page.Pages, true, null, under is null ? null : under.Draw);
     }
 
+    /// <summary>A page put on at once, whatever the book does: no riffle, no sound (the end page, as the original's).</summary>
+    public void PushInstantly(MenuPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        pages.Push(page);
+        page.Enter();
+    }
+
     /// <summary>A riffle of the page's own (a cutscene's: its old picture goes on the sheets, the new one is under them); no page put on.</summary>
     public void Riffle(int count, Action<MenuPicture> going)
     {

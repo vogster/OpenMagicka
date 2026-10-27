@@ -43,7 +43,9 @@ once with `--content` and its folder, or delete `settings.json` (see below).
   starts shut, the camera flying in; a click, A, Enter or Space opens it. It needs
   the game's `XNAnimation.dll` next to its `Content` folder; without it the page shows flat, and the log says why.
 
-What is not in it yet: the end page with the level's last frame, multiplayer,
+- A finished chapter shows its last frame on the book's page, then the book riffles to the next chapter's map.
+
+What is not in it yet: multiplayer,
 challenges, versus, DLC, and the magick book.
 
 ## Controls

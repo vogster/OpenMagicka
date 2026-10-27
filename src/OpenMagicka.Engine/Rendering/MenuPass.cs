@@ -88,6 +88,28 @@ public sealed class MenuPass : IDisposable
         RenderTarget2D page) =>
         (this.text, this.encoded, this.paper, this.atlases, Fonts, this.page) = (text, encoded, paper, atlases, fonts, page);
 
+    /// <summary>The level's last frame (<see cref="MenuAtlas.Shot"/>), the caller's: not disposed here.</summary>
+    public Texture2D? Shot { get; set; }
+
+    /// <summary>The shape the end page cuts the shot to, as the original's.</summary>
+    public const float ShotShape = 1.25f;
+
+    /// <summary>
+    /// A shot's middle cut to 1.25 : 1: its full height for a wider one, as the original's; for a narrower one (ours: the
+    /// original stretched it) its full width.
+    /// </summary>
+    public static Rectangle ShotCut(int width, int height)
+    {
+        var (w, h) = (Math.Max(width, 1), Math.Max(height, 1));
+        if (w >= h * ShotShape)
+        {
+            var cut = (int)MathF.Round(h * ShotShape);
+            return new Rectangle((w - cut) / 2, 0, cut, h);
+        }
+        var tall = (int)MathF.Round(w / ShotShape);
+        return new Rectangle(0, (h - tall) / 2, w, tall);
+    }
+
     /// <summary>The menu's fonts by the original's names.</summary>
     public IReadOnlyDictionary<string, GuiFont> Fonts { get; }
 
@@ -241,6 +263,11 @@ public sealed class MenuPass : IDisposable
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(picture);
         States(device);
+        if (picture.Shot > 0 && Shot is { } shot)
+        {
+            text.DrawSprites(device, shot, [new GuiSprite(Vector2.Zero, new Vector2(width, height), Vector2.Zero, Vector2.One,
+                new Vector4(1, 1, 1, Math.Clamp(picture.Shot, 0, 1)))], width, height);   // ours: blended on the screen
+        }
         var laid = MenuPicture.Scaled(new Point(width, height), picture.ScreenScale);
         Draw(device, picture.ScreenSprites, picture.ScreenTexts, laid.X, laid.Y, text);
         if (picture.Cover > 0)
@@ -294,11 +321,23 @@ public sealed class MenuPass : IDisposable
         for (var i = 0; i < sprites.Count;)
         {
             var (atlas, saturation) = (sprites[i].Atlas, sprites[i].Saturation);
-            var texture = atlases[atlas];
+            var texture = atlas == MenuAtlas.Shot ? Shot : atlases[atlas];
+            if (texture is null)
+            {
+                for (; i < sprites.Count && sprites[i].Atlas == atlas; i++)
+                {
+                    // no shot taken: nothing drawn
+                }
+                continue;
+            }
             batch.Clear();
             for (; i < sprites.Count && sprites[i].Atlas == atlas && sprites[i].Saturation == saturation; i++)
             {
                 var s = sprites[i];
+                if (s.Atlas == MenuAtlas.Shot && s.Source.IsEmpty)
+                {
+                    s = s with { Source = ShotCut(texture.Width, texture.Height) };
+                }
                 var (u0, u1) = (s.Source.Left / (float)texture.Width, s.Source.Right / (float)texture.Width);
                 batch.Add(new GuiSprite(s.At, s.At + s.Size, new Vector2(s.Mirrored ? u1 : u0, s.Source.Top / (float)texture.Height),
                     new Vector2(s.Mirrored ? u0 : u1, s.Source.Bottom / (float)texture.Height), s.Colour));

@@ -57,8 +57,11 @@ public sealed class LevelEnding(EndGameCondition outcome, float delay = 0, bool 
 
     public float WordAlpha { get; private set; }
 
+    /// <summary>The chapter's end goes to the book's end page (OM-83), which shows the level's last frame: not covered.</summary>
+    public bool ToEndPage { get; init; }
+
     /// <summary>How much of the screen is covered (black).</summary>
-    public float Cover => Next == EndingNext.None ? 0
+    public float Cover => Next == EndingNext.None || ToEndPage && Next == EndingNext.NextChapter && Outcome != EndGameCondition.ToBeContinued ? 0
         : Outcome == EndGameCondition.ToBeContinued ? Math.Clamp(-timer / ContinuedFade, 0, 1)
         : Math.Clamp(-timer - Hold, 0, 1);
 

@@ -26,6 +26,9 @@ public sealed class ShellFrame
 
     public MenuPicture Menu { get; } = new();
 
+    /// <summary>The level's frame is to be kept once drawn (a chapter's end, for the book's end page).</summary>
+    public bool CaptureShot { get; set; }
+
     public ScreenMode Screen { get; set; }
 
     public string Language { get; set; } = Content.Localization.LanguagePack.Fallback;
@@ -36,6 +39,14 @@ public sealed class ShellSignals
 {
     private int shown;
     private volatile bool book;
+    private int captured;
+
+    /// <summary>The serial of the level whose last frame the render thread kept.</summary>
+    public int Captured
+    {
+        get => Volatile.Read(ref captured);
+        set => Volatile.Write(ref captured, value);
+    }
 
     /// <summary>The book's pass is made (OM-83): the menu's page may lie in it.</summary>
     public bool Book

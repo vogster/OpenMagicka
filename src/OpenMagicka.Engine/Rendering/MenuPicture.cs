@@ -35,6 +35,9 @@ public enum MenuAtlas : byte
 
     /// <summary><c>UI/Cutscenes/intro_s1</c> … <c>intro_s6</c>: the intro's pictures.</summary>
     Intro1, Intro2, Intro3, Intro4, Intro5, Intro6,
+
+    /// <summary>The level's last frame, taken as a chapter ends (OM-83): the screen's size; none before one is taken.</summary>
+    Shot,
 }
 
 /// <summary>A piece of an atlas drawn at a place: its source rectangle, where (top left) and how big, its colour and saturation.</summary>
@@ -114,6 +117,9 @@ public sealed class MenuPicture
     /// <summary>How black the screen is over everything (a fade).</summary>
     public float Cover { get; set; }
 
+    /// <summary>How much of the level's last frame still shows over the screen (OM-83: the cross-fade from it, 1 to 0).</summary>
+    public float Shot { get; set; }
+
     /// <summary>
     /// The interface's size (OM-87): the screen's own pieces are laid out on a screen this much smaller, and drawn this
     /// much bigger (the page keeps its square). Kept from frame to frame (not cleared).
@@ -135,6 +141,7 @@ public sealed class MenuPicture
         Page.Clear();
         Sheet.Clear();
         OnSheet = false;
+        Shot = 0;
         ScreenSprites.Clear();
         ScreenTexts.Clear();
         Cover = 0;

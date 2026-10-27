@@ -23,6 +23,7 @@ public sealed partial class ShellSimulation
     private LevelPlay? play;
     private PlaySimulation? playing;
     private LevelEnding? ending;
+    private double? capturing;
     private int level, slot, chapter, tip = 1;
     private bool resume;
     private Narration? narration;
@@ -54,8 +55,8 @@ public sealed partial class ShellSimulation
         {
             throw new ArgumentOutOfRangeException(nameof(chapter), $"no chapter {chapter} in slot {slot}");
         }
-        (this.slot, this.chapter, this.resume, this.narration, told, tip, loadingSeconds, mode) =
-            (slot, chapter, resume, narration, narration?.TextKey, Random.Shared.Next(1, LoadingScreen.Tips + 1), 0, ShellMode.Loading);
+        (this.slot, this.chapter, this.resume, this.narration, told, tip, loadingSeconds, mode, shotShown) =
+            (slot, chapter, resume, narration, narration?.TextKey, Random.Shared.Next(1, LoadingScreen.Tips + 1), 0, ShellMode.Loading, 0);
         var language = Settings.Language;
         loading = Task.Run(() => Open(chapter, language));
     }
@@ -181,7 +182,7 @@ public sealed partial class ShellSimulation
         if ((ending is null || byDeath) && requests.OfType<EndGameRequest>().FirstOrDefault(r => r.Outcome is EndGameCondition.Victory
             or EndGameCondition.LevelComplete or EndGameCondition.Defeat or EndGameCondition.ToBeContinued or EndGameCondition.EndOffGame) is { } end)
         {
-            (ending, byDeath) = (new LevelEnding(end.Outcome, 0, end.Phony), false);
+            (ending, byDeath) = (new LevelEnding(end.Outcome, 0, end.Phony) { ToEndPage = Book is not null }, false);
         }
         requests.RemoveAll(r => r is EndGameRequest);
         var dead = AllDead(play);
@@ -205,6 +206,16 @@ public sealed partial class ShellSimulation
 
     private void StepEnding(float dt)
     {
+        if (capturing is { } waited)
+        {
+            capturing = waited + dt;
+            if (signals.Captured == level || capturing > CaptureTimeout)
+            {
+                capturing = null;
+                CompleteChapter(endPage: signals.Captured == level);          // without a shot in time, straight to the map
+            }
+            return;
+        }
         if (ending is not { } end)
         {
             return;
@@ -223,6 +234,9 @@ public sealed partial class ShellSimulation
             case EndingNext.Restart when !play!.RestartAtCheckpoint():
                 RestartLevel();                                               // no checkpoint yet: the level from its start
                 break;
+            case EndingNext.NextChapter when end.ToEndPage && end.Outcome != EndGameCondition.ToBeContinued && Book is not null:
+                capturing = 0;                                                // the level's last frame first, for the end page
+                break;
             case EndingNext.NextChapter:
                 CompleteChapter();
                 break;
@@ -231,7 +245,7 @@ public sealed partial class ShellSimulation
 
     private void OpenPause()
     {
-        if (ending is { Waiting: false, Next: not EndingNext.None })
+        if (ending is { Waiting: false, Next: not EndingNext.None } || capturing is not null)
         {
             return;                                                           // the level is ending: its cover would hide the menu
         }
@@ -264,8 +278,15 @@ public sealed partial class ShellSimulation
         BackToMenu();
     }
 
-    /// <summary>The chapter is done: the slot goes on to the next (after the last, the first, looped), which loads at once.</summary>
-    private void CompleteChapter()
+    /// <summary>How long a chapter's end waits for its last frame to be kept (seconds).</summary>
+    private const double CaptureTimeout = 1;
+
+    /// <summary>
+    /// The chapter is done: the slot goes on to the next (after the last, the first, looped). With the book and the
+    /// level's last frame, the end page shows it (the book cross-fading in from it, the camera pulling back) and then
+    /// riffles to the next chapter's map; else the map comes at once.
+    /// </summary>
+    private void CompleteChapter(bool endPage = false)
     {
         var saved = Saves[slot] ?? new CampaignSlot(chapter, chapter);
         var done = (saved with { Chapter = chapter }).Completed() with { Seconds = saved.Seconds + playSeconds };
@@ -274,9 +295,16 @@ public sealed partial class ShellSimulation
         Saves.SetCheckpoint(slot, null);                                      // ours: the original leaves it, for the next chapter's hash to pass over
         LeaveLevel();
         BackToMenu();
-        if (!done.Looped || chapter != Chapters.Count - 1)
+        int? next = !done.Looped || chapter != Chapters.Count - 1 ? done.Chapter : null;
+        if (endPage && Book is { } book)
         {
-            CutscenePages.Begin(menu, slot, done.Chapter, resume: true);      // the next chapter's map, over the lobby
+            book.EndLevel();
+            menu.PushInstantly(new EndPage(menu, slot, next));
+            shotShown = 1;
+        }
+        else if (next is { } chapterNext)
+        {
+            CutscenePages.Begin(menu, slot, chapterNext, resume: true);      // the next chapter's map, over the lobby
         }
     }
 
@@ -305,7 +333,7 @@ public sealed partial class ShellSimulation
         play?.Dispose();
         content.Sounds?.ResumeAll();
         content.Sounds?.StopAll(immediate: true);
-        (play, playing, paused, ending, byDeath, waiting) = (null, null, false, null, false, false);
+        (play, playing, paused, ending, byDeath, waiting, capturing) = (null, null, false, null, false, false, null);
     }
 
     private void BackToMenu()
@@ -345,6 +373,7 @@ public sealed partial class ShellSimulation
             return;
         }
         playing.WriteFrame(frame.Play, timing);
+        frame.CaptureShot = capturing is not null && !paused;
         if (waiting)
         {
             frame.Mode = ShellMode.Loading;
