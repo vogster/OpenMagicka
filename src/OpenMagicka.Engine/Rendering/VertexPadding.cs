@@ -38,6 +38,9 @@ public static class EffectInputs
         In(VertexElementUsageXna31.Color, 1),
     ];
 
+    /// <summary>A liquid's own vertices: what its effects read but the freeze value, which comes as a second stream (OM-88).</summary>
+    public static IReadOnlyList<ShaderInput> LiquidVertices { get; } = [.. Liquid.Where(i => i != In(VertexElementUsageXna31.Color, 1))];
+
     /// <summary>Every input the vertex shaders of an fx_2_0 effect read, all techniques together, without repeats.</summary>
     public static IReadOnlyList<ShaderInput> Read(byte[] effect)
     {
@@ -57,7 +60,7 @@ public static class EffectInputs
             : batch.Material switch
             {
                 SkinnedModelBasicEffectContent => SkinnedModelDeferred,
-                RenderDeferredLiquidEffectContent or LavaEffectContent => Liquid,
+                RenderDeferredLiquidEffectContent or LavaEffectContent => batch.Liquid >= 0 ? LiquidVertices : Liquid,
                 _ => RenderDeferred,
             };
     }

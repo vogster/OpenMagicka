@@ -22,10 +22,38 @@ public sealed record GpuBatch(
     int Part = -1)
     : IDisposable
 {
+    /// <summary>A liquid's key (<see cref="LevelLiquids.Key"/>); −1 for anything else.</summary>
+    public int Liquid { get; init; } = -1;
+
+    /// <summary>A liquid's freeze values, its second vertex stream (OM-88).</summary>
+    public DynamicVertexBuffer? Freeze { get; init; }
+
+    /// <summary>The streams a liquid is drawn from (its vertices, its freeze values); none for anything else.</summary>
+    public VertexBufferBinding[]? Streams { get; init; }
+
+    /// <summary>The version of the freeze values last uploaded, and the game's liquid they came from (render thread).</summary>
+    public int FreezeVersion { get; set; } = -1;
+
+    public object? FreezeSource { get; set; }
+
+    /// <summary>Binds its vertices (and a liquid's freeze values) for drawing.</summary>
+    public void Bind(GraphicsDevice device)
+    {
+        if (Streams is { } streams)
+        {
+            device.SetVertexBuffers(streams);
+        }
+        else
+        {
+            device.SetVertexBuffer(Vertices);
+        }
+    }
+
     public void Dispose()
     {
         Vertices.Dispose();
         Indices.Dispose();
+        Freeze?.Dispose();
     }
 }
 
@@ -312,6 +340,7 @@ public sealed class GpuLevel : IDisposable
         var declaration = new VertexDeclaration(batch.Stride, VertexLayouts.Full(batch.Declaration));
         VertexBuffer? vertices = null;
         IndexBuffer? indices = null;
+        DynamicVertexBuffer? freeze = null;
         try
         {
             vertices = new VertexBuffer(device, declaration, batch.VertexCount, BufferUsage.WriteOnly);
@@ -323,13 +352,26 @@ public sealed class GpuLevel : IDisposable
             indices.SetData(batch.IndexData, 0, count * indexSize);
             // Only what drawing needs is kept: the CPU vertex and index data can be collected.
             var deferred = DeferredMaterial(batch);
+            if (batch.Liquid >= 0)
+            {
+                freeze = new DynamicVertexBuffer(device, LevelLiquids.FreezeStream, batch.VertexCount, BufferUsage.WriteOnly);
+                var start = new float[batch.VertexCount];
+                Array.Fill(start, batch.FreezeStart);
+                freeze.SetData(start);
+            }
             return new GpuBatch(vertices, indices, batch.VertexCount, batch.StartIndex, batch.PrimitiveCount, batch.Bounds, batch.World,
-                batch.Material, deferred, batch.HasUv ? diffuse : null, batch.DiffuseColor, batch.Additive, batch.HasNormal, batch.Part);
+                batch.Material, deferred, batch.HasUv ? diffuse : null, batch.DiffuseColor, batch.Additive, batch.HasNormal, batch.Part)
+            {
+                Liquid = batch.Liquid,
+                Freeze = freeze,
+                Streams = freeze is null ? null : [new VertexBufferBinding(vertices), new VertexBufferBinding(freeze)],
+            };
         }
         catch
         {
             vertices?.Dispose();
             indices?.Dispose();
+            freeze?.Dispose();
             throw;
         }
     }
@@ -363,7 +405,7 @@ public sealed class GpuLevel : IDisposable
             effect.Texture = batch.Diffuse;
             effect.DiffuseColor = batch.Diffuse is null ? batch.DiffuseColor : Vector3.One;
             effect.LightingEnabled = !additive && batch.Lit;
-            device.SetVertexBuffer(batch.Vertices);
+            batch.Bind(device);
             device.Indices = batch.Indices;
             effect.CurrentTechnique.Passes[0].Apply();
             device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, batch.VertexCount, batch.StartIndex, batch.PrimitiveCount);

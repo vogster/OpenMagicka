@@ -40,6 +40,9 @@ public sealed class PlayFrame
     /// <summary>Where the level's animated parts are, as its batches number them (LevelParts.Order).</summary>
     public List<System.Numerics.Matrix4x4> Parts { get; } = [];
 
+    /// <summary>The scene's liquids' freeze values (OM-88), kept from frame to frame and copied anew when they change.</summary>
+    public List<Engine.Rendering.LiquidFreeze> Liquids { get; } = [];
+
     /// <summary>Which of them glow this frame (a script's highlightAnim), lined up with <see cref="Parts"/>.</summary>
     public List<bool> Highlighted { get; } = [];
 
@@ -142,6 +145,35 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escap
         return pad.IsConnected && (padTouched || (usingPad && !keysTouched));
     }
 
+    /// <summary>The scene's liquids' freeze values into the frame, copied only when they changed (OM-88).</summary>
+    private void WriteLiquids(List<Engine.Rendering.LiquidFreeze> into)
+    {
+        var liquids = play.World.Liquids;
+        var keyed = 0;
+        foreach (var liquid in liquids)
+        {
+            if (liquid.Key >= 0)
+            {
+                if (keyed >= into.Count || !ReferenceEquals(into[keyed].Source, liquid))
+                {
+                    into.RemoveRange(keyed, into.Count - keyed);
+                    into.Add(new Engine.Rendering.LiquidFreeze(liquid.Key, liquid));
+                }
+                var entry = into[keyed++];
+                if (entry.Version != liquid.Version)
+                {
+                    if (entry.Values.Length != liquid.FreezeValues.Length)
+                    {
+                        entry.Values = new float[liquid.FreezeValues.Length];
+                    }
+                    liquid.FreezeValues.CopyTo(entry.Values);
+                    entry.Version = liquid.Version;
+                }
+            }
+        }
+        into.RemoveRange(keyed, into.Count - keyed);
+    }
+
     public void WriteFrame(PlayFrame frame, FrameTiming timing)
     {
         frame.Timing = timing;
@@ -153,6 +185,7 @@ public sealed class PlaySimulation(IGameHost host, LevelPlay play, Action? escap
         frame.Settings = scene?.Definition.Settings;
         frame.Cover = play.Cover;
         frame.Transition = play.Transitions.Picture;
+        WriteLiquids(frame.Liquids);
         play.Requests.Clear();                                                // nothing takes them yet (OM-49, OM-51)
         EntityPictures.Collect(play.World, play.Looks, frame.Models);
         play.Spells.WriteModels(frame.Models);

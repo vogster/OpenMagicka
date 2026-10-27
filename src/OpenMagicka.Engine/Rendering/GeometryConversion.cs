@@ -137,6 +137,15 @@ public sealed record LevelBatch(
 
     /// <summary>The animated part it belongs to, by its place in <see cref="LevelParts.Order"/>; −1 for the level's own.</summary>
     public int Part { get; init; } = -1;
+
+    /// <summary>
+    /// A liquid's key (OM-88: <see cref="LevelLiquids.Key"/>), whose freeze values come each frame as a second vertex
+    /// stream; −1 for anything else.
+    /// </summary>
+    public int Liquid { get; init; } = -1;
+
+    /// <summary>A liquid's freeze value before any comes (1 for one frozen by itself).</summary>
+    public float FreezeStart { get; init; }
 }
 
 /// <summary>Turns a level model's BiTree into batches (no GPU work).</summary>

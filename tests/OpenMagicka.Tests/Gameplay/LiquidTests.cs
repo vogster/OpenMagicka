@@ -178,4 +178,19 @@ public class LiquidTests
         sheet.Step(1);
         Assert.Equal(before + 2, sheet.Version);
     }
+
+    [GameContentFact]
+    public void TheRendersLiquidBatches_CarryTheGamesKeys_AndTakeTheirFreezeAsASecondStream()
+    {
+        var loader = new ContentLoader(new ContentFileSystem(GameContent.ContentDirectory!), XnbReaderRegistry.Magicka);
+        var level = (LevelModelContent)loader.LoadUncached("Levels/Versus/vs_frozen_lake").Root!;
+        var batches = OpenMagicka.Engine.Rendering.LevelLiquids.Batches(level.Liquids);
+        var sheets = level.Liquids.Select(LiquidSheets.From).ToList();
+
+        Assert.Equal(sheets.Count(s => s is not null), batches.Count);
+        Assert.All(batches, b => Assert.Equal(sheets[b.Liquid]!.AutoFreeze ? 1 : 0, b.FreezeStart));
+        Assert.All(batches, b => Assert.Equal(sheets[b.Liquid]!.Vertices.Count, b.VertexCount));   // one freeze value a vertex
+        Assert.DoesNotContain(OpenMagicka.Engine.Rendering.EffectInputs.For(batches[0]), i => i.Usage == OpenMagicka.Content.Xna.VertexElementUsageXna31.Color && i.Index == 1);
+        Assert.Equal(2003, OpenMagicka.Engine.Rendering.LevelLiquids.Key(1, 3));   // a part's: (its place + 1) × 1000 + its own
+    }
 }

@@ -274,6 +274,16 @@ public sealed partial class PlayedLevel
                 StringComparison.OrdinalIgnoreCase) != true));
     }
 
+    /// <summary>A level liquid's key: its place in the level's list (OM-88).</summary>
+    private static Gameplay.Liquids.Liquid? Keyed(Gameplay.Liquids.Liquid? liquid, int index)
+    {
+        if (liquid is not null)
+        {
+            liquid.Key = Rendering.LevelLiquids.Key(-1, index);
+        }
+        return liquid;
+    }
+
     /// <summary>A scene's model, nav mesh and scripts, made the first time it is gone to.</summary>
     private void Prepare(LevelScene scene)
     {
@@ -283,7 +293,19 @@ public sealed partial class PlayedLevel
             scene.Scripts = new ScriptScene(scene.Definition, Level, registry, World, Services.Looped, Services.Seed, new ScriptPlaces(scene.Model), Game,
                 Services.Assets);
             scene.NavMesh = SceneSetup.Navigation(scene.Model, scene.Scripts.Places);
-            scene.Liquids = scene.Model is { } model ? [.. model.Liquids.Select(LiquidSheets.From).OfType<Gameplay.Liquids.Liquid>()] : [];
+            scene.Liquids = scene.Model is { } model ? [.. model.Liquids.Select(LiquidSheets.From).Select(Keyed).OfType<Gameplay.Liquids.Liquid>()] : [];
+            if (scene.Model is { } partsModel)
+            {
+                var order = Rendering.LevelParts.Order(partsModel.AnimatedParts);
+                foreach (var part in scene.Scripts.Places.AllParts)
+                {
+                    var at = order.ToList().FindIndex(p => ReferenceEquals(p, part.Content));
+                    foreach (var liquid in part.Liquids)
+                    {
+                        liquid.Key = at < 0 ? -1 : Rendering.LevelLiquids.Key(at, liquid.Key);   // the render's key for its freeze values
+                    }
+                }
+            }
             if (scene.NavMesh is { } nav)
             {
                 var lakes = scene.Liquids;

@@ -57,6 +57,9 @@ public sealed class Liquid : IMeshSurface
 
     public LiquidKind Kind { get; }
 
+    /// <summary>Which of the level's drawn liquids it is (the render's key for its freeze values); −1: none.</summary>
+    public int Key { get; set; } = -1;
+
     /// <summary>Bodies meet it (else it is only drawn).</summary>
     public bool HasCollision { get; }
 

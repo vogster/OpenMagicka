@@ -28,7 +28,7 @@ public sealed class ScenePart
         Name = content.Name.ToLowerInvariant();
         Key = LegacyStringHash.Compute(Name);
         (start, end) = (0, content.AnimationDuration);
-        Liquids = [.. content.Liquids.Select(Physics.LiquidSheets.From).OfType<Gameplay.Liquids.Liquid>()];
+        Liquids = [.. content.Liquids.Select((liquid, index) => Keyed(Physics.LiquidSheets.From(liquid), index)).OfType<Gameplay.Liquids.Liquid>()];
         foreach (var child in content.Children)
         {
             var part = new ScenePart(child);
@@ -42,6 +42,16 @@ public sealed class ScenePart
     }
 
     public AnimatedLevelPartContent Content { get; }
+
+    /// <summary>A sheet with its place in the part's list for a key (the level makes it whole with the part's place).</summary>
+    private static Gameplay.Liquids.Liquid? Keyed(Gameplay.Liquids.Liquid? liquid, int index)
+    {
+        if (liquid is not null)
+        {
+            liquid.Key = index;
+        }
+        return liquid;
+    }
 
     /// <summary>Its water and lava (OM-88), riding it; kept with the part, so a frozen pool stays frozen while the scene is left.</summary>
     public IReadOnlyList<Gameplay.Liquids.Liquid> Liquids { get; }

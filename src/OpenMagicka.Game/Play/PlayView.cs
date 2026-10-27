@@ -165,7 +165,8 @@ public sealed class PlayView : IDisposable
             (float)(clock.Elapsed.TotalSeconds % 3600), effects?.Pool, PostProcessing.For(frame.Settings), models.Instances(frame.Models),
             CharacterRimLight.For(frame.Settings), placed, frame.Spells, models.Get, frame.Gui,
             placed is not null && frame.Highlighted.Count == frame.Parts.Count ? frame.Highlighted : null,   // the glow only with the parts it lines up with
-            frame.Transition);
+            frame.Transition,
+            string.Equals(frame.Model, shownModel, StringComparison.OrdinalIgnoreCase) ? frame.Liquids : null);   // a level still shown while the next loads keeps its own
     }
 
     /// <summary>The level's parts where the frame has them, when the frame is of the level shown (none: at rest).</summary>

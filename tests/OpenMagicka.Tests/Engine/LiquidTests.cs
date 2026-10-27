@@ -55,7 +55,7 @@ public class LiquidTests
     [Theory]
     [InlineData(false, 0f)]
     [InlineData(true, 1f)]
-    public void ALiquid_IsABatch_WithItsFreezeValueOnEveryVertex(bool autoFreeze, float freeze)
+    public void ALiquid_IsABatch_ItsFreezeValueStartingForItsSecondStream(bool autoFreeze, float freeze)
     {
         var batch = Assert.Single(LevelLiquids.Batches([Pool(Water(), autoFreeze)]));
 
@@ -63,9 +63,8 @@ public class LiquidTests
         Assert.Equal(new BoundingBox(new Vector3(-1, 1, -1), new Vector3(1, 1, 1)), batch.Bounds);
         Assert.IsType<RenderDeferredLiquidEffectContent>(batch.Material);
         Assert.False(batch.Additive);
-        var element = batch.Declaration.Elements.Single(e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1);
-        Assert.Equal((VertexElementFormatXna31.Single, 60, 64), (element.Format, element.Offset, batch.Stride));
-        Assert.All(Enumerable.Range(0, 4), v => Assert.Equal(freeze, BitConverter.ToSingle(batch.VertexData, v * 64 + 60)));
+        Assert.DoesNotContain(batch.Declaration.Elements, e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1);   // a second stream (OM-88)
+        Assert.Equal((60, 0, freeze), (batch.Stride, batch.Liquid, batch.FreezeStart));
         Assert.Equal(("bottom", new Vector3(0.1f, 0.2f, 0.3f)), (batch.DiffuseTexture?.Path, batch.DiffuseColor));   // for the simple view
     }
 
@@ -105,14 +104,13 @@ public class LiquidTests
     }
 
     [Fact]
-    public void ALiquidPaddedForItsEffect_HasOneFreezeValue_WhereItWasPut()
+    public void ALiquidPaddedForItsEffect_GetsNoFreezeValueInItsOwnVertices()
     {
         var batch = Assert.Single(LevelLiquids.Batches([Pool(Water(), false)]));
 
         var padded = VertexPadding.Complete(batch, EffectInputs.For(batch));
 
-        var freeze = Assert.Single(padded.Declaration.Elements, e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1);
-        Assert.Equal(60, freeze.Offset);
+        Assert.DoesNotContain(padded.Declaration.Elements, e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1);   // its second stream brings it
     }
 
     [Fact]

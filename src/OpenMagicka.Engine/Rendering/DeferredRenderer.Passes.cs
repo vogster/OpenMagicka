@@ -272,7 +272,7 @@ public sealed partial class DeferredRenderer
 
     private static void Draw(GraphicsDevice device, Effect effect, GpuBatch batch)
     {
-        device.SetVertexBuffer(batch.Vertices);
+        batch.Bind(device);
         device.Indices = batch.Indices;
         foreach (var pass in effect.CurrentTechnique.Passes)
         {

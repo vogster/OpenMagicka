@@ -15,7 +15,24 @@ namespace OpenMagicka.Engine.Rendering;
 public sealed record DeferredFrame(GlobalEffectValues Globals, DirectionalLighting Sun, SceneFog Fog, Vector3 Background, Vector3 ShadowFocus,
     float Seconds = 0, Particles.ParticlePool? Particles = null, PostProcessing? Post = null, IReadOnlyList<ModelInstance>? Models = null,
     CharacterRimLight? RimLight = null, IReadOnlyList<Matrix>? Parts = null, SpellPictures? Spells = null, Func<string, GpuLevel?>? ModelOf = null,
-    GuiPictures? Gui = null, IReadOnlyList<bool>? Highlighted = null, Screen.TransitionPicture Transition = default);
+    GuiPictures? Gui = null, IReadOnlyList<bool>? Highlighted = null, Screen.TransitionPicture Transition = default,
+    IReadOnlyList<LiquidFreeze>? Liquids = null);
+
+/// <summary>
+/// A liquid's freeze values as a frame carries them to the render thread (OM-88): its key (<see cref="LevelLiquids.Key"/>),
+/// the version they are at, one float a vertex. Owned by the frame and filled again by the logic thread.
+/// </summary>
+public sealed class LiquidFreeze(int key, object? source = null)
+{
+    public int Key { get; } = key;
+
+    /// <summary>The game's liquid it copies (another scene's of the same key is another entry).</summary>
+    public object? Source { get; } = source;
+
+    public int Version { get; set; } = -1;
+
+    public float[] Values { get; set; } = [];
+}
 
 /// <summary>
 /// The light on the characters' edges a scene gives the skinned effect (its <c>&lt;RimLight&gt;</c>), as the
@@ -188,6 +205,31 @@ public sealed partial class DeferredRenderer : IDisposable
     /// <summary>Why the filter and bloom are not applied (the scene is then shown as it is), or null.</summary>
     public string? PostUnavailable { get; private set; }
 
+    /// <summary>The liquids' freeze values the frame brings, into their second streams where they changed (OM-88).</summary>
+    private static void UploadFreeze(GpuLevel level, IReadOnlyList<LiquidFreeze>? liquids)
+    {
+        if (liquids is null || liquids.Count == 0)
+        {
+            return;
+        }
+        foreach (var batch in level.Batches)
+        {
+            if (batch.Freeze is not { } stream)
+            {
+                continue;
+            }
+            foreach (var liquid in liquids)
+            {
+                if (liquid.Key == batch.Liquid && (liquid.Version != batch.FreezeVersion || !ReferenceEquals(liquid.Source, batch.FreezeSource))
+                    && liquid.Values.Length >= batch.VertexCount)
+                {
+                    stream.SetData(liquid.Values, 0, batch.VertexCount, SetDataOptions.Discard);
+                    (batch.FreezeVersion, batch.FreezeSource) = (liquid.Version, liquid.Source);
+                }
+            }
+        }
+    }
+
     /// <summary>Draws the level and shows it on the back buffer; returns how many batches were drawn into the G-buffer.</summary>
     public int Render(GraphicsDevice device, GpuLevel level, DeferredFrame frame)
     {
@@ -195,6 +237,7 @@ public sealed partial class DeferredRenderer : IDisposable
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(frame);
         EnsureTargets(device);
+        UploadFreeze(level, frame.Liquids);
         device.RasterizerState = RasterizerState.CullNone;
         UnbindTextures(device);
         var globals = frame.Globals;

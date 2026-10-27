@@ -11,19 +11,26 @@ namespace OpenMagicka.Engine.Rendering;
 public enum OpaqueKind { Shadow, Depth, GBuffer }
 
 /// <summary>
-/// A level's water and lava as batches (no GPU work). The original feeds each liquid a second
-/// vertex stream with one "freeze" value per vertex (0 water, 1 ice, changed by frost spells); here
-/// it is appended to the vertices as Color1, at its starting value: ice when the liquid freezes by
-/// itself (AutoFreeze), water otherwise.
+/// A level's water and lava as batches (no GPU work). As the original's, each liquid gets a second vertex stream with
+/// one "freeze" value per vertex (Color1: 0 water, 1 ice), which the game's freezing changes each frame (OM-88); it
+/// starts at ice when the liquid freezes by itself (AutoFreeze), water otherwise. Each batch carries its liquid's key.
 /// </summary>
 public static class LevelLiquids
 {
+    /// <summary>
+    /// A liquid's key, the same for the game and the render: the level's own by their place in its list; a part's by
+    /// (the part's place in <see cref="LevelParts.Order"/> + 1) × 1000 + their place in the part's list.
+    /// </summary>
+    public static int Key(int part, int index) => part < 0 ? index : (part + 1) * 1000 + index;
+
     public static IReadOnlyList<LevelBatch> Batches(IEnumerable<LiquidContent> liquids)
     {
         ArgumentNullException.ThrowIfNull(liquids);
         var batches = new List<LevelBatch>();
+        var index = -1;
         foreach (var liquid in liquids)
         {
+            index++;
             if (liquid.VertexBuffer is null || liquid.IndexBuffer is null || liquid.Declaration is null || liquid.NumVertices <= 0
                 || liquid.PrimitiveCount <= 0 || liquid.Effect is not (RenderDeferredLiquidEffectContent or LavaEffectContent))
             {
@@ -43,8 +50,10 @@ public static class LevelLiquids
                 basic.Any(e => e.VertexElementUsage == VertexElementUsage.TextureCoordinate))
             {
                 Material = liquid.Effect,
+                Liquid = liquid.Declaration.Elements.Any(e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1) ? -1 : index,   // one with its own freeze value keeps it
+                FreezeStart = liquid.AutoFreeze ? 1 : 0,
             };
-            batches.Add(WithFreeze(batch, liquid.AutoFreeze ? 1 : 0));
+            batches.Add(batch);
         }
         return batches;
     }
@@ -56,14 +65,8 @@ public static class LevelLiquids
     private static BoundingBox Transform(BoundingBox box, Matrix world) =>
         BoundingBox.CreateFromPoints(box.GetCorners().Select(c => Vector3.Transform(c, world)));
 
-    /// <summary>Appends the freeze value (Color1, a single float) to every vertex of a liquid batch that lacks it.</summary>
-    public static LevelBatch WithFreeze(LevelBatch batch, float freeze)
-    {
-        ArgumentNullException.ThrowIfNull(batch);
-        return batch.Declaration.Elements.Any(e => e.Usage == VertexElementUsageXna31.Color && e.UsageIndex == 1)
-            ? batch
-            : VertexPadding.Append(batch, new ShaderInput(VertexElementUsageXna31.Color, 1), VertexElementFormatXna31.Single, BitConverter.GetBytes(freeze));
-    }
+    /// <summary>The second stream's layout: the freeze value, one float a vertex, read as Color1.</summary>
+    public static readonly VertexDeclaration FreezeStream = new(new VertexElement(0, VertexElementFormat.Single, VertexElementUsage.Color, 1));
 
     private static BoundingBox Bounds(LiquidContent liquid)
     {

@@ -37,7 +37,7 @@ public static class LevelParts
                     }
                 }
             }
-            batches.AddRange(LevelLiquids.Batches(part.Liquids, at).Select(b => b with { Part = index }));
+            batches.AddRange(LevelLiquids.Batches(part.Liquids, at).Select(b => b with { Part = index, Liquid = LevelLiquids.Key(index, b.Liquid) }));
         }
         return batches;
     }
