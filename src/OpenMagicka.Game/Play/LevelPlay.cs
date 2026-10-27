@@ -138,6 +138,7 @@ public sealed partial class LevelPlay : IDisposable
         {
             return false;
         }
+        (pendingIn, overridden) = (null, false);                              // a scene change's way back from the run before is dropped
         Transitions.End(Engine.Screen.TransitionKind.Fade, Numerics.Vector3.Zero, FadeIn);
         return true;
     }

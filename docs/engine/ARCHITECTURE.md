@@ -377,6 +377,12 @@ them; what the engine must reproduce is how each pass is fed (from the original'
     effect's preshader) from `SaturateMatrix`, `IdentityMatrix` and `Saturation`, and encodes
     again. The two matrices keep the values the effect file gives them; the original never sets them. The values come from the scene's `Filter` (default 1, 1, 1);
     the original first copies Main to Secondary and draws the scene's post effects there.
+  - **The scene's post effects** (OM-67, `DeferredRenderer.DrawPost`), after the particles: the frame's
+    effects (`IScenePostEffect`) in the order of their z (equal ones as they came), drawn onto Main with its
+    own depth and stencil; when one reads the scene (a refraction), Main is first copied and that copy is
+    what it reads (the original draws into Secondary reading Main: the same picture). Only the shields
+    (z 90) so far; the rest of the original's (z: the lightning zap 0, radial blur 0, force fields 0,
+    conflagration and wave 89, vortex 100, invisibility 1500, blizzard 10000) come with their tasks.
   - The game's GUI is drawn on that target after the filter (so the scene's brightness, contrast and
     saturation never touch it), then the screen's transition over it (OM-67, below), so both bloom too.
   - **The transition** (`ScreenTransitions`, stepped on the logic thread; drawn by `PostPass`):
@@ -384,8 +390,8 @@ them; what the engine must reproduce is how each pass is fed (from the original'
     uncovers it (from 1 to 0); either starts from its start whatever the screen shows, so an end on a
     clear screen flashes its colour (the scripts' white flashes). An out reaching its end stays,
     covering the screen, till another starts; an in is gone. Both say they ended (the original's
-    `TransitionEnd` fires either way). Time 0 is done in one step. The original's runs on through the
-    pause menu; ours steps with the level's ticks, so the pause stops it for now. The colour is kept as
+    `TransitionEnd` fires either way). Time 0 is done in one step. It runs on through the pause menu
+    (stepped by the shell while the level is paused), as the original's. The colour is kept as
     bytes, its alpha left out. Drawn with `FadeTransitionEffect` from the GUI target
     into a plain one: the picture toward the colour by the amount, **in encoded light** (black stays
     black, white is the brightest and blooms). Ours: a cross-fade, without a captured last frame yet,
@@ -394,9 +400,11 @@ them; what the engine must reproduce is how each pass is fed (from the original'
     ending its own); a scene change (its kind to black over its time, and back the same once the new
     scene has run its first update, replacing what its startup faded, unless overridden); the level's
     start (what was left dropped, then an end from black over 0.5 s; the first update's plain fades
-    dropped, an override's kept); a checkpoint's restart (back from black over 0.5 s). Ours: a fade and
-    a scene change asked in one update are taken fade first. Not yet: the level's
-    last frame cross-faded into the Tome, the menu's own fades (they keep `MenuPicture.Cover`).
+    dropped, an override's kept); a defeat's restart (once its word is gone, to black over 0.5 s, then
+    back to the checkpoint and from black over 0.5 s; without a checkpoint the level loads anew). Ours:
+    a fade and a scene change asked in one update are taken fade first. Not through the slot yet: the
+    level's last frame cross-faded into the Tome (blended on the screen, §20 "The book"), the menu's own
+    fades (they keep `MenuPicture.Cover`).
   - `BloomEffect` (techniques 0 horizontal blur, 1 vertical blur, 2 combine, 3 down-sample):
     down-sample into a buffer a sixteenth of the screen on each side, keeping what is above
     `Threshold` (`SourceDimensions` = the source's size); blur horizontally into a second such
@@ -1615,7 +1623,7 @@ and has no shine.
   bottom pole left open; a disc is the same sphere, cut by the shader to a cap 45° round its way. A wall is a
   lens-shaped plate 12 long, 6 high and 0.2 thick at its middle.
 - The noise comes from `EffectTextures/shield`, tiled ⌈radius × 0.666⌉ (4) times.
-- They are added onto the frame after the particles (the original's post effects). The scene's depth cuts them where
+- They are drawn in the scene's post effects (z 90, after the particles). The scene's depth cuts them where
   it stands in front, and they glow where they meet it and along a disc's edge.
 - A sphere or disc is scaled to its radius and tipped 40° about X (the original turns its open pole and seam so);
   a wall stands as it is, along its way.
@@ -2007,9 +2015,11 @@ alone).
   white: "VICTORY", "LEVEL COMPLETE", "DEFEATED") with `music_fanfare` or `music_defeat`, stays, and fades out from
   2 s; at 3 s it is over. A player alive again during a defeat's delay calls it off.
 - "To be continued" fades to black over 8 s without a word. A phony ending only shows its word.
-- Then: a defeat goes back to the last checkpoint (or the level's start without one); any other ending saves the
-  slot at the next chapter (after the last: the first, looped, back to the menu) and, back in the menu over the
-  lobby, plays the next chapter's map cutscene. The original's end page with its screenshot of the frame is left out.
+- Then: a defeat (its word shown over the level, uncovered) fades the screen to black over half a second and goes
+  back to the last checkpoint (or the level's start without one), fading back in as long; the pause stays shut
+  meanwhile. Any other ending saves the slot at the next chapter (after the last: the first, looped, back to the
+  menu) and, back in the menu, goes on through the book's end page (§20, "The book") or, without the book, covered
+  black in its last second, plays the next chapter's map cutscene over the lobby.
 
 **Before a chapter** (OM-84, `CutscenePages`), every time its Start is chosen in the lobby or the chapter before it
 ends (never on a restart), as the original's; each can be skipped at any time (a click, Enter, Space or A; ours: Esc

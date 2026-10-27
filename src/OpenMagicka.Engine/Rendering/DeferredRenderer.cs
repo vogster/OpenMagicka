@@ -270,10 +270,7 @@ public sealed partial class DeferredRenderer : IDisposable
         {
             particles.Draw(device, pool, globals.View, globals.Projection, depth!);
         }
-        if (frame.Spells is { Shields.Count: > 0 } shielded)
-        {
-            spells?.DrawShields(device, shielded, globals, depth!);
-        }
+        DrawPost(device, frame);
         void DrawGui(GraphicsDevice on)
         {
             if (frame.Gui is { } screen)

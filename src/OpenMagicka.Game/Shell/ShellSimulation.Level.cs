@@ -24,6 +24,14 @@ public sealed partial class ShellSimulation
     private PlaySimulation? playing;
     private LevelEnding? ending;
     private double? capturing;
+    private bool restarting;
+    private float restartSeconds;
+
+    /// <summary>A defeat's restart waits for the screen to go black (OM-67).</summary>
+    public bool Restarting => restarting;
+
+    /// <summary>The fade out before a defeat's restart (the restart fades back in as long), as the original's.</summary>
+    public const float RestartFade = 0.5f;
     private int level, slot, chapter, tip = 1;
     private bool resume;
     private Narration? narration;
@@ -132,6 +140,7 @@ public sealed partial class ShellSimulation
         if (paused)
         {
             pause.Update(read, screen);
+            play?.Transitions.Step((float)dt);                                 // the screen's transition runs on through the pause, as the original's
             content.Sounds?.Update((float)dt, []);
             return;
         }
@@ -179,6 +188,11 @@ public sealed partial class ShellSimulation
     private void TakeEnding()
     {
         var requests = play!.Requests;
+        if (restarting)
+        {
+            requests.RemoveAll(r => r is EndGameRequest);                     // the run is over: none taken into the next
+            return;
+        }
         if ((ending is null || byDeath) && requests.OfType<EndGameRequest>().FirstOrDefault(r => r.Outcome is EndGameCondition.Victory
             or EndGameCondition.LevelComplete or EndGameCondition.Defeat or EndGameCondition.ToBeContinued or EndGameCondition.EndOffGame) is { } end)
         {
@@ -206,6 +220,20 @@ public sealed partial class ShellSimulation
 
     private void StepEnding(float dt)
     {
+        if (restarting)
+        {
+            restartSeconds += dt;
+            // Out (or a script cleared or replaced it; ours: never held past a little more than its time): the checkpoint.
+            if (play!.Transitions.IsCovered || !play.Transitions.IsActive || restartSeconds > RestartFade + 0.5f)
+            {
+                restarting = false;
+                if (!play.RestartAtCheckpoint())
+                {
+                    RestartLevel();                                           // no checkpoint yet: the level from its start
+                }
+            }
+            return;
+        }
         if (capturing is { } waited)
         {
             capturing = waited + dt;
@@ -231,8 +259,9 @@ public sealed partial class ShellSimulation
         (ending, byDeath) = (null, false);
         switch (end.Next)
         {
-            case EndingNext.Restart when !play!.RestartAtCheckpoint():
-                RestartLevel();                                               // no checkpoint yet: the level from its start
+            case EndingNext.Restart:
+                play!.Transitions.Begin(Engine.Screen.TransitionKind.Fade, System.Numerics.Vector3.Zero, RestartFade);
+                (restarting, restartSeconds) = (true, 0);                     // the restart once the screen is black
                 break;
             case EndingNext.NextChapter when end.ToEndPage && end.Outcome != EndGameCondition.ToBeContinued && Book is not null:
                 capturing = 0;                                                // the level's last frame first, for the end page
@@ -245,9 +274,9 @@ public sealed partial class ShellSimulation
 
     private void OpenPause()
     {
-        if (ending is { Waiting: false, Next: not EndingNext.None } || capturing is not null)
+        if (ending is { Waiting: false, Next: not EndingNext.None } || capturing is not null || restarting)
         {
-            return;                                                           // the level is ending: its cover would hide the menu
+            return;                                                           // the level is ending (or going back): no pause over it
         }
         paused = true;
         pause.Open(host.Input.Value.Pad.IsButtonDown(Buttons.Start));
@@ -333,7 +362,7 @@ public sealed partial class ShellSimulation
         play?.Dispose();
         content.Sounds?.ResumeAll();
         content.Sounds?.StopAll(immediate: true);
-        (play, playing, paused, ending, byDeath, waiting, capturing) = (null, null, false, null, false, false, null);
+        (play, playing, paused, ending, byDeath, waiting, capturing, restarting) = (null, null, false, null, false, false, null, false);
     }
 
     private void BackToMenu()

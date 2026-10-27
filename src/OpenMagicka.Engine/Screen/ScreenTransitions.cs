@@ -30,6 +30,9 @@ public sealed class ScreenTransitions
 
     public bool IsActive => kind != TransitionKind.None;
 
+    /// <summary>An out has reached its colour: the screen is covered, and stays so till another starts.</summary>
+    public bool IsCovered => IsActive && direction == TransitionDirection.Out && amount >= 1;
+
     public TransitionPicture Picture => IsActive ? new TransitionPicture(kind, amount, colour) : TransitionPicture.None;
 
     /// <summary>The screen goes to the colour over the time.</summary>

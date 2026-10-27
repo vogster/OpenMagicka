@@ -190,6 +190,60 @@ public sealed class ShellSimulationTests : IDisposable
         Assert.InRange(shown.Menu.Shot, 0.9f, 1);                             // the cross-fade from it begins
     }
 
+    /// <summary>A level of chapter 1 started and shown.</summary>
+    private ShellSimulation Playing()
+    {
+        var shell = Start();
+        shell.Saves.Set(0, new CampaignSlot(0, 0));
+        shell.Play(0, 0);
+        Assert.True(TickUntil(shell, () => shell.Mode == ShellMode.Play));
+        shell.Tick(Step);
+        Show(shell);
+        shell.Tick(Step);
+        Show(shell);
+        shell.Tick(Step);
+        return shell;
+    }
+
+    [GameContentFact]
+    public void TheScreensTransition_RunsOnThroughThePause()
+    {
+        var shell = Playing();
+        var play = shell.Level!;
+        play.Transitions.Begin(OpenMagicka.Engine.Screen.TransitionKind.Fade, System.Numerics.Vector3.Zero, 1);
+        Press(Keys.Escape);
+        shell.Tick(Step);
+        Press();
+        Assert.True(shell.Paused);
+        var before = play.Transitions.Picture.Amount;
+        for (var i = 0; i < 30; i++)
+        {
+            shell.Tick(Step);
+        }
+
+        Assert.Equal(before + 30 * Step, play.Transitions.Picture.Amount, 2);
+    }
+
+    [GameContentFact]
+    public void ADefeat_ShowsItsWordUncovered_ThenFadesOutHalfASecond_AndRestarts()
+    {
+        var shell = Playing();
+        shell.Tick(Step);
+        shell.Level!.Requests.Add(new OpenMagicka.Engine.Scripting.EndGameRequest(OpenMagicka.Engine.Scripting.EndGameCondition.Defeat, false, false));
+        shell.Tick(Step);
+        Assert.True(TickUntil(shell, () => shell.Ending is { WordAlpha: > 0.9f }));
+        Assert.Equal(0, Show(shell).Menu.Cover);                              // the word over the level, not black
+        Assert.True(TickUntil(shell, () => shell.Restarting));
+        var ticks = 0;
+        for (; shell.Restarting && ticks < 200; ticks++)
+        {
+            shell.Tick(Step);
+        }
+
+        Assert.InRange(ticks * Step, ShellSimulation.RestartFade - 2 * Step, ShellSimulation.RestartFade + 2 * Step);   // half a second to black
+        Assert.Null(shell.Ending);
+    }
+
     [GameContentFact]
     public void ANarrationThatNeverEnds_HoldsTheLevelNoLongerThanItsLimit_AndIsToldTillTheLevelShows()
     {

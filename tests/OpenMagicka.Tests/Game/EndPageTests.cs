@@ -60,7 +60,7 @@ public class EndPageTests
     }
 
     [Fact]
-    public void AChaptersEnd_ToTheEndPage_IsNotCovered_ButADefeatIs()
+    public void AChaptersEnd_ToTheEndPage_IsNotCovered_NorADefeat()
     {
         var complete = new LevelEnding(EndGameCondition.LevelComplete) { ToEndPage = true };
         var defeat = new LevelEnding(EndGameCondition.Defeat) { ToEndPage = true };
@@ -71,6 +71,6 @@ public class EndPageTests
         }
 
         Assert.Equal(0, complete.Cover);
-        Assert.True(defeat.Cover > 0.5f);
+        Assert.Equal(0, defeat.Cover);                                        // its restart fades the screen out, after the word
     }
 }

@@ -18,8 +18,9 @@ public enum EndingNext : byte
 /// <summary>
 /// A level's ending (OM-53, docs/engine/ARCHITECTURE.md §20), as the original times it: after its delay (3 s for a
 /// defeat by death, none for a script's), its word fades in over a second with its music, stays, and fades out from
-/// 2 s on; at 3 s it is over. A chapter's end and a defeat cover the screen in that last second; "to be continued"
-/// is an 8 s fade to black without a word. A defeat by death is called off while its delay runs if a player lives again.
+/// 2 s on; at 3 s it is over. A defeat is not covered (the restart fades the screen out and in after it, OM-67); a
+/// chapter's end is, in that last second, unless it goes to the book's end page; "to be continued" is an 8 s fade to
+/// black without a word. A defeat by death is called off while its delay runs if a player lives again.
 /// </summary>
 public sealed class LevelEnding(EndGameCondition outcome, float delay = 0, bool phony = false)
 {
@@ -61,7 +62,7 @@ public sealed class LevelEnding(EndGameCondition outcome, float delay = 0, bool 
     public bool ToEndPage { get; init; }
 
     /// <summary>How much of the screen is covered (black).</summary>
-    public float Cover => Next == EndingNext.None || ToEndPage && Next == EndingNext.NextChapter && Outcome != EndGameCondition.ToBeContinued ? 0
+    public float Cover => Next is EndingNext.None or EndingNext.Restart || ToEndPage && Next == EndingNext.NextChapter && Outcome != EndGameCondition.ToBeContinued ? 0
         : Outcome == EndGameCondition.ToBeContinued ? Math.Clamp(-timer / ContinuedFade, 0, 1)
         : Math.Clamp(-timer - Hold, 0, 1);
 
