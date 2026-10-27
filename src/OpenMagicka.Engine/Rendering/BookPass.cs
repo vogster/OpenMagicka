@@ -14,8 +14,8 @@ namespace OpenMagicka.Engine.Rendering;
 /// (lit by the candle alone, its light over the squared distance, written in the scene's encoded light) into a
 /// multisampled target with depth, then the turning sheets while it riffles; then the colour filter (left as it is) and
 /// the bloom onto the screen, which decode it.
-/// The pages show the page atlas (<see cref="MenuPass.DrawAtlas"/>), their texels decoded by the effect. No shadow map
-/// yet (every pixel lit). Render thread only.
+/// The pages show the page atlas (<see cref="MenuPass.DrawAtlas"/>), their texels decoded by the effect. The candle's
+/// shadow map is drawn first (<see cref="DrawShadows"/>), and every model drawn reads it. Render thread only.
 /// </summary>
 public sealed class BookPass : IDisposable
 {
@@ -27,6 +27,7 @@ public sealed class BookPass : IDisposable
         "View", "Projection", "ViewProjection", "CameraPosition", "LightPosition", "LightAmbientColor", "LightDiffuseColor", "LightSpecularColor",
         "LightViewProjection", "NormalPower0", "ShadowMapScale", "shadowMapEnabled", "bloat", "matBones", "DiffuseColor", "SpecularAmount",
         "SpecularPower", "diffuseIsHDR", "diffuseMap0", "diffuseMap0Enabled", "specularMap0", "specularMapEnabled", "normalMap0", "normalMapEnabled",
+        "shadowMap",
     ];
 
     private readonly GameEffect effect;
@@ -35,7 +36,17 @@ public sealed class BookPass : IDisposable
     private readonly PostPass post;
     private readonly FullscreenQuad quad;
     private readonly Matrix[] still = [Matrix.Identity];
-    private RenderTarget2D? scene;
+    private RenderTarget2D? scene, shadow;
+
+    /// <summary>The shadow map's side, where the candle's camera looks, its lens, and the sampler the effect reads it with.</summary>
+    public const int ShadowSize = 1024, ShadowSlot = 3;
+
+    public const float ShadowFieldOfView = 1.885f;
+
+    public static readonly Vector3 ShadowAim = new(-2, 0, 2.5f);
+
+    private static readonly DepthStencilState LessEqual = new() { DepthBufferEnable = true, DepthBufferWriteEnable = true,
+        DepthBufferFunction = CompareFunction.LessEqual };
 
     private BookPass(GameEffect effect, GpuLevel room, GpuLevel book, GpuLevel stack, GpuLevel sheet, PostPass post, FullscreenQuad quad)
     {
@@ -66,9 +77,10 @@ public sealed class BookPass : IDisposable
             await Task.WhenAll([effectTask, .. modelTasks, .. postTasks]).ConfigureAwait(false);
             return await gpu.Enqueue(device =>
             {
-                if (effectTask.Result.Effect.Techniques[XnAnimationEffect.Forward] is null)
+                if (effectTask.Result.Effect.Techniques[XnAnimationEffect.Forward] is null
+                    || effectTask.Result.Effect.Techniques[XnAnimationEffect.Shadow] is null)
                 {
-                    throw new InvalidDataException($"the book's effect has no technique {XnAnimationEffect.Forward}");
+                    throw new InvalidDataException($"the book's effect lacks {XnAnimationEffect.Forward} or {XnAnimationEffect.Shadow}");
                 }
                 EffectChecks.Require(effectTask.Result, Parameters);
                 var post = new PostPass(postTasks[0].Result, postTasks[1].Result);       // checks, and makes its targets only when drawing
@@ -117,10 +129,13 @@ public sealed class BookPass : IDisposable
             scene = new RenderTarget2D(device, width, height, false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8, PostPass.GuiSamples,
                 RenderTargetUsage.DiscardContents);
         }
+        var lightViewProjection = LightViewProjection(picture.Light);
+        DrawShadows(device, picture, pages, lightViewProjection);
         device.SetRenderTarget(scene);
         device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer | ClearOptions.Stencil, Color.Black, 1, 0);
         device.DepthStencilState = DepthStencilState.Default;
         device.RasterizerState = RasterizerState.CullCounterClockwise;
+        effect.Effect.CurrentTechnique = effect.Effect.Techniques[XnAnimationEffect.Forward];
         parameters.SetValue("View", picture.View);
         parameters.SetValue("Projection", picture.Projection);
         parameters.SetValue("ViewProjection", picture.View * picture.Projection);
@@ -129,11 +144,12 @@ public sealed class BookPass : IDisposable
         parameters.SetValue("LightAmbientColor", picture.Ambient);
         parameters.SetValue("LightDiffuseColor", picture.Diffuse);
         parameters.SetValue("LightSpecularColor", picture.Specular);
-        parameters.SetValue("LightViewProjection", Matrix.Identity);
+        parameters.SetValue("LightViewProjection", lightViewProjection);
         parameters.SetValue("NormalPower0", 1f);
-        parameters.SetValue("ShadowMapScale", 1f / 1024);
-        parameters.SetValue("shadowMapEnabled", false);
-        parameters.SetValue("bloat", 0f);
+        parameters.SetValue("ShadowMapScale", 1f / ShadowSize);
+        parameters.SetValue("shadowMapEnabled", true);
+        parameters.SetValue("shadowMap", shadow);
+        device.SamplerStates[ShadowSlot] = SamplerState.PointClamp;          // as the effect declares it: it blends its four taps itself
         Samplers(device, SamplerState.LinearWrap);
         if (picture.Room)
         {
@@ -148,10 +164,47 @@ public sealed class BookPass : IDisposable
             Draw(device, sheet, picture.Sheets[i], BlendState.NonPremultiplied, pages);
         }
         device.SetRenderTarget(null);
-        device.Textures[0] = null;
+        for (var slot = 0; slot <= ShadowSlot; slot++)
+        {
+            device.Textures[slot] = null;
+        }
         post.Draw(device, quad, scene, PostProcessing.Default);
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = RasterizerState.CullNone;
+    }
+
+    /// <summary>The candle's camera: from the candle towards the book's middle, a wide square lens (108°) from 1 to 15.</summary>
+    public static Matrix LightViewProjection(Vector3 light) =>
+        Matrix.CreateLookAt(light, ShadowAim, Vector3.Up) * Matrix.CreatePerspectiveFieldOfView(ShadowFieldOfView, 1, 1, 15);
+
+    /// <summary>
+    /// The candle's shadow map, as the original's: a 1024² single-float target cleared to 1, each caster's distance from
+    /// the candle in its camera written by the effect's shadow technique (depth tested, less or equal): the sheets, the
+    /// right stack, the left one, the book, the room.
+    /// </summary>
+    private void DrawShadows(GraphicsDevice device, BookPicture picture, Texture2D pages, Matrix lightViewProjection)
+    {
+        shadow ??= new RenderTarget2D(device, ShadowSize, ShadowSize, false, SurfaceFormat.Single, DepthFormat.Depth24);
+        device.SetRenderTarget(shadow);
+        device.Clear(ClearOptions.Target | ClearOptions.DepthBuffer, Vector4.One, 1, 0);
+        device.DepthStencilState = LessEqual;
+        device.RasterizerState = RasterizerState.CullCounterClockwise;
+        effect.Effect.CurrentTechnique = effect.Effect.Techniques[XnAnimationEffect.Shadow];
+        parameters.SetValue("ViewProjection", lightViewProjection);
+        parameters.SetValue("shadowMap", null);                               // not read while it is drawn into
+        parameters.SetValue("shadowMapEnabled", false);
+        parameters.SetValue("bloat", 0f);
+        Samplers(device, SamplerState.LinearClamp);
+        for (var i = 0; i < Math.Min(picture.SheetCount, picture.Sheets.Length); i++)
+        {
+            Draw(device, sheet, picture.Sheets[i], BlendState.Opaque, pages);
+        }
+        Draw(device, stack, picture.Right, BlendState.Opaque, pages);
+        Draw(device, stack, picture.Left, BlendState.Opaque, pages);
+        Samplers(device, SamplerState.LinearWrap);
+        Draw(device, book, picture.Book, BlendState.Opaque, null);
+        Draw(device, room, still, BlendState.Opaque, null);                   // a caster even where it is not drawn, as the original's
+        device.SetRenderTarget(null);
     }
 
     /// <summary>A model's parts with its materials (the pages' picture, decoded, in place of their paper) and a palette.</summary>
@@ -202,6 +255,7 @@ public sealed class BookPass : IDisposable
     public void Dispose()
     {
         scene?.Dispose();
+        shadow?.Dispose();
         post.Dispose();
         quad.Dispose();
         room.Dispose();

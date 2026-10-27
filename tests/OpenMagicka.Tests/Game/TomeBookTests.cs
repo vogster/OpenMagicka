@@ -79,6 +79,20 @@ public class TomeBookTests
     }
 
     [Fact]
+    public void TheCandlesCamera_LooksAtTheBooksMiddle_FromTheCandle()
+    {
+        var candle = new Microsoft.Xna.Framework.Vector3(-1.438f, 8.539f, 3.036f);
+        var lens = BookPass.LightViewProjection(candle);
+        var aim = Microsoft.Xna.Framework.Vector4.Transform(new Microsoft.Xna.Framework.Vector4(BookPass.ShadowAim, 1), lens);
+        var near = Microsoft.Xna.Framework.Vector4.Transform(new Microsoft.Xna.Framework.Vector4(candle + new Microsoft.Xna.Framework.Vector3(0, -1.5f, 0), 1), lens);
+
+        Assert.Equal(0, aim.X / aim.W, 3);
+        Assert.Equal(0, aim.Y / aim.W, 3);
+        Assert.InRange(aim.Z / aim.W, 0, 1);                                  // within its 1…15
+        Assert.InRange(near.Z / near.W, 0, aim.Z / aim.W);
+    }
+
+    [Fact]
     public void AnAssembly_WithoutTheEffect_OrNoAssembly_IsRefused()
     {
         Assert.Throws<InvalidDataException>(() => XnAnimationEffect.Read(typeof(object).Assembly.Location));

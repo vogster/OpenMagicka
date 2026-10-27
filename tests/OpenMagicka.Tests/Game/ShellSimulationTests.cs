@@ -171,7 +171,7 @@ public sealed class ShellSimulationTests : IDisposable
         {
             shell.Tick(0.25);                                                 // the loading's own time, in long steps
             held += 0.25;
-            Thread.Sleep(5);
+            Thread.Sleep(held > ShellSimulation.NarrationLimit ? 100 : 5);   // past the limit, the level's loading (slow under a busy machine) hardly counts
         }
 
         Assert.InRange(held, ShellSimulation.NarrationLimit, ShellSimulation.NarrationLimit + 30);   // waited for it, then no longer

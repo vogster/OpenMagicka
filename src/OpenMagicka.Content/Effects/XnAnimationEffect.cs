@@ -18,6 +18,9 @@ public static class XnAnimationEffect
     /// <summary>The technique the book, its pages and the room are drawn with (lit by one point light, no G-buffer).</summary>
     public const string Forward = "AnimatedModelNonDeffered";
 
+    /// <summary>The technique the candle's shadow map is drawn with (each caster's distance from the light).</summary>
+    public const string Shadow = "AnimatedModelShadow";
+
     /// <summary>An fx_2_0 effect's first four bytes, little-endian.</summary>
     public const uint Magic = 0xFEFF0901;
 

@@ -1896,7 +1896,10 @@ come later.
 - Drawn into a screen-sized, 4× multisampled target with depth, cleared black: the room (alpha-blended: the quill's
   feather), the book (opaque), the right stack, the left one (alpha-blended: the torn edges); default culling. Then the
   colour filter (as it is) and the bloom onto the screen, which decode its light; then the screen's pieces as before.
-  No shadow map yet: every pixel is lit.
+- The candle's shadow map (first): 1024², one float, cleared to 1, depth tested less-or-equal; the candle's camera
+  looks at (−2, 0, 2.5) with +Y up, a square 1.885 rad lens from 1 to 15; the casters (technique
+  `AnimatedModelShadow`, each writing its distance) are the sheets, the right stack, the left one, the book and the room.
+  Every model drawn then reads it (four taps, a 0.06 bias, faded out towards the lens's rim, in the effect).
 - The page atlas (2048², with mip levels): the whole `tome_pages_0` written, encoded (`ScaleToHdr` on), then the page
   drawn into the top-right sheet's 1024² viewport, encoded too, each draw blending by its alpha and keeping the paper's
   (its torn edges stay); paintings put the paper's own alpha back. The stacks' top faces show the left sheet (bare
@@ -2039,7 +2042,7 @@ or B too) and nothing remembers it was seen:
 - `tools/package_beta.ps1` publishes the beta self-contained for Windows and Linux, with `docs/TESTING.md`.
 
 **Not done:**
-- the book's shadow map; the logos; the end page between a chapter and the next one's map;
+- the logos; the end page between a chapter and the next one's map;
 - the lobby's players and their robes, staffs and weapons; the magick book; the controls page;
 - the original's `campaign.sav` read or written (OM-55);
 - the loading screen's spell picture and progress bar; the end page with the level's last frame.
