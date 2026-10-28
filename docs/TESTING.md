@@ -45,6 +45,10 @@ once with `--content` and its folder, or delete `settings.json` (see below).
 
 - A finished chapter shows its last frame on the book's page, then the book riffles to the next chapter's map.
 
+- Water, ice and lava: wading slows you and soaks you, deep water drowns, lava burns; cold freezes water to walk on.
+- Enemies grab: goblins ride your back, trolls pick you up, zombies and orcs hold you. Press Space (B on a pad) again
+  and again to break free.
+
 What is not in it yet: multiplayer,
 challenges, versus, DLC, and the magick book.
 

@@ -7,7 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- The version (OM-53); a release's comes from its tag (.github/workflows/release.yml). The build adds the
          commit (+hash) to the informational version. -->
-    <Version>0.0.2</Version>
+    <Version>0.0.3</Version>
     <RootDir>$(MSBuildThisFileDirectory)</RootDir>
     <FnaProject>$(RootDir)lib/FNA/FNA.Core.csproj</FnaProject>
   </PropertyGroup>
